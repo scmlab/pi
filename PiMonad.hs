@@ -7,7 +7,7 @@ import Control.Monad.State.Lazy
 class Monad m => MonadFresh m where
   fresh :: m Name
 
-instance MonadState Int m => MonadFresh m where
+instance (Monad m, MonadState Int m) => MonadFresh m where
   fresh = get >>= \i ->
           put (i-1) >>
           return i
