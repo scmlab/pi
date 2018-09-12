@@ -1,11 +1,13 @@
 module Syntax where
 
+import Utilities
+
 type Name = Int
 
 data Val = N Name
          | VI Int
          | VB Bool
-         | VP Val Val
+         | VT [Val]    -- n-tuples
    deriving (Eq, Show)
 
 data Expr = EV Val
@@ -14,8 +16,12 @@ data Expr = EV Val
 
           | EIf Expr Expr Expr
 
-          | EFst Expr
-          | ESnd Expr
+          | ETup [Expr]     -- n-tuples
+          | EPrj Int Expr   -- projection of tuples
+   deriving Show
+
+data Ptrn = PN Name         -- patterns
+          | PT [Ptrn]
    deriving Show
 
 eN :: Name -> Expr
@@ -26,43 +32,48 @@ eI = EV . VI
 
 data Pi = End
         | Send Expr Expr Pi
-        | Recv Expr Name Pi
+        | Recv Expr Ptrn Pi
         | Par Pi Pi
         | Nu Name Pi
    deriving Show
 
-substName :: Name -> Name -> Name -> Name
-substName x z y | x == y    = z
-                | otherwise = y
+type Subst = FMap Name Val
 
-substVal :: Name -> Val -> Val -> Val
-substVal x v (N y) | x == y    = v
-                   | otherwise = N y
-substVal x v (VP l r) = VP (substVal x v l) (substVal x v r)
-substVal x v u = u
+-- substName :: Name -> Name -> Name -> Name
+-- substName x z y | x == y    = z
+--                 | otherwise = y
 
-substExpr :: Name -> Val -> Expr -> Expr
-substExpr x v (EV u) = EV (substVal x v u)
-substExpr x v (EPlus e1 e2) =
-  EPlus (substExpr x v e1) (substExpr x v e2)
-substExpr x v (EMinus e1 e2) =
-  EMinus (substExpr x v e1) (substExpr x v e2)
-substExpr x v (EIf e0 e1 e2) =
-  EIf (substExpr x v e0) (substExpr x v e1) (substExpr x v e2)
-substExpr x v (EFst e) = EFst (substExpr x v e)
-substExpr x v (ESnd e) = ESnd (substExpr x v e)
+substVal :: Subst -> Val -> Val
+substVal th (N y) | Just v <- lookup y th = v
+                  | otherwise             = N y
+substVal th (VT vs) = VT (map (substVal th) vs)
+substVal th u = u
 
-substPi :: Name -> Val -> Pi -> Pi
-substPi x v End = End
-substPi x v (Send c u p) =
-   Send (substExpr x v c) (substExpr x v u) (substPi x v p)
-substPi x v (Recv c y p)
-   | x == y = Recv c y p   -- is this right?
-   | otherwise = Recv (substExpr x v c) y (substPi x v p)
-substExp x v (Par p q) = Par (substPi x v p) (substPi x v q)
-substExp x v (Nu y p)
-   | x == y = Nu y p       -- is this right?
-   | otherwise = Nu y (substPi x v p)
+substExpr :: Subst -> Expr -> Expr
+substExpr th (EV u) = EV (substVal th u)
+substExpr th (EPlus e1 e2) =
+  EPlus (substExpr th e1) (substExpr th e2)
+substExpr th (EMinus e1 e2) =
+  EMinus (substExpr th e1) (substExpr th e2)
+substExpr th (EIf e0 e1 e2) =
+  EIf (substExpr th e0) (substExpr th e1) (substExpr th e2)
+substExpr th (ETup es) = ETup (map (substExpr th) es)
+substExpr th (EPrj i e) = EPrj i (substExpr th e)
+
+substPi :: Subst -> Pi -> Pi
+substPi th End = End
+substPi th (Send c u p) =
+   Send (substExpr th c) (substExpr th u) (substPi th p)
+substPi th (Recv c ys p) =
+    if isEmpty th' then Recv c ys p
+        else Recv (substExpr th' c) ys (substPi th' p)
+  where th' = mask th ys
+   -- | y `inDom` th = Recv c y p   -- is this right?
+   -- | otherwise = Recv (substExpr th c) y (substPi th p)
+substPi th (Par p q) = Par (substPi th p) (substPi th q)
+substPi th (Nu y p)
+   | y `inDom` th = Nu y p       -- is this right?
+   | otherwise = Nu y (substPi th p)
 
 evalExpr :: Expr -> Val
 evalExpr (EV v) = v
@@ -78,9 +89,20 @@ evalExpr (EIf e0 e1 e2)
   | VB v0 <- evalExpr e0 =
     if v0 then evalExpr e1 else evalExpr e2
   | otherwise = error "type error in EIf"
-evalExpr (EFst e)
-  | VP v1 v2 <- evalExpr e = v1
-  | otherwise = error "type error in EFst"
-evalExpr (ESnd e)
-  | VP v1 v2 <- evalExpr e = v2
-  | otherwise = error "type error in ESnd"
+evalExpr (ETup es) = VT (map evalExpr es)
+evalExpr (EPrj i e)
+  | VT vs <- evalExpr e = vs !! i
+  | otherwise = error "type error in EPrj"
+
+-- substitution related stuffs
+
+match :: Ptrn -> Val -> Subst
+match (PN x) v = [(x,v)]
+match (PT xs) (VT vs) | length xs == length vs =
+  concat (map (uncurry match) (zip xs vs))
+match _ _ = error "pattern matching error"
+
+mask :: Subst -> Ptrn -> Subst
+mask th (PN x)  = rmEntry x th
+mask th (PT []) = th
+mask th (PT (p:ps)) = mask (mask th p) (PT ps)
