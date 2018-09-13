@@ -10,6 +10,8 @@ import Syntax
 import PiMonad
 import Utilities
 
+type Env = FMap Name Pi
+
 type St = ( [Pi]               -- processes running
           , FMap Name Waiting    -- processes waiting at each channels
           , [Name]               -- generated names
@@ -29,15 +31,18 @@ data Waiting = Senders [(Val, Pi)] | Receivers [(Ptrn, Pi)]
    deriving Show
        -- non-empty
 
-step :: MonadFresh m => St -> m St
-step ([], waits, news) = return ([], waits, news)  -- is this right?
-step (End : ps, waits, news) = step (ps, waits, news)
-step (Par p1 p2 : ps, waits, news) = step (p1:p2:ps, waits, news)
-step (Send c v p : ps, waits, news) =
+step :: MonadFresh m => Env -> St -> m St
+step defs ([], waits, news) = return ([], waits, news)  -- is this right?
+step defs (End : ps, waits, news) = step defs (ps, waits, news)
+step defs (Par p1 p2 : ps, waits, news) = step defs (p1:p2:ps, waits, news)
+step defs (Send c v p : ps, waits, news) =
   return $ doSend (evalExpr c) (evalExpr v) p (ps, waits, news)
-step (Recv c xs p : ps, waits, news) =
+step defs (Recv c xs p : ps, waits, news) =
   return $ doRecv (evalExpr c) xs p (ps, waits, news)
-step (Nu x p : ps, waits, news) = doNu x p (ps, waits, news)
+step defs (Nu x p : ps, waits, news) = doNu x p (ps, waits, news)
+step defs (Call x : ps, waits, news)
+  | Just p <- lookup x defs = step defs (p:ps, waits, news)
+  | otherwise = error "definition not found"
 
 doSend :: Val -> Val -> Pi -> St -> St
 doSend (N c) v p (ps, waits, news) =
@@ -75,26 +80,28 @@ doNu x p (ps, waits, news) =
 
 -- some tests
 
+{-   p0 = (new i . c!i . i?<x,y> . i!(x+y) . end)
+     p1 = (c?j . j!<3,4> . j?z . end)
+-}
+
+defs = [(0, Nu i (Send (eN c) (eN i)
+              (Recv (eN i) (PT [PN x, PN y])
+                (Send (eN i) (EPlus (eN x) (eN y)) End)))),
+        (1, Recv (eN c) (PN j)
+              (Send (eN j) (ETup [eI 3, eI 4])
+                (Recv (eN j) (PN z) End)))]
+    where (i,j,c,x,y,z) = (1,2,3,4,5,6)
+
 startSt :: St
 startSt = ([startE], [], [])
 
-{-   (new i . c!i . i?<x,y> . i!(x+y) . end) |
-     (c?j . j!<3,4> . j?z . end)
--}
 
-startE =
-   Nu i (Send (eN c) (eN i)
-     (Recv (eN i) (PT [PN x, PN y])
-        (Send (eN i) (EPlus (eN x) (eN y)) End))) `Par`
-   Recv (eN c) (PN j)
-     (Send (eN j) (ETup [eI 3, eI 4])
-       (Recv (eN j) (PN z) End))
-  where (i,j,c,x,y,z) = (1,2,3,4,5,6)
+startE = Call 0 `Par` Call 1
 
 iterateM :: Monad m => (a -> m a) -> a -> m [a]
 iterateM f x = (f x >>= iterateM f) >>= (return . (x:))
 
 trace :: [St]
 trace = fst . flip runState (-1) $
-          (iterateM step startSt :: PiMonad [St])
+          (iterateM (step defs) startSt :: PiMonad [St])
   where fst3 (x,y,z) = x

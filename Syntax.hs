@@ -4,11 +4,15 @@ import Utilities
 
 type Name = Int
 
-data Val = N Name
-         | VI Int
-         | VB Bool
-         | VT [Val]    -- n-tuples
-   deriving (Eq, Show)
+type Prog = [(Name, Pi)]
+
+data Pi = End
+        | Send Expr Expr Pi
+        | Recv Expr Ptrn Pi
+        | Par Pi Pi
+        | Nu Name Pi
+        | Call Name
+   deriving Show
 
 data Expr = EV Val
           | EPlus Expr Expr
@@ -20,6 +24,12 @@ data Expr = EV Val
           | EPrj Int Expr   -- projection of tuples
    deriving Show
 
+data Val = N Name
+         | VI Int
+         | VB Bool
+         | VT [Val]    -- n-tuples
+   deriving (Eq, Show)
+
 data Ptrn = PN Name         -- patterns
           | PT [Ptrn]
    deriving Show
@@ -29,13 +39,6 @@ eN = EV . N
 
 eI :: Int -> Expr
 eI = EV . VI
-
-data Pi = End
-        | Send Expr Expr Pi
-        | Recv Expr Ptrn Pi
-        | Par Pi Pi
-        | Nu Name Pi
-   deriving Show
 
 type Subst = FMap Name Val
 
@@ -74,6 +77,7 @@ substPi th (Par p q) = Par (substPi th p) (substPi th q)
 substPi th (Nu y p)
    | y `inDom` th = Nu y p       -- is this right?
    | otherwise = Nu y (substPi th p)
+substPi th (Call p) = Call p  -- perhaps this shouldn't be substituted?
 
 evalExpr :: Expr -> Val
 evalExpr (EV v) = v
