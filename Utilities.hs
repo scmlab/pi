@@ -21,3 +21,7 @@ fMapUpdate i f ((j,x):xs)
 rmEntry i [] = []
 rmEntry i ((j,x):xs) | i == j    = rmEntry i xs
                      | otherwise = (j,x) : rmEntry i xs
+
+nodup :: Eq a => [a] -> Bool
+nodup [] = True
+nodup (x:xs) = not (x `elem` xs) && nodup xs

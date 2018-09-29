@@ -1,14 +1,21 @@
 module Syntax where
 
+import Data.List(nub)
 import Utilities
+import Control.Arrow ((***))
 
-type Name = Int
+data Name = NS String  -- user defined
+          | NG Int     -- system generated
+          | NR String  -- reserved name
+    deriving (Eq, Show)
+
+type Label = String
 
 type Prog = [(Name, Pi)]
 
 data Pi = End
         | Send Expr Expr Pi
-        | Recv Expr Ptrn Pi
+        | Recv Expr [(Ptrn,Pi)]
         | Par Pi Pi
         | Nu Name Pi
         | Call Name
@@ -28,10 +35,12 @@ data Val = N Name
          | VI Int
          | VB Bool
          | VT [Val]    -- n-tuples
+         | VL Label
    deriving (Eq, Show)
 
 data Ptrn = PN Name         -- patterns
           | PT [Ptrn]
+          | PL Label
    deriving Show
 
 eN :: Name -> Expr
@@ -39,6 +48,9 @@ eN = EV . N
 
 eI :: Int -> Expr
 eI = EV . VI
+
+eL :: Label -> Expr
+eL = EV . VL
 
 type Subst = FMap Name Val
 
@@ -67,12 +79,11 @@ substPi :: Subst -> Pi -> Pi
 substPi th End = End
 substPi th (Send c u p) =
    Send (substExpr th c) (substExpr th u) (substPi th p)
-substPi th (Recv c ys p) =
-    if isEmpty th' then Recv c ys p
-        else Recv (substExpr th' c) ys (substPi th' p)
-  where th' = mask th ys
-   -- | y `inDom` th = Recv c y p   -- is this right?
-   -- | otherwise = Recv (substExpr th c) y (substPi th p)
+substPi th (Recv c pps) =
+    if isEmpty th' then Recv c pps
+        else Recv (substExpr th' c)
+                  (map (id *** substPi th') pps)
+  where th' = foldr mask th (map fst pps)
 substPi th (Par p q) = Par (substPi th p) (substPi th q)
 substPi th (Nu y p)
    | y `inDom` th = Nu y p       -- is this right?
@@ -100,13 +111,26 @@ evalExpr (EPrj i e)
 
 -- substitution related stuffs
 
-match :: Ptrn -> Val -> Subst
-match (PN x) v = [(x,v)]
+match :: Ptrn -> Val -> Maybe Subst
+match (PN x) v = Just [(x,v)]
+match (PL x) (VL y) | x == y = Just []
 match (PT xs) (VT vs) | length xs == length vs =
-  concat (map (uncurry match) (zip xs vs))
-match _ _ = error "pattern matching error"
+  joinSubs <$> mapM (uncurry match) (zip xs vs)
+match _ _ = Nothing
 
-mask :: Subst -> Ptrn -> Subst
-mask th (PN x)  = rmEntry x th
-mask th (PT []) = th
-mask th (PT (p:ps)) = mask (mask th p) (PT ps)
+joinSubs :: [Subst] -> Subst
+joinSubs ss | nodup (map fst s) = s
+           | otherwise = error "non-linear pattern"
+  where s = concat ss
+
+matchPPs :: [(Ptrn, Pi)] -> Val -> Maybe (Subst, Pi)
+matchPPs [] v = Nothing
+matchPPs ((pt,e):pps) v
+  | Just ss <- match pt v = Just (ss,e)
+matchPPs (_:pps) v = matchPPs pps v
+
+mask :: Ptrn -> Subst -> Subst
+mask (PN x)      = rmEntry x
+mask (PT [])     = id
+mask (PT (p:ps)) = mask (PT ps) . mask p
+mask (PL _)      = id
