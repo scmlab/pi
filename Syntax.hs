@@ -1,5 +1,7 @@
+{-#LANGUAGE FlexibleContexts #-}
 module Syntax where
 
+import Control.Monad.Except
 import Data.List(nub)
 import Utilities
 import Control.Arrow ((***))
@@ -10,6 +12,7 @@ data Name = NS String  -- user defined
     deriving (Eq, Show)
 
 type Label = String
+type ErrMsg = String
 
 type Prog = [(Name, Pi)]
 
@@ -37,6 +40,18 @@ data Val = N Name
          | VT [Val]    -- n-tuples
          | VL Label
    deriving (Eq, Show)
+
+unVI :: MonadError ErrMsg m => Val -> m Int
+unVI (VI n) = return n
+unVI _ = throwError "type error: Int wanted"
+
+unVB :: MonadError ErrMsg m => Val -> m Bool
+unVB (VB b) = return b
+unVB _ = throwError "type error: Bool wanted"
+
+unVT :: MonadError ErrMsg m => Val -> m [Val]
+unVT (VT xs) = return xs
+unVT _ = throwError "type error: tuple wanted"
 
 data Ptrn = PN Name         -- patterns
           | PT [Ptrn]
@@ -90,24 +105,20 @@ substPi th (Nu y p)
    | otherwise = Nu y (substPi th p)
 substPi th (Call p) = Call p  -- perhaps this shouldn't be substituted?
 
-evalExpr :: Expr -> Val
-evalExpr (EV v) = v
-evalExpr (EPlus e1 e2)
-  | VI v1 <- evalExpr e1,
-    VI v2 <- evalExpr e2  = VI (v1 + v2)
-  | otherwise = error "type error in EPlus"
-evalExpr (EMinus e1 e2)
-  | VI v1 <- evalExpr e1,
-    VI v2 <- evalExpr e2  = VI (v1 - v2)
-  | otherwise = error "type error in EMinus"
-evalExpr (EIf e0 e1 e2)
-  | VB v0 <- evalExpr e0 =
-    if v0 then evalExpr e1 else evalExpr e2
-  | otherwise = error "type error in EIf"
-evalExpr (ETup es) = VT (map evalExpr es)
-evalExpr (EPrj i e)
-  | VT vs <- evalExpr e = vs !! i
-  | otherwise = error "type error in EPrj"
+evalExpr :: MonadError ErrMsg m => Expr -> m Val
+evalExpr (EV v) = return v
+evalExpr (EPlus e1 e2) =
+  VI <$> (liftM2 (+) (evalExpr e1 >>= unVI)
+                     (evalExpr e1 >>= unVI))
+evalExpr (EMinus e1 e2) =
+  VI <$> (liftM2 (-) (evalExpr e1 >>= unVI)
+                     (evalExpr e1 >>= unVI))
+evalExpr (EIf e0 e1 e2) =
+  (evalExpr e0 >>= unVB) >>= \v0 ->
+  if v0 then evalExpr e1 else evalExpr e2
+evalExpr (ETup es) = VT <$> mapM evalExpr es
+evalExpr (EPrj i e) =
+  (!! i) <$> (evalExpr e >>= unVT)
 
 -- substitution related stuffs
 
@@ -120,7 +131,7 @@ match _ _ = Nothing
 
 joinSubs :: [Subst] -> Subst
 joinSubs ss | nodup (map fst s) = s
-           | otherwise = error "non-linear pattern"
+            | otherwise = error "non-linear pattern"
   where s = concat ss
 
 matchPPs :: [(Ptrn, Pi)] -> Val -> Maybe (Subst, Pi)

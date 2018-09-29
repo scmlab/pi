@@ -43,7 +43,10 @@ startE = Call (NS "p0") `Par` Call (NS "p1")
 iterateM :: Monad m => (a -> m a) -> a -> m [a]
 iterateM f x = (f x >>= iterateM f) >>= (return . (x:))
 
-trace :: [St]
-trace = fst . flip runState (-1) $
-          (iterateM (step defs) startSt :: PiMonad [St])
-  where fst3 (x,y,z) = x
+trace :: Env -> Int -> St -> [Either String St]
+trace defs i st =
+  case (runStateT (step defs st :: PiMonad St) i) of
+    Left err -> [Left err]
+    Right (st', i') -> Right st' : trace defs i' st'
+
+traceIt = trace defs 0 startSt

@@ -2,6 +2,7 @@
 module PiMonad where
 
 import Syntax
+import Control.Monad.Except
 import Control.Monad.State.Lazy
 
 class Monad m => MonadFresh m where
@@ -14,4 +15,4 @@ instance (Monad m, MonadState Int m) => MonadFresh m where
 
 -- one implementation
 
-type PiMonad = State Int -- StateT Int []
+type PiMonad = StateT Int (Either String) -- StateT Int []
