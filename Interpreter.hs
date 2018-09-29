@@ -26,9 +26,9 @@ stToPi (ps, waits, news, _) =
     ((foldr Par End ps) `Par`
      (foldr Par End (map letWait waits))) news
   where letWait (c, Senders ps) =
-          foldr1 Par [ Send (eN c) (EV v) p | (v,p) <- ps ]
+          foldr1 Par [ Send c (EV v) p | (v,p) <- ps ]
         letWait (c, Receivers ps) =
-          foldr1 Par [ Recv (eN c) pps | pps <- ps ]
+          foldr1 Par [ Recv c pps | pps <- ps ]
 
 data Waiting = Senders [(Val, Pi)]
              | Receivers [[(Ptrn, Pi)]]
@@ -43,12 +43,11 @@ step defs (End : ps, waits, news, sout) =
   step defs (ps, waits, news, sout)
 step defs (Par p1 p2 : ps, waits, news, sout) =
   step defs (p1:p2:ps, waits, news, sout)
-step defs (Send c v p : ps, waits, news, sout) =
-  evalExpr c >>= \c' -> evalExpr v >>= \v' ->
-  doSend c' v' p (ps, waits, news, sout)
+step defs (Send c x p : ps, waits, news, sout) =
+  evalExpr x >>= \v ->
+  doSend c v p (ps, waits, news, sout)
 step defs (Recv c pps : ps, waits, news, sout) =
-  evalExpr c >>= \c' ->
-  doRecv c' pps (ps, waits, news, sout)
+  doRecv c pps (ps, waits, news, sout)
 step defs (Nu x p : ps, waits, news, sout) =
   doNu x p (ps, waits, news, sout)
 step defs (Call x : ps, waits, news, sout)
@@ -57,10 +56,10 @@ step defs (Call x : ps, waits, news, sout)
   | otherwise = throwError "definition not found"
 
 doSend :: MonadError ErrMsg m =>
-          Val -> Val -> Pi -> St -> m St
-doSend (N (NR StdOut)) v p (ps, waits, news, _) =
+          Name -> Val -> Pi -> St -> m St
+doSend (NR StdOut) v p (ps, waits, news, _) =
   return (p:ps, waits, news, Just v)
-doSend (N c) v p (ps, waits, news, sout) =
+doSend c v p (ps, waits, news, sout) =
   case lookup c waits of
     Nothing ->
       return (ps, (c, Senders [(v,p)]):waits, news, sout)
@@ -76,11 +75,10 @@ doSend (N c) v p (ps, waits, news, sout) =
         addSender v p (Receivers _) = error "shouldn't happen"
         popReceiver c [] = rmEntry c
         popReceiver c qs = fMapUpdate c (const (Receivers qs))
-doSend _ _ _ _  = throwError "type error in send"
 
 doRecv :: MonadError ErrMsg m =>
-          Val -> [(Ptrn, Pi)] -> St -> m St
-doRecv (N c) pps (ps, waits, news, sout) =
+          Name -> [(Ptrn, Pi)] -> St -> m St
+doRecv c pps (ps, waits, news, sout) =
   case lookup c waits of
     Nothing ->
       return (ps, (c, Receivers [pps]):waits, news, sout)
@@ -96,12 +94,14 @@ doRecv (N c) pps (ps, waits, news, sout) =
         addReceiver pps (Senders _) = error "shouldn't happen"
         popSender c [] = rmEntry c
         popSender c qs = fMapUpdate c (const (Senders qs))
-doRecv _ _ _  = throwError "type error in recv"
 
 doNu :: MonadFresh m => Name -> Pi -> St -> m St
 doNu x p (ps, waits, news, sout) =
   fresh >>= \i ->
   return (substPi [(x, N i)] p : ps, waits, i : news, sout)
+
+iterateM :: Monad m => (a -> m a) -> a -> m [a]
+iterateM f x = (f x >>= iterateM f) >>= (return . (x:))
 
 trace :: Env -> Int -> St -> [Either String St]
 trace defs i st =

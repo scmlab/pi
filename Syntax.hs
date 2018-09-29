@@ -10,7 +10,7 @@ type Label = String
 type ErrMsg = String
 type RName = String   -- row name
 
-data Name = NS RName   -- user defined
+data Name = NS RName    -- user defined
           | NG Int      -- system generated
           | NR ResName  -- reserved name
     deriving (Eq, Show)
@@ -21,8 +21,8 @@ data ResName = StdOut | StdIn
 type Prog = [(Name, Pi)]
 
 data Pi = End
-        | Send Expr Expr Pi
-        | Recv Expr [(Ptrn,Pi)]
+        | Send Name Expr Pi
+        | Recv Name [(Ptrn,Pi)]
         | Par Pi Pi
         | Nu Name Pi
         | Call Name
@@ -76,9 +76,12 @@ eR = EV . N . NR
 
 type Subst = FMap Name Val
 
--- substName :: Name -> Name -> Name -> Name
--- substName x z y | x == y    = z
---                 | otherwise = y
+substName :: Subst -> Name -> Name
+substName th x =
+  case lookup x th of
+    Just (N y) -> y
+    Just _ -> error "not a name"
+    Nothing -> x
 
 substVal :: Subst -> Val -> Val
 substVal th (N y) | Just v <- lookup y th = v
@@ -100,10 +103,10 @@ substExpr th (EPrj i e) = EPrj i (substExpr th e)
 substPi :: Subst -> Pi -> Pi
 substPi th End = End
 substPi th (Send c u p) =
-   Send (substExpr th c) (substExpr th u) (substPi th p)
+   Send (substName th c) (substExpr th u) (substPi th p)
 substPi th (Recv c pps) =
     if isEmpty th' then Recv c pps
-        else Recv (substExpr th' c)
+        else Recv (substName th' c)
                   (map (id *** substPi th') pps)
   where th' = foldr mask th (map fst pps)
 substPi th (Par p q) = Par (substPi th p) (substPi th q)
