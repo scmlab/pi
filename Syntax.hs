@@ -6,13 +6,17 @@ import Data.List(nub)
 import Utilities
 import Control.Arrow ((***))
 
-data Name = NS String  -- user defined
-          | NG Int     -- system generated
-          | NR String  -- reserved name
-    deriving (Eq, Show)
-
 type Label = String
 type ErrMsg = String
+type RName = String   -- row name
+
+data Name = NS RName   -- user defined
+          | NG Int      -- system generated
+          | NR ResName  -- reserved name
+    deriving (Eq, Show)
+
+data ResName = StdOut | StdIn
+  deriving (Eq, Show)
 
 type Prog = [(Name, Pi)]
 
@@ -67,6 +71,9 @@ eI = EV . VI
 eL :: Label -> Expr
 eL = EV . VL
 
+eR :: ResName -> Expr
+eR = EV . N . NR
+
 type Subst = FMap Name Val
 
 -- substName :: Name -> Name -> Name -> Name
@@ -109,10 +116,10 @@ evalExpr :: MonadError ErrMsg m => Expr -> m Val
 evalExpr (EV v) = return v
 evalExpr (EPlus e1 e2) =
   VI <$> (liftM2 (+) (evalExpr e1 >>= unVI)
-                     (evalExpr e1 >>= unVI))
+                     (evalExpr e2 >>= unVI))
 evalExpr (EMinus e1 e2) =
   VI <$> (liftM2 (-) (evalExpr e1 >>= unVI)
-                     (evalExpr e1 >>= unVI))
+                     (evalExpr e2 >>= unVI))
 evalExpr (EIf e0 e1 e2) =
   (evalExpr e0 >>= unVB) >>= \v0 ->
   if v0 then evalExpr e1 else evalExpr e2
