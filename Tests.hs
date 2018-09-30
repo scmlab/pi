@@ -6,6 +6,9 @@ import Syntax
 import PiMonad
 import Interpreter
 
+import Data.Text.Prettyprint.Doc
+import Data.Text.Prettyprint.Doc.Util (putDocW)
+import PPrint
 
 -- some tests
 
@@ -53,3 +56,43 @@ startE = Call (NS "p0") `Par` Call (NS "p1") `Par` Call (NS "p2")
 
 traceIt = trace defs 0 startSt
 runIt n = run defs n 0 startSt
+
+ppTraceIt i = ppMsgSt (traceIt !! i)
+ppRunIt n =
+  vsep [pretty "Output:" <+> hsep (map pretty sout),
+        pretty "-- current state --",
+        ppMsgSt st]
+  where (sout, st) = runIt n
+
+-- pretty printing
+
+ppMsgSt :: Either ErrMsg St -> Doc a
+ppMsgSt (Left msg) = pretty "error:" <+> pretty msg
+ppMsgSt (Right st) = ppSt st
+
+ppSt :: St -> Doc a
+ppSt (ps, waits, news, sout) =
+ vsep [pretty "Running:" <+>
+         nest 2 (pretty ps),
+       pretty "Waiting:",
+         indent 2 (vsep (map ppWaiting waits)),
+       encloseSep (pretty "New: ") (pretty ".") comma
+          (map pretty news),
+       pretty "OutQueue:" <+> pretty sout]
+
+ppWaiting :: (Name, Waiting) -> Doc a
+ppWaiting (c, Senders ps) =
+  pretty c <> pretty "!" <>
+   align (encloseSep lbracket rbracket comma
+           (map ppPs ps))
+ where ppPs (x,p) =
+        pretty x <+> pretty "->" <+> nest 2 (ppPi p 0)
+ppWaiting (c, Receivers pps) =
+  pretty c <> pretty "?" <>
+   align (encloseSep lbracket rbracket comma
+           (map ppPs pps))
+ where ppPs [(x,p)] = ppSingle (x,p)
+       ppPs ps =
+        align (encloseSep lbrace rbrace sepa (map ppSingle ps))
+       ppSingle (x,p) = pretty x <+> pretty "->" <+> nest 2 (ppPi p 0)
+       sepa = flatAlt mempty (pretty "; ")

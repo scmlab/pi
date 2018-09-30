@@ -10,7 +10,7 @@ class Monad m => MonadFresh m where
 
 instance (Monad m, MonadState Int m) => MonadFresh m where
   fresh = get >>= \i ->
-          put (i-1) >>
+          put (i+1) >>
           return (NG i)
 
 -- one implementation
