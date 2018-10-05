@@ -26,7 +26,7 @@ data Pi = End
         | Par Pi Pi
         | Nu Name Pi
         | Call Name
-   deriving Show
+   deriving (Eq, Show)
 
 data Expr = EV Val
           | EPlus Expr Expr
@@ -36,7 +36,7 @@ data Expr = EV Val
 
           | ETup [Expr]     -- n-tuples
           | EPrj Int Expr   -- projection of tuples
-   deriving Show
+   deriving (Eq, Show)
 
 data Val = N Name
          | VI Int
@@ -60,7 +60,7 @@ unVT _ = throwError "type error: tuple wanted"
 data Ptrn = PN Name         -- patterns
           | PT [Ptrn]
           | PL Label
-   deriving Show
+   deriving (Eq, Show)
 
 eN :: Name -> Expr
 eN = EV . N
@@ -73,6 +73,10 @@ eL = EV . VL
 
 eR :: ResName -> Expr
 eR = EV . N . NR
+
+End `par` p = p
+p `par` End = p
+p `par` q = Par p q
 
 type Subst = FMap Name Val
 

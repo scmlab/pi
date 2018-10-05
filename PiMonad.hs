@@ -15,4 +15,8 @@ instance (Monad m, MonadState Int m) => MonadFresh m where
 
 -- one implementation
 
-type PiMonad = StateT Int (Either String) -- StateT Int []
+type BkSt = Int  -- bookkeeping state.
+type PiMonad = StateT BkSt (Either String) -- StateT Int []
+
+runPiM :: BkSt -> PiMonad a -> Either String (a, BkSt)
+runPiM bk m = runStateT m bk

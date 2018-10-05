@@ -21,7 +21,7 @@ infix  8 ? !
 
 instance Pretty Name where
   pretty (NS x) = pretty x
-  pretty (NG i) = pretty ("@"++show i)
+  pretty (NG i) = pretty ("X"++show i)
   pretty (NR StdOut) = pretty "StdOut"
   pretty (NR StdIn) = pretty "StdIn"
 
@@ -97,7 +97,7 @@ ppPi (Par p1 p2) pr =
 ppPi (Nu x p) pr =
   shParen (pr > 4)
    (group . nest 4 . vsep $
-     [pretty "nu " <> pretty x <+> pretty ".",
+     [pretty "(nu " <> pretty x <> pretty ")",
       ppPi p 4])
 ppPi (Call p) pr = pretty p
 

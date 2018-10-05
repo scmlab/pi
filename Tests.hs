@@ -5,6 +5,7 @@ import Control.Monad.State
 import Syntax
 import PiMonad
 import Interpreter
+import Backend
 
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Util (putDocW)
@@ -12,9 +13,9 @@ import PPrint
 
 -- some tests
 
-{-   p0 = (new i. c!i .
+{-   p0 = (nu i) c!i .
            i?{PLUS -> i?<x,y> . i!(x+y) . end
-              NEG  -> i?x . i!(-x). end} )
+              NEG  -> i?x . i!(-x). end}
      p1 = c?j . j!PLUS . j!<3,4> . j?z . stdout!z . end
      p2 = c?j . j!NEG . j!5 . j?z . stdout!z . end
 
@@ -50,19 +51,19 @@ defs = [(NS "p0",
     where [i,j,c,x,y,z] = map NS ["i","j","c","x","y","z"]
 
 startSt :: St
-startSt = ([startE], [], [], Nothing)
+startSt = ([startE], [], [])
 
 startE = Call (NS "p0") `Par` Call (NS "p1") `Par` Call (NS "p2")
 
-traceIt = trace defs 0 startSt
-runIt n = run defs n 0 startSt
+-- traceIt = trace defs 0 startSt
+-- runIt n = run defs n 0 startSt
 
-ppTraceIt i = ppMsgSt (traceIt !! i)
-ppRunIt n =
-  vsep [pretty "Output:" <+> hsep (map pretty sout),
-        pretty "-- current state --",
-        ppMsgSt st]
-  where (sout, st) = runIt n
+-- ppTraceIt i = ppMsgSt (traceIt !! i)
+-- ppRunIt n =
+--   vsep [pretty "Output:" <+> hsep (map pretty sout),
+--         pretty "-- current state --",
+--         ppMsgSt st]
+-- where (sout, st) = runIt n
 
 -- pretty printing
 
@@ -70,15 +71,34 @@ ppMsgSt :: Either ErrMsg St -> Doc a
 ppMsgSt (Left msg) = pretty "error:" <+> pretty msg
 ppMsgSt (Right st) = ppSt st
 
+ppTrace :: (St -> Doc a) -> Trace -> (Doc a, Maybe BState)
+ppTrace ppSt Stop = (pretty "stopped" <> line, Nothing)
+ppTrace ppSt (Deadlock st) =
+  (vsep [pretty "Deadlock at:", ppSt st], Nothing)
+ppTrace ppSt (Error msg) = (pretty msg <> line, Nothing)
+ppTrace ppSt (TOut v (defs,st,bk)) =
+  (vsep [pretty "Output:" <+> pretty v,
+         ppSt st]
+  , Just (defs,st,bk))
+ppTrace ppSt (TIn (defs,st,bk)) =
+  (vsep [pretty "Waiting for input.",
+         ppSt st]
+  , Just (defs,st,bk))
+ppTrace ppSt (Next st tr) =
+  let (doc, bst) = ppTrace ppSt tr
+  in (vsep [ppSt st, line, doc], bst)
+
 ppSt :: St -> Doc a
-ppSt (ps, waits, news, sout) =
+ppSt (ps, waits, news) =
  vsep [pretty "Running:" <+>
          nest 2 (pretty ps),
        pretty "Waiting:",
          indent 2 (vsep (map ppWaiting waits)),
        encloseSep (pretty "New: ") (pretty ".") comma
-          (map pretty news),
-       pretty "OutQueue:" <+> pretty sout]
+          (map pretty news)]
+
+ppStPi :: St -> Doc a
+ppStPi = pretty . stToPi
 
 ppWaiting :: (Name, Waiting) -> Doc a
 ppWaiting (c, Senders ps) =
@@ -96,3 +116,7 @@ ppWaiting (c, Receivers pps) =
         align (encloseSep lbrace rbrace sepa (map ppSingle ps))
        ppSingle (x,p) = pretty x <+> pretty "->" <+> nest 2 (ppPi p 0)
        sepa = flatAlt mempty (pretty "; ")
+
+fromJust (Just x) = x
+
+resume = ppTrace ppStPi . trace1 . fromJust . snd
