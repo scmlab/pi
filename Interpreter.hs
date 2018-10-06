@@ -1,5 +1,4 @@
--- Shin-Cheng Mu, August 2018.
--- adapted from https://github.com/alexj136/pi/
+-- Shin-Cheng Mu, 2018.
 
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 
@@ -12,16 +11,125 @@ import Syntax
 import PiMonad
 import Utilities
 
+import Data.Text.Prettyprint.Doc
+import Data.Text.Prettyprint.Doc.Util (putDocW)
+import PPrint
+
 type Env = FMap Name Pi
 
+type St = ( FMap Name (Val, Pi)
+          , FMap Name [(Ptrn, Pi)]
+          , [Name])
+
+stToPi :: St -> Pi
+stToPi (sends, recvs, news) =
+  foldr Nu ((foldr par End ss) `par`
+            (foldr par End rs)) news
+  where
+    ss = [ Send c (EV v) p | (c,(v,p)) <- sends ]
+    rs = [ Recv c pps | (c,pps) <- recvs ]
+
+lineup :: (MonadFresh m, MonadError ErrMsg m) =>
+    Env -> [Pi] -> St -> m St
+lineup _ [] st = return st
+lineup defs (End : ps) st = lineup defs ps st
+lineup defs (Par p1 p2 : ps) st =
+  lineup defs (p1:p2:ps) st
+lineup defs (Call x : ps) st
+  | Just p <- lookup x defs =
+    lineup defs (p:ps) st
+  | otherwise = throwError "definition not found"
+lineup defs (Send c x p : ps) (sends, recvs, news) =
+   evalExpr x >>= \v ->
+   lineup defs ps ((c,(v,p)):sends, recvs, news)
+lineup defs (Recv c pps : ps) (sends, recvs, news) =
+   lineup defs ps (sends, (c,pps):recvs, news)
+lineup defs (Nu x p : ps) (sends, recvs, news) =
+  fresh >>= \i ->
+  lineup defs (substPi [(x, N i)] p : ps)
+      (sends, recvs, i:news)
+
+select :: MonadPlus m => [a] -> m (a,[a])
+select [] = mzero
+select (x:xs) = return (x,xs) `mplus`
+                ((id *** (x:)) <$> select xs)
+
+data Res = Silent St
+         | Output Val Pi St
+         | Input [(Ptrn, Pi)] St
+
+step :: (MonadFresh m, MonadError ErrMsg m, MonadPlus m) =>
+        Env -> St -> m Res
+step defs (sends, recvs, news) =
+   select sends >>= \((c,(v,p)), sends') ->
+   doSend c (v,p) sends'
+ where
+   doSend :: (MonadFresh m, MonadError ErrMsg m,
+              MonadPlus m) =>
+          Name -> (Val, Pi) -> FMap Name (Val, Pi) -> m Res
+   doSend (NR StdOut) (v,p) sends' =
+     return (Output v p (sends', recvs, news))
+   doSend c (v,p) sends' =
+     selectByKey c recvs >>= \(pps, recvs') ->
+     comm (v,p) pps >>= \qs ->
+     Silent <$> lineup defs qs (sends', recvs', news)
+
+comm :: MonadPlus m => (Val, Pi) -> [(Ptrn, Pi)] -> m [Pi]
+comm (v,q) pps =
+  case matchPPs pps v of
+   Just (th, p) -> return [q,substPi th p]
+   Nothing -> mzero
+
+-- Pretty Printing
+
+ppStPi :: St -> Doc a
+ppStPi = pretty . stToPi
+
+ppSt :: St -> Doc a
+ppSt (sends, recvs, news) =
+ vsep [pretty "Senders:",
+       indent 2 (vsep (map pretty ss)),
+       pretty "Receivers:",
+       indent 2 (vsep (map pretty rs)),
+       encloseSep (pretty "New: ") (pretty ".") comma
+          (map pretty news)]
+ where ss = [ Send c (EV v) p | (c,(v,p)) <- sends ]
+       rs = [ Recv c pps | (c,pps) <- recvs ]
+
+ppMsg :: Pretty st => Either ErrMsg st -> Doc a
+ppMsg (Left msg) = pretty "error:" <+> pretty msg
+ppMsg (Right st) = pretty st
+
+ppMsgSt :: Either ErrMsg (St, b) -> Doc a
+ppMsgSt (Left msg) = pretty "error:" <+> pretty msg
+ppMsgSt (Right (st, _)) = ppSt st
+
+ppRes :: Res -> Doc a
+ppRes (Silent st) = ppSt st
+ppRes (Output v p st) =
+  vsep [pretty "Output:" <+>
+         pretty (Send (NR StdOut) (EV v) p),
+        ppSt st]
+ppRes (Input p st) =
+  vsep [pretty "Input:" <+>
+         pretty (Recv (NR StdIn) p),
+        ppSt st]
+
+ppMsgRes :: Either ErrMsg (Res, b) -> Doc a
+ppMsgRes (Left msg) = pretty "error:" <+> pretty msg
+ppMsgRes (Right (res, _)) = ppRes res
+
+{-
 type St = ( [Pi]               -- processes running
           , FMap Name Waiting  -- processes waiting at each channels
           , [Name]             -- generated names
           )
 
-data Waiting = Senders [(Val, Pi)]
-             | Receivers [[(Ptrn, Pi)]]
-   deriving (Eq, Show)
+type Waiting = [(Val, Pi)] -- only senders wait in the queue
+
+-- data Waiting = Senders [(Val, Pi)]
+--              | Receivers [[(Ptrn, Pi)]]
+--    deriving (Eq, Show)
        -- non-empty
 
 stopped :: St -> Bool
@@ -40,21 +148,23 @@ stToPi (ps, waits, news) =
         letWait (c, Receivers ps) =
           foldr1 par [ Recv c pps | pps <- ps ]
 
-data Res a = Silent a
-           | Output a Val
-           | Input a
+instance Functor Res where
+  fmap f (Silent x) = Silent (f x)
+  fmap f (Output v x) = Output (f x) v
+  fmap f (Input x) = Input (f x)
 
 step :: (MonadFresh m, MonadError ErrMsg m) =>
         Env -> St -> m (Res St)
-step defs ([], waits, news) =
-  return . Silent $ ([], waits, news)  -- is this right?
+step defs ([], waits, news) = mzero
 step defs (End : ps, waits, news) =
   step defs (ps, waits, news)
 step defs (Par p1 p2 : ps, waits, news) =
   step defs (p1:p2:ps, waits, news)
 step defs (Send c x p : ps, waits, news) =
   evalExpr x >>= \v ->
-  doSend c v p (ps, waits, news)
+    doSend c v p (ps, waits, news) `mplus`
+  fmap (fork3 (Send c x p :) id id)
+    step defs (ps, waits, news)
 step defs (Recv c pps : ps, waits, news) =
   doRecv c pps (ps, waits, news)
 step defs (Nu x p : ps, waits, news) =
@@ -67,23 +177,9 @@ step defs (Call x : ps, waits, news)
 doSend :: MonadError ErrMsg m =>
           Name -> Val -> Pi -> St -> m (Res St)
 doSend (NR StdOut) v p (ps, waits, news) =
-  return (Output (p:ps, waits, news) v)
+  return (Output v (p:ps, waits, news))
 doSend c v p (ps, waits, news) =
-  case lookup c waits of
-    Nothing ->
-      return . Silent $ (ps, (c, Senders [(v,p)]):waits, news)
-    Just (Senders _) ->
-      return . Silent $ (ps, fMapUpdate c (addSender v p) waits, news)
-    Just (Receivers (pqs:qs)) ->
-       case matchPPs pqs v of
-         Just (th, q) ->
-             return . Silent $ ([substPi th q] ++ ps ++ [p]
-                       , popReceiver c qs waits, news)
-         Nothing -> throwError "pattern matching fails"
-  where addSender v p (Senders qs) = Senders ((v,p):qs)
-        addSender v p (Receivers _) = error "shouldn't happen"
-        popReceiver c [] = rmEntry c
-        popReceiver c qs = fMapUpdate c (const (Receivers qs))
+  step (ps, fMapUpdate c (v,p) ((v,p):) waits, news)
 
 doRecv :: MonadError ErrMsg m =>
           Name -> [(Ptrn, Pi)] -> St -> m (Res St)
@@ -107,24 +203,5 @@ doRecv c pps (ps, waits, news) =
 doNu :: MonadFresh m => Name -> Pi -> St -> m (Res St)
 doNu x p (ps, waits, news) =
   fresh >>= \i ->
-  return . Silent $ (substPi [(x, N i)] p : ps, waits, i : news)
-{-
-iterateM :: Monad m => (a -> m a) -> a -> m [a]
-iterateM f x = (f x >>= iterateM f) >>= (return . (x:))
-
-trace :: Env -> Int -> St -> [Either String St]
-trace defs i st =
-  case runStateT (step defs st :: PiMonad St) i of
-      Left err -> [Left err]
-      Right (st', i') -> Right st' : trace defs i' st'
-
-run :: Env -> Int -> Int -> St -> ([Val], Either ErrMsg St)
-run _ 0 _ st = ([],Right st)
-run defs n i st =
-  case runStateT (step defs st :: PiMonad St) i of
-    Left err -> ([], Left err)
-    Right ((ps,waits,news,Just v), i') ->
-      ((v:) *** id)
-        (run defs (n-1) i' (ps,waits,news,Nothing))
-    Right (st', i') -> run defs (n-1) i' st'
+  step (substPi [(x, N i)] p : ps, waits, i : news)
 -}

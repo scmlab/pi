@@ -5,6 +5,7 @@ import Control.Monad.State
 import Syntax
 import PiMonad
 import Interpreter
+import Utilities (FMap)
 import Backend
 
 import Data.Text.Prettyprint.Doc
@@ -50,27 +51,17 @@ defs = [(NS "p0",
        ]
     where [i,j,c,x,y,z] = map NS ["i","j","c","x","y","z"]
 
-startSt :: St
-startSt = ([startE], [], [])
+startSt :: PiMonad St
+startSt = lineup defs [startE] ([],[],[])
+
+ppstartSt' =
+  vsep (map (\s -> ppMsgSt s <> line) (runPiM 0 startSt))
 
 startE = Call (NS "p0") `Par` Call (NS "p1") `Par` Call (NS "p2")
 
--- traceIt = trace defs 0 startSt
--- runIt n = run defs n 0 startSt
 
--- ppTraceIt i = ppMsgSt (traceIt !! i)
--- ppRunIt n =
---   vsep [pretty "Output:" <+> hsep (map pretty sout),
---         pretty "-- current state --",
---         ppMsgSt st]
--- where (sout, st) = runIt n
 
--- pretty printing
-
-ppMsgSt :: Either ErrMsg St -> Doc a
-ppMsgSt (Left msg) = pretty "error:" <+> pretty msg
-ppMsgSt (Right st) = ppSt st
-
+{-
 ppTrace :: (St -> Doc a) -> Trace -> (Doc a, Maybe BState)
 ppTrace ppSt Stop = (pretty "stopped" <> line, Nothing)
 ppTrace ppSt (Deadlock st) =
@@ -88,35 +79,7 @@ ppTrace ppSt (Next st tr) =
   let (doc, bst) = ppTrace ppSt tr
   in (vsep [ppSt st, line, doc], bst)
 
-ppSt :: St -> Doc a
-ppSt (ps, waits, news) =
- vsep [pretty "Running:" <+>
-         nest 2 (pretty ps),
-       pretty "Waiting:",
-         indent 2 (vsep (map ppWaiting waits)),
-       encloseSep (pretty "New: ") (pretty ".") comma
-          (map pretty news)]
-
-ppStPi :: St -> Doc a
-ppStPi = pretty . stToPi
-
-ppWaiting :: (Name, Waiting) -> Doc a
-ppWaiting (c, Senders ps) =
-  pretty c <> pretty "!" <>
-   align (encloseSep lbracket rbracket comma
-           (map ppPs ps))
- where ppPs (x,p) =
-        pretty x <+> pretty "->" <+> nest 2 (ppPi p 0)
-ppWaiting (c, Receivers pps) =
-  pretty c <> pretty "?" <>
-   align (encloseSep lbracket rbracket comma
-           (map ppPs pps))
- where ppPs [(x,p)] = ppSingle (x,p)
-       ppPs ps =
-        align (encloseSep lbrace rbrace sepa (map ppSingle ps))
-       ppSingle (x,p) = pretty x <+> pretty "->" <+> nest 2 (ppPi p 0)
-       sepa = flatAlt mempty (pretty "; ")
-
 fromJust (Just x) = x
 
 resume = ppTrace ppStPi . trace1 . fromJust . snd
+-}

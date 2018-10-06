@@ -1,10 +1,15 @@
 module Backend where
 
+import Control.Arrow ((***))
+
+import Data.Text.Prettyprint.Doc
+
 import Syntax
 import PiMonad
 import Interpreter
 
-type BState = (Env, St, BkSt) -- backend state
+type BState =
+  (Env, [Either ErrMsg (Res, BkSt)]) -- backend state
 
 {-
 commands:
@@ -13,27 +18,30 @@ commands:
  run n
 -}
 
-data Trace = Stop
-           | Deadlock St
-           | Error ErrMsg
-           | TOut Val BState
-           | TIn BState
-           | Next St Trace
+start :: Env -> Pi -> BState
+start defs p =
+  (defs, map (fmap (Silent *** id))
+      (runPiM 0 (lineup defs [p] ([],[],[]))))
 
-eqSt :: St -> St -> Bool
-eqSt = (==)
+down :: Int -> BState -> BState
+down i (defs, sts) = down' (sts !! i)
+  where
+    down' (Left err) = (defs, [Left err])
+    down' (Right (Output v p st, i)) =
+      (defs, runPiM i (lineup defs [p] st >>= step defs))
+    down' (Right (Input pps st, i)) =
+      (defs, [Right (Input pps st, i)])
+    down' (Right (Silent st, i)) =
+      (defs, runPiM i (step defs st))
 
-trace1 :: BState -> Trace
-trace1 (defs, st, bk) = Next st (trace (defs, st, bk))
+trace :: [Int] -> BState -> BState
+trace [] = id
+trace (i:is) = trace is . down i
 
-trace :: BState -> Trace
-trace (defs, st, bk) | stopped st = Stop
-trace (defs, st, bk) =
-  case runPiM bk (step defs st) of
-    Left errMsg -> Error errMsg
-    Right (Silent st', bk') ->
-      if eqSt st st' then Deadlock st'
-         else Next st' (trace (defs, st', bk'))
-    Right (Output st' v, bk') ->
-      TOut v (defs, st', bk')
-    Right (Input st', bk') -> TIn (defs, st', bk')
+ppBState :: BState -> Doc a
+ppBState (_, sts) =
+  vsep (map ppSts (zip [0..] sts))
+ where ppSts (i,st) =
+        vsep [pretty ("= " ++ show i ++ " ===="),
+              ppMsgRes st,
+              line]
