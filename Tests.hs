@@ -1,6 +1,8 @@
 module Tests where
 
 import Control.Arrow ((***))
+import Data.Function ((&))
+
 import Control.Monad.State
 import Syntax
 import PiMonad
@@ -17,10 +19,11 @@ import PPrint
 {-   p0 = (nu i) c!i .
            i?{PLUS -> i?<x,y> . i!(x+y) . end
               NEG  -> i?x . i!(-x). end}
-     p1 = c?j . j!PLUS . j!<3,4> . j?z . stdout!z . end
-     p2 = c?j . j!NEG . j!5 . j?z . stdout!z . end
+     p1 = c?j . j!PLUS . j!<3,4> . j?z . StdOut!z . end
+     p2 = c?j . StdIn?x . j!NEG . j!x . j?z . StdOut!z . end
 
      main = p0 | p1 | p2
+
 -}
 
 recv c xs p = Recv c [(xs,p)]
@@ -44,42 +47,21 @@ defs = [(NS "p0",
                     (Send (NR StdOut) (eN z) End)))))
        ,(NS "p2",
           recv c (PN j)
-           (send j (eL "NEG")
-             (send j (eI 5)
+           (recv (NR StdIn) (PN x)
+            (send j (eL "NEG")
+             (send j (eN x)
                (recv j (PN z)
-                 (Send (NR StdOut) (eN z) End)))))
+                 (Send (NR StdOut) (eN z) End))))))
        ]
     where [i,j,c,x,y,z] = map NS ["i","j","c","x","y","z"]
 
 startSt :: PiMonad St
-startSt = lineup defs [startE] ([],[],[])
+startSt = lineup defs [startE] ([],[],[], [])
 
 ppstartSt' =
   vsep (map (\s -> ppMsgSt s <> line) (runPiM 0 startSt))
 
 startE = Call (NS "p0") `Par` Call (NS "p1") `Par` Call (NS "p2")
 
-
-
-{-
-ppTrace :: (St -> Doc a) -> Trace -> (Doc a, Maybe BState)
-ppTrace ppSt Stop = (pretty "stopped" <> line, Nothing)
-ppTrace ppSt (Deadlock st) =
-  (vsep [pretty "Deadlock at:", ppSt st], Nothing)
-ppTrace ppSt (Error msg) = (pretty msg <> line, Nothing)
-ppTrace ppSt (TOut v (defs,st,bk)) =
-  (vsep [pretty "Output:" <+> pretty v,
-         ppSt st]
-  , Just (defs,st,bk))
-ppTrace ppSt (TIn (defs,st,bk)) =
-  (vsep [pretty "Waiting for input.",
-         ppSt st]
-  , Just (defs,st,bk))
-ppTrace ppSt (Next st tr) =
-  let (doc, bst) = ppTrace ppSt tr
-  in (vsep [ppSt st, line, doc], bst)
-
-fromJust (Just x) = x
-
-resume = ppTrace ppStPi . trace1 . fromJust . snd
--}
+-- try in GHCi:
+-- start defs startE & trace [0,0] & readInp 0 (VI 10) & trace [0,0,0,0,1,1,0,0,0,0] & ppBState

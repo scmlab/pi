@@ -1,7 +1,6 @@
 module Backend where
 
 import Control.Arrow ((***))
-
 import Data.Text.Prettyprint.Doc
 
 import Syntax
@@ -21,7 +20,7 @@ commands:
 start :: Env -> Pi -> BState
 start defs p =
   (defs, map (fmap (Silent *** id))
-      (runPiM 0 (lineup defs [p] ([],[],[]))))
+      (runPiM 0 (lineup defs [p] ([],[],[],[]))))
 
 down :: Int -> BState -> BState
 down i (defs, sts) = down' (sts !! i)
@@ -34,6 +33,13 @@ down i (defs, sts) = down' (sts !! i)
     down' (Right (Silent st, i)) =
       (defs, runPiM i (step defs st))
 
+readInp :: Int -> Val -> BState -> BState
+readInp i v (defs, sts) =
+  case sts !! i of
+    Right (Input pps st, j) ->
+      (defs, runPiM j (Silent <$> input defs v pps st))
+    _ -> error "not expecting input."
+
 trace :: [Int] -> BState -> BState
 trace [] = id
 trace (i:is) = trace is . down i
@@ -45,3 +51,5 @@ ppBState (_, sts) =
         vsep [pretty ("= " ++ show i ++ " ===="),
               ppMsgRes st,
               line]
+
+--  ppBState . trace [0,0,0,0] $ start defs startE

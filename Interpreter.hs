@@ -17,17 +17,20 @@ import PPrint
 
 type Env = FMap Name Pi
 
-type St = ( FMap Name (Val, Pi)
-          , FMap Name [(Ptrn, Pi)]
-          , [Name])
+type St = ( FMap Name (Val, Pi)     -- senders
+          , FMap Name [(Ptrn, Pi)]  -- receivers
+          , [[(Ptrn, Pi)]]            -- blocked at stdin
+          , [Name])                 -- new variables
 
 stToPi :: St -> Pi
-stToPi (sends, recvs, news) =
-  foldr Nu ((foldr par End ss) `par`
-            (foldr par End rs)) news
+stToPi (sends, recvs, inps, news) =
+  foldr Nu (foldr par End ss `par`
+            foldr par End rs `par`
+            foldr par End is ) news
   where
     ss = [ Send c (EV v) p | (c,(v,p)) <- sends ]
     rs = [ Recv c pps | (c,pps) <- recvs ]
+    is = [ Recv (NR StdIn) pps | pps <- inps]
 
 lineup :: (MonadFresh m, MonadError ErrMsg m) =>
     Env -> [Pi] -> St -> m St
@@ -39,15 +42,18 @@ lineup defs (Call x : ps) st
   | Just p <- lookup x defs =
     lineup defs (p:ps) st
   | otherwise = throwError "definition not found"
-lineup defs (Send c x p : ps) (sends, recvs, news) =
+lineup defs (Send c x p : ps) (sends, recvs, inps, news) =
    evalExpr x >>= \v ->
-   lineup defs ps ((c,(v,p)):sends, recvs, news)
-lineup defs (Recv c pps : ps) (sends, recvs, news) =
-   lineup defs ps (sends, (c,pps):recvs, news)
-lineup defs (Nu x p : ps) (sends, recvs, news) =
+   lineup defs ps ((c,(v,p)):sends, recvs, inps, news)
+lineup defs (Recv (NR StdIn) pps : ps)
+            (sends, recvs, inps, news) =
+   lineup defs ps (sends, recvs, pps:inps, news)
+lineup defs (Recv c pps : ps) (sends, recvs, inps, news) =
+   lineup defs ps (sends, (c,pps):recvs, inps, news)
+lineup defs (Nu x p : ps) (sends, recvs, inps, news) =
   fresh >>= \i ->
   lineup defs (substPi [(x, N i)] p : ps)
-      (sends, recvs, i:news)
+      (sends, recvs, inps, i:news)
 
 select :: MonadPlus m => [a] -> m (a,[a])
 select [] = mzero
@@ -60,19 +66,31 @@ data Res = Silent St
 
 step :: (MonadFresh m, MonadError ErrMsg m, MonadPlus m) =>
         Env -> St -> m Res
-step defs (sends, recvs, news) =
-   select sends >>= \((c,(v,p)), sends') ->
-   doSend c (v,p) sends'
+step defs (sends, recvs, inps, news) =
+   (select inps >>= doInput) `mplus`
+   (select sends >>= doSend)
  where
    doSend :: (MonadFresh m, MonadError ErrMsg m,
               MonadPlus m) =>
-          Name -> (Val, Pi) -> FMap Name (Val, Pi) -> m Res
-   doSend (NR StdOut) (v,p) sends' =
-     return (Output v p (sends', recvs, news))
-   doSend c (v,p) sends' =
+      ((Name, (Val, Pi)), FMap Name (Val,Pi))  -> m Res
+   doSend ((NR StdOut, (v,p)), sends') =
+     return (Output v p (sends', recvs, inps, news))
+   doSend ((c,(v,p)), sends') =
      selectByKey c recvs >>= \(pps, recvs') ->
      comm (v,p) pps >>= \qs ->
-     Silent <$> lineup defs qs (sends', recvs', news)
+     Silent <$> lineup defs qs (sends', recvs', inps, news)
+   doInput :: (MonadFresh m, MonadError ErrMsg m,
+               MonadPlus m) =>
+      ([(Ptrn, Pi)], [[(Ptrn, Pi)]]) -> m Res
+   doInput (pps, inps') =
+      return (Input pps (sends, recvs, inps', news))
+
+input :: (MonadFresh m, MonadError ErrMsg m) =>
+       Env -> Val -> [(Ptrn, Pi)] -> St -> m St
+input defs v pps st =
+  case matchPPs pps v of
+   Just (th, p) -> lineup defs [substPi th p] st
+   Nothing -> throwError "input fails to match"
 
 comm :: MonadPlus m => (Val, Pi) -> [(Ptrn, Pi)] -> m [Pi]
 comm (v,q) pps =
@@ -86,7 +104,7 @@ ppStPi :: St -> Doc a
 ppStPi = pretty . stToPi
 
 ppSt :: St -> Doc a
-ppSt (sends, recvs, news) =
+ppSt (sends, recvs, inps, news) =
  vsep [pretty "Senders:",
        indent 2 (vsep (map pretty ss)),
        pretty "Receivers:",
@@ -94,7 +112,8 @@ ppSt (sends, recvs, news) =
        encloseSep (pretty "New: ") (pretty ".") comma
           (map pretty news)]
  where ss = [ Send c (EV v) p | (c,(v,p)) <- sends ]
-       rs = [ Recv c pps | (c,pps) <- recvs ]
+       rs = [ Recv (NR StdIn) pps | pps <- inps ] ++
+            [ Recv c pps | (c,pps) <- recvs ]
 
 ppMsg :: Pretty st => Either ErrMsg st -> Doc a
 ppMsg (Left msg) = pretty "error:" <+> pretty msg
