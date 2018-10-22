@@ -24,9 +24,6 @@ dependencies:
 - mtl
 - prettyprinter
 
-library:
-  source-dirs: src
-
 executables:
   pi:
     main:                Main.hs

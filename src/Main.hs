@@ -16,7 +16,7 @@ import PPrint
 
 main :: IO ()
 main = do
-  print $ start defs startE & trace [0,0] & readInp 0 (VI 10) & trace [0,0,0,0,1,1,0,0,0,0] & ppBState
+  print $ start defs startE & trace [0,0] & readInp 0 (VI 10) & trace [] & ppBState
 
 -- some tests
 
