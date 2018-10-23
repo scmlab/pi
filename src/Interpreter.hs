@@ -19,7 +19,7 @@ type Env = FMap Name Pi
 
 type St = ( FMap Name (Val, Pi)     -- senders
           , FMap Name [(Ptrn, Pi)]  -- receivers
-          , [[(Ptrn, Pi)]]            -- blocked at stdin
+          , [[(Ptrn, Pi)]]          -- blocked at stdin
           , [Name])                 -- new variables
 
 stToPi :: St -> Pi
