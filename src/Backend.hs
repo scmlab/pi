@@ -7,8 +7,8 @@ import Syntax
 import PiMonad
 import Interpreter
 
-type BState =
-  (Env, [Either ErrMsg (Res, BkSt)]) -- backend state
+-- backend state
+data BState = BState Env [Either ErrMsg (Res, BkSt)]
 
 {-
 commands:
@@ -19,37 +19,34 @@ commands:
 
 start :: Env -> Pi -> BState
 start defs p =
-  (defs, map (fmap (Silent *** id))
-      (runPiM 0 (lineup defs [p] ([],[],[],[]))))
+  BState defs $ map (fmap (Silent *** id))
+      (runPiM 0 (lineup defs [p] ([],[],[],[])))
 
 down :: Int -> BState -> BState
-down i (defs, sts) = down' (sts !! i)
+down i (BState defs sts) = down' (sts !! i)
   where
-    down' (Left err) = (defs, [Left err])
+    down' (Left err) =
+      BState defs [Left err]
     down' (Right (Output v p st, i)) =
-      (defs, runPiM i (lineup defs [p] st >>= step defs))
+      BState defs (runPiM i (lineup defs [p] st >>= step defs))
     down' (Right (Input pps st, i)) =
-      (defs, [Right (Input pps st, i)])
+      BState defs [Right (Input pps st, i)]
     down' (Right (Silent st, i)) =
-      (defs, runPiM i (step defs st))
+      BState defs (runPiM i (step defs st))
 
 readInp :: Int -> Val -> BState -> BState
-readInp i v (defs, sts) =
+readInp i v (BState defs sts) =
   case sts !! i of
     Right (Input pps st, j) ->
-      (defs, runPiM j (Silent <$> input defs v pps st))
+      BState defs (runPiM j (Silent <$> input defs v pps st))
     _ -> error "not expecting input."
 
 trace :: [Int] -> BState -> BState
-trace [] = id
+trace []     = id
 trace (i:is) = trace is . down i
 
-ppBState :: BState -> Doc a
-ppBState (_, sts) =
-  vsep (map ppSts (zip [0..] sts))
- where ppSts (i,st) =
-        vsep [pretty ("= " ++ show i ++ " ===="),
-              ppMsgRes st,
-              line]
-
---  ppBState . trace [0,0,0,0] $ start defs startE
+instance Pretty BState where
+  pretty (BState _ sts) = vsep (map ppSts (zip [0..] sts))
+    where ppSts (i,st) = vsep [ pretty ("= " ++ show i ++ " ====")
+                              , ppMsgRes st
+                              , line]

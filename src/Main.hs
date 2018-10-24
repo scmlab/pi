@@ -1,34 +1,33 @@
 module Main where
 
 import Control.Arrow ((***))
+import Control.Monad.State
 import Data.Function ((&))
 import Data.List (isPrefixOf)
-import Control.Monad.State
+import Data.Text.Prettyprint.Doc
+import Data.Text.Prettyprint.Doc.Util (putDocW)
+import System.Console.Haskeline
+
 import Syntax
 import PiMonad
 import Interpreter
 import Utilities (FMap)
 import Backend
-
-import Data.Text.Prettyprint.Doc
-import Data.Text.Prettyprint.Doc.Util (putDocW)
 import PPrint
 
--- main :: IO ()
--- main = do
---   print $ start defs startE & trace [0,0] & readInp 0 (VI 10) & trace [] & ppBState
-import System.Console.Haskeline
+main :: IO ()
+main = putStrLn "hello"
 
 data Request = Down Int | Read Int
   deriving (Show)
 
-main :: IO ()
-main = runInputT defaultSettings (loop initialBState)
+haskeline :: IO ()
+haskeline = runInputT defaultSettings (loop initialBState)
   where
     loop :: BState -> InputT IO ()
     loop state = do
       -- print the current state
-      outputStrLn (show $ ppBState state)
+      outputStrLn (show $ pretty state)
 
       minput <- getInputLine "π > "
       case minput of
@@ -87,26 +86,6 @@ main = runInputT defaultSettings (loop initialBState)
     initialPi :: Pi
     initialPi = Call (NS "p0") `Par` Call (NS "p1") `Par` Call (NS "p2")
 
-
--- some tests
-
-{-   p0 = (nu i) c!i .
-           i?{PLUS -> i?<x,y> . i!(x+y) . end
-              NEG  -> i?x . i!(-x). end}
-     p1 = c?j . j!PLUS . j!<3,4> . j?z . StdOut!z . end
-     p2 = c?j . StdIn?x . j!NEG . j!x . j?z . StdOut!z . end
-
-     main = p0 | p1 | p2
-
--}
-
--- startSt :: PiMonad St
--- startSt = lineup defs [startE] ([],[],[], [])
-
--- ppstartSt' =
---   vsep (map (\s -> ppMsgSt s <> line) (runPiM 0 startSt))
-
--- startE = Call (NS "p0") `Par` Call (NS "p1") `Par` Call (NS "p2")
 
 -- try in GHCi:
 -- start defs startE & trace [0,0] & readInp 0 (VI 10) & trace [0,0,0,0,1,1,0,0,0,0] & ppBState
