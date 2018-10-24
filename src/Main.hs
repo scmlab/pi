@@ -18,9 +18,6 @@ import PPrint
 main :: IO ()
 main = putStrLn "hello"
 
-data Request = Down Int | Read Int
-  deriving (Show)
-
 haskeline :: IO ()
 haskeline = runInputT defaultSettings (loop initialBState)
   where
@@ -34,18 +31,16 @@ haskeline = runInputT defaultSettings (loop initialBState)
         Nothing -> return ()
         Just input -> do
           case parseInput input of
-            Just (Down n) -> do
-              loop (down n state)
-            Just (Read n) -> do
-              raw <- getInputLine ""
-              case raw of
-                Just raw' -> loop (readInp n (VI (read raw')) state)
-            Nothing -> loop state
+            Just (Down n)   -> loop (down n state)
+            Just (Read i v) -> loop (readInp i v state)
+            Nothing         -> loop state
         where
           parseInput :: String -> Maybe Request
           parseInput input
             | "down " `isPrefixOf` input = Just $ Down (read $ drop 5 input)
-            | "read " `isPrefixOf` input = Just $ Read (read $ drop 5 input)
+            | "read " `isPrefixOf` input =
+                let [i, v] = (map read $ words $ drop 5 input) :: [Int]
+                in Just $ Read i (VI v)
             | otherwise = Nothing
 
     initialBState :: BState
