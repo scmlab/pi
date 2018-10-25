@@ -1,4 +1,13 @@
-module Backend where
+
+module Interaction
+  ( Request(..)
+  , Response(..)
+  , InteractionM(..)
+  , runInteraction
+  , run
+  , feed
+  , ppStates
+  ) where
 
 import Control.Arrow ((***))
 import Control.Monad.State hiding (State)
@@ -10,6 +19,16 @@ import Syntax
 import PiMonad
 import Interpreter
 
+type State = Either ErrMsg (Res, BkSt)
+type Error = String
+type InteractionM m = ExceptT Error (StateT [State] (ReaderT Env m))
+
+data Request = Run Int | Feed Int Val
+  deriving (Show)
+
+data Response = ResError String | ResSuccess String
+  deriving (Show)
+
 {-
 commands:
  load
@@ -17,12 +36,9 @@ commands:
  run n
 -}
 
-type State = Either ErrMsg (Res, BkSt)
-type Error = String
-type InteractionM m = ExceptT Error (StateT [State] (ReaderT Env m))
+--------------------------------------------------------------------------------
+-- | Interaction Monad
 
-data Request = Choose Int | Feed Int Val
-  deriving (Show)
 
 -- start
 runInteraction :: Monad m => Env -> Pi -> InteractionM m a -> m (Either Error a, [State])
@@ -47,8 +63,8 @@ chooseState i = do
     gets (!! i)
 
 -- down
-choose ::  Monad m => Int -> InteractionM m ()
-choose i = do
+run ::  Monad m => Int -> InteractionM m ()
+run i = do
   state <- chooseState i
   case state of
     Left err ->
@@ -73,7 +89,9 @@ feed i val = do
     _ ->
       throwError "not expecting input"
 
+
 --------------------------------------------------------------------------------
+-- | BStates
 
 data BState = BState Env [Either ErrMsg (Res, BkSt)]
 

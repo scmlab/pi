@@ -22,16 +22,20 @@ description:         Please see the README on GitHub at <https://github.com/gith
 dependencies:
 - base >= 4.7 && < 5
 - aeson
+- bytestring
 - haskeline
 - mtl
 - prettyprinter
+- text
 
 executables:
   pi:
     main:                Main.hs
     source-dirs:         src
     other-modules:
-    - Backend
+    - Interaction.Human
+    - Interaction.JSON
+    - Interaction
     - Interpreter
     - PiMonad
     - PPrint
