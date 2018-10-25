@@ -40,6 +40,8 @@ executables:
     - PiMonad
     - PPrint
     - Syntax
+    - Syntax.Primitive
+    - Syntax.Concrete
     - Utilities
     ghc-options:
     - -threaded

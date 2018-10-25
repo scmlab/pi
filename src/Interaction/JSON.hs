@@ -2,12 +2,15 @@
 
 module Interaction.JSON where
 
-import Prelude hiding (getLine, putStrLn)
-import Interaction
-import Data.Aeson
-import Data.Text
-import Data.ByteString.Char8 (getLine, putStrLn)
 
+import Data.Aeson
+import Data.Text hiding (pack)
+import Data.ByteString.Char8 (getLine, putStrLn, pack)
+import Prelude hiding (getLine, putStrLn)
+import qualified Syntax.Primitive as Primitive
+import qualified Syntax.Concrete as Concrete
+
+import Interaction
 import Syntax
 
 --------------------------------------------------------------------------------
@@ -19,23 +22,22 @@ jsonREPL = loop
     loop :: IO ()
     loop = do
       raw <- getLine
-      case (decodeStrict raw :: Maybe Request) of
-        Just req -> putStrLn "success"
-        Nothing -> putStrLn "failed parsing requests"
+      putStrLn raw
+      case (eitherDecodeStrict raw :: Either String Request) of
+        Left err -> putStrLn $ pack $ show err
+        Right val -> putStrLn $ pack $ show val
       loop
-
--- recvRequest ::
-
--- parseRequest :: ByteString -> Maybe
--- parseRequest raw = do
 
 --------------------------------------------------------------------------------
 -- | Encoding & Decoding JSON
 
 instance FromJSON Request where
   parseJSON = withObject "Request" $ \obj -> do
-    kind <- obj .: "kind"
+    kind <- obj .: "request"
     case (kind :: Text) of
+      "load"  -> do
+        pst <- obj .: "syntax-tree"
+        return $ Load (Concrete.fromPrim pst)
       "run"   -> do
         i <- obj .: "index"
         return $ Run i
