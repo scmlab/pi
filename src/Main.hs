@@ -1,16 +1,18 @@
+-- {-# LANGUAGE DeriveDataTypeable #-}
+
 module Main where
 
 import Control.Arrow ((***))
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except
-
-
 import Data.Function ((&))
 import Data.List (isPrefixOf)
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Util (putDocW)
 import System.Console.Haskeline
+import System.Console.GetOpt
+import System.Environment
 
 import Syntax
 import PiMonad
@@ -20,7 +22,34 @@ import Backend
 import PPrint
 
 main :: IO ()
-main = haskeline
+main = do
+  (opts, _) <- getArgs >>= parseOpts
+  case optJSON opts of
+    True -> putStrLn "JSON"
+    False -> haskeline
+
+--------------------------------------------------------------------------------
+-- | Command-line arguments
+
+data Options = Options
+  { optJSON :: Bool
+  } deriving (Show)
+
+defaultOptions = Options
+  { optJSON = False
+  }
+
+options :: [OptDescr (Options -> Options)]
+options =
+  [ Option ['j']  ["json"]  (NoArg (\opts -> opts { optJSON = True }))  "talk in JSON format"
+  ]
+
+parseOpts :: [String] -> IO (Options, [String])
+parseOpts argv =
+  case getOpt Permute options argv of
+    (o,n,[]  ) -> return (foldl (flip id) defaultOptions o, n)
+    (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
+      where header = "Usage: pi [OPTION...]"
 
 haskeline :: IO ()
 haskeline = runInputT defaultSettings $ do
@@ -62,9 +91,6 @@ haskeline = runInputT defaultSettings $ do
           try program = do
             program `catchError` \err ->
               liftH $ outputStrLn err
-
-    initialBState :: BState
-    initialBState = start initialEnv initialPi
 
     initialEnv :: Env
     initialEnv =
