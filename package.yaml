@@ -39,7 +39,7 @@ executables:
     - Interpreter
     - PiMonad
     - PPrint
-    - Syntax
+    - Syntax.Abstract
     - Syntax.Primitive
     - Syntax.Concrete
     - Utilities

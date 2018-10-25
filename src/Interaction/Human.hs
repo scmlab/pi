@@ -12,7 +12,7 @@ import System.Console.Haskeline
 
 import Interaction
 import Interpreter
-import Syntax
+import Syntax.Abstract
 
 --------------------------------------------------------------------------------
 -- | Interfacing with Humans

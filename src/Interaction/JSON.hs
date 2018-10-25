@@ -11,7 +11,7 @@ import qualified Syntax.Primitive as Primitive
 import qualified Syntax.Concrete as Concrete
 
 import Interaction
-import Syntax
+import Syntax.Abstract
 
 --------------------------------------------------------------------------------
 -- | Interfacing with Machines

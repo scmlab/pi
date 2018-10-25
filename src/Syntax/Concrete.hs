@@ -34,7 +34,7 @@ data Expr     = Mul       Range Expr Expr
               deriving (Show)
 
 --------------------------------------------------------------------------------
--- | Converting from the Primivite Syntax Tree
+-- | Converting from Primivite Syntax Tree
 
 class FromPrim a where
   fromPrim :: P.SyntaxTree -> a

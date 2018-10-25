@@ -1,10 +1,14 @@
-{-#LANGUAGE FlexibleContexts #-}
-module Syntax where
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
+module Syntax.Abstract where
 
 import Control.Monad.Except
-import Data.List(nub)
-import Utilities
 import Control.Arrow ((***))
+import Data.List (nub)
+import Data.Text (unpack)
+
+import qualified Syntax.Concrete as C
+import Utilities
 
 type Label = String
 type ErrMsg = String
@@ -18,7 +22,8 @@ data Name = NS RName    -- user defined
 data ResName = StdOut | StdIn
   deriving (Eq, Show)
 
-type Prog = [(Name, Pi)]
+data Prog = Prog [PiDecl]
+data PiDecl = PiDecl Name Pi
 
 data Pi = End
         | Send Name Expr Pi
@@ -159,3 +164,38 @@ mask (PN x)      = rmEntry x
 mask (PT [])     = id
 mask (PT (p:ps)) = mask (PT ps) . mask p
 mask (PL _)      = id
+
+--------------------------------------------------------------------------------
+-- | Converting from Concrete Syntax Tree
+
+class FromConcrete a b | a -> b where
+  fromConcrete :: a -> b
+
+instance FromConcrete C.Program Prog where
+  fromConcrete (C.Program _ declarations) = Prog (map fromConcrete declarations)
+
+instance FromConcrete C.ProcDecl PiDecl where
+  fromConcrete (C.ProcDecl _ name process) = PiDecl (fromConcrete name) (fromConcrete process)
+
+instance FromConcrete C.Name Name where
+  fromConcrete (C.Name _ name) = NS (unpack name)
+
+instance FromConcrete C.Process Pi where
+  fromConcrete (C.Nu _ name process) =
+    Nu (fromConcrete name) (fromConcrete process)
+  fromConcrete (C.Send _ name expr process) =
+    Send (fromConcrete name) (fromConcrete expr) (fromConcrete process)
+  fromConcrete (C.Recv _ name name' process) =
+    Recv (fromConcrete name) [(PN (fromConcrete name'), (fromConcrete process))]
+  fromConcrete (C.Par _ procA procB) =
+    Par (fromConcrete procA) (fromConcrete procB)
+  fromConcrete (C.End _) =
+    End
+
+instance FromConcrete C.Expr Expr where
+  -- WARNING: there's no multiplication or division here in the AST!
+  fromConcrete (C.Mul _ x y) = fromConcrete x
+  fromConcrete (C.Div _ x y) = fromConcrete x
+  fromConcrete (C.Add _ x y) = EPlus (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.Minus _ x y) = EMinus (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.Digit _ x) = EV (VI x)

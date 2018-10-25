@@ -7,7 +7,7 @@ module Interpreter where
 import Control.Monad.State
 import Control.Monad.Except
 import Control.Arrow ((***))
-import Syntax
+import Syntax.Abstract
 import PiMonad
 import Utilities
 

@@ -9,7 +9,6 @@ import Data.Text (Text)
 --------------------------------------------------------------------------------
 -- | Primitive Syntax Tree (from the tree-sitter parsers)
 
-
 data PointPrim = PointPrim
   { row     :: Int
   , column  :: Int

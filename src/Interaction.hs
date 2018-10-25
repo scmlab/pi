@@ -14,7 +14,7 @@ import Control.Monad.Reader
 import Control.Monad.Except
 import Data.Text.Prettyprint.Doc
 
-import Syntax
+import Syntax.Abstract
 import qualified Syntax.Concrete as Concrete
 import PiMonad
 import Interpreter

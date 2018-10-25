@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances, MultiParamTypeClasses #-}
 module PiMonad where
 
-import Syntax
+import Syntax.Abstract
 -- import Control.Monad.Trans.Either
 -- import Control.Monad.Trans.List
 import GHC.Base (Alternative, empty, (<|>))

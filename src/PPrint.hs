@@ -5,7 +5,8 @@ import Data.Text.Prettyprint.Doc
   -- cabal install prettyprinter
 import Data.Text.Prettyprint.Doc.Util (putDocW)
 import Control.Arrow ((***))
-import Syntax
+import Syntax.Abstract
+
 
 {-
 Operator Precedences
