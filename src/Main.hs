@@ -2,6 +2,10 @@ module Main where
 
 import Control.Arrow ((***))
 import Control.Monad.State
+import Control.Monad.Reader
+import Control.Monad.Except
+
+
 import Data.Function ((&))
 import Data.List (isPrefixOf)
 import Data.Text.Prettyprint.Doc
@@ -16,32 +20,48 @@ import Backend
 import PPrint
 
 main :: IO ()
-main = putStrLn "hello"
+main = haskeline
 
 haskeline :: IO ()
-haskeline = runInputT defaultSettings (loop initialBState)
+haskeline = runInputT defaultSettings $ do
+  (result, state) <- runInteraction initialEnv initialPi loop
+  outputStrLn (show result)
+  -- outputStrLn (show result)
+  return ()
   where
-    loop :: BState -> InputT IO ()
-    loop state = do
-      -- print the current state
-      outputStrLn (show $ pretty state)
+    liftH = lift . lift . lift
 
-      minput <- getInputLine "π > "
+    loop :: InteractionM (InputT IO) ()
+    loop = do
+      -- print the current environment
+      states <- get
+      liftH $ outputStrLn (show $ ppStates states)
+      -- get user input
+      minput <- liftH $ getInputLine "π > "
       case minput of
         Nothing -> return ()
         Just input -> do
           case parseInput input of
-            Just (Down n)   -> loop (down n state)
-            Just (Read i v) -> loop (readInp i v state)
-            Nothing         -> loop state
+            Just (Choose n)   -> do
+              try (choose n)
+              loop
+            Just (Feed i v) -> do
+              try (feed i v)
+              loop
+            Nothing         -> loop
         where
           parseInput :: String -> Maybe Request
           parseInput input
-            | "down " `isPrefixOf` input = Just $ Down (read $ drop 5 input)
-            | "read " `isPrefixOf` input =
+            | "choose " `isPrefixOf` input = Just $ Choose (read $ drop 7 input)
+            | "feed " `isPrefixOf` input =
                 let [i, v] = (map read $ words $ drop 5 input) :: [Int]
-                in Just $ Read i (VI v)
+                in Just $ Feed i (VI v)
             | otherwise = Nothing
+
+          try :: InteractionM (InputT IO) () -> InteractionM (InputT IO) ()
+          try program = do
+            program `catchError` \err ->
+              liftH $ outputStrLn err
 
     initialBState :: BState
     initialBState = start initialEnv initialPi
