@@ -23,7 +23,7 @@ type State = Either ErrMsg (Res, BkSt)
 type Error = String
 type InteractionM m = ExceptT Error (StateT [State] (ReaderT Env m))
 
-data Request = Load Prog | Run Int | Feed Int Val
+data Request = Load Prog | Run Int | Feed Int Val | Err String
   deriving (Show)
 
 data Response = ResError String | ResSuccess String

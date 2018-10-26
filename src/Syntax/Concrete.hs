@@ -3,6 +3,7 @@
 module Syntax.Concrete where
 import qualified Syntax.Primitive as P
 
+import Control.Monad.Except
 import Data.Text (Text, unpack)
 
 --------------------------------------------------------------------------------
@@ -36,64 +37,97 @@ data Expr     = Mul       Range Expr Expr
 --------------------------------------------------------------------------------
 -- | Converting from Primivite Syntax Tree
 
+parsePrim :: P.SyntaxTree -> Either Range Program
+parsePrim = runExcept . fromPrim
+
 class FromPrim a where
-  fromPrim :: P.SyntaxTree -> a
+  fromPrim :: P.SyntaxTree -> Except Range a
 
 instance FromPrim Range where
   fromPrim (P.Node _ _ text (P.RangePrim (P.PointPrim a b) (P.PointPrim c d)) start end) =
-    Range (Point a b start) (Point c d end) text
+    return $ Range (Point a b start) (Point c d end) text
 
 instance FromPrim Name where
-  fromPrim node@(P.Node "name" _ text _ _ _) = Name (fromPrim node) text
+  fromPrim node@(P.Node "name" _ text _ _ _) =
+    Name
+      <$> fromPrim node
+      <*> (return text)
+  fromPrim node = fromPrim node >>= throwError
 
 instance FromPrim Program where
-  fromPrim node@(P.Node "source_file" children _ _ _ _) = Program (fromPrim node)
-    (map fromPrim children)
+  fromPrim node@(P.Node "source_file" children _ _ _ _) =
+    Program
+      <$> fromPrim node
+      <*> mapM fromPrim children
+  fromPrim node = fromPrim node >>= throwError
 
 instance FromPrim ProcDecl where
-  fromPrim node@(P.Node "proc_declaration" children _ _ _ _) = ProcDecl (fromPrim node)
-    (fromPrim $ children !! 0)
-    (fromPrim $ children !! 2)
+  fromPrim node@(P.Node "proc_declaration" children _ _ _ _) =
+    ProcDecl
+      <$> fromPrim node
+      <*> fromPrim (children !! 0)
+      <*> fromPrim (children !! 2)
+  fromPrim node = fromPrim node >>= throwError
 
 instance FromPrim Process where
-  fromPrim node@(P.Node "nu" children _ _ _ _) = Nu (fromPrim node)
-    (fromPrim $ children !! 2)
-    (fromPrim $ children !! 4)
-  fromPrim node@(P.Node "send" children _ _ _ _) = Send (fromPrim node)
-    (fromPrim $ children !! 0)
-    (fromPrim $ children !! 2)
-    (fromPrim $ children !! 4)
-  fromPrim node@(P.Node "recv" children _ _ _ _) = Recv (fromPrim node)
-    (fromPrim $ children !! 0)
-    (fromPrim $ children !! 2)
-    (fromPrim $ children !! 4)
-  fromPrim node@(P.Node "par" children _ _ _ _) = Par (fromPrim node)
-    (fromPrim $ children !! 0)
-    (fromPrim $ children !! 2)
-  fromPrim node@(P.Node "end" children _ _ _ _) = End (fromPrim node)
+  fromPrim node@(P.Node "nu" children _ _ _ _) =
+    Nu
+      <$> fromPrim node
+      <*> fromPrim (children !! 2)
+      <*> fromPrim (children !! 4)
+  fromPrim node@(P.Node "send" children _ _ _ _) =
+    Send
+      <$> fromPrim node
+      <*> fromPrim (children !! 0)
+      <*> fromPrim (children !! 2)
+      <*> fromPrim (children !! 4)
+  fromPrim node@(P.Node "recv" children _ _ _ _) =
+    Recv
+      <$> fromPrim node
+      <*> fromPrim (children !! 0)
+      <*> fromPrim (children !! 2)
+      <*> fromPrim (children !! 4)
+  fromPrim node@(P.Node "par" children _ _ _ _) =
+    Par
+      <$> fromPrim node
+      <*> fromPrim (children !! 0)
+      <*> fromPrim (children !! 2)
+  fromPrim node@(P.Node "end" children _ _ _ _) = End <$> fromPrim node
+  fromPrim node = fromPrim node >>= throwError
 
 instance FromPrim Expr where
   fromPrim node@(P.Node "expr_expr" children _ _ _ _) =
-    (fromPrim $ children !! 1)  -- wrapped in a pair of ( )
-  fromPrim node@(P.Node "expr_mul" children _ _ _ _) = Mul (fromPrim node)
-    (fromPrim $ children !! 0)
-    (fromPrim $ children !! 2)
-  fromPrim node@(P.Node "expr_div" children _ _ _ _) = Div (fromPrim node)
-    (fromPrim $ children !! 0)
-    (fromPrim $ children !! 2)
+    fromPrim (children !! 1)  -- wrapped in a pair of ( )
+  fromPrim node@(P.Node "expr_mul" children _ _ _ _) =
+    Mul
+      <$> fromPrim node
+      <*> fromPrim (children !! 0)
+      <*> fromPrim (children !! 2)
+  fromPrim node@(P.Node "expr_div" children _ _ _ _) =
+    Div
+      <$> fromPrim node
+      <*> fromPrim (children !! 0)
+      <*> fromPrim (children !! 2)
   fromPrim node@(P.Node "expr_factor" children _ _ _ _) =
-    (fromPrim $ children !! 0)  -- go down
+    fromPrim (children !! 0)  -- go down
   fromPrim node@(P.Node "factor_expr" children _ _ _ _) =
-    (fromPrim $ children !! 1)  -- wrapped in a pair of ( )
-  fromPrim node@(P.Node "factor_add" children _ _ _ _) = Add (fromPrim node)
-    (fromPrim $ children !! 0)
-    (fromPrim $ children !! 2)
-  fromPrim node@(P.Node "factor_minus" children _ _ _ _) = Minus (fromPrim node)
-    (fromPrim $ children !! 0)
-    (fromPrim $ children !! 2)
+    fromPrim (children !! 1)  -- wrapped in a pair of ( )
+  fromPrim node@(P.Node "factor_add" children _ _ _ _) =
+    Add
+      <$> fromPrim node
+      <*> fromPrim (children !! 0)
+      <*> fromPrim (children !! 2)
+  fromPrim node@(P.Node "factor_minus" children _ _ _ _) =
+    Minus
+      <$> fromPrim node
+      <*> fromPrim (children !! 0)
+      <*> fromPrim (children !! 2)
   fromPrim node@(P.Node "factor_term" children _ _ _ _) =
-    (fromPrim $ children !! 0)  -- go down
+    fromPrim (children !! 0)  -- go down
   fromPrim node@(P.Node "term_expr" children _ _ _ _) =
-    (fromPrim $ children !! 1)  -- wrapped in a pair of ( )
-  fromPrim node@(P.Node "term_digit" children text _ _ _) = Digit (fromPrim node)
-    (read $ unpack text)
+    fromPrim (children !! 1)  -- wrapped in a pair of ( )
+  fromPrim node@(P.Node "term_digit" children text _ _ _) =
+    Digit
+      <$> fromPrim node
+      <*> (return $ read $ unpack text)
+  fromPrim node = fromPrim node >>= throwError

@@ -37,8 +37,9 @@ instance FromJSON Request where
     case (kind :: Text) of
       "load"  -> do
         pst <- obj .: "syntax-tree"
-        let program = Conc.fromPrim pst :: Conc.Program
-        return $ Load (Abst.fromConcrete program)
+        case Conc.parsePrim pst of
+          Left err -> return $ Err (show err)
+          Right program -> return $ Load (Abst.fromConcrete program)
       "run"   -> do
         i <- obj .: "index"
         return $ Run i
