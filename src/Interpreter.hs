@@ -41,7 +41,7 @@ lineup defs (Par p1 p2 : ps) st =
 lineup defs (Call x : ps) st
   | Just p <- lookup x defs =
     lineup defs (p:ps) st
-  | otherwise = throwError "definition not found"
+  | otherwise = throwError $ "definition not found (looking for " ++ show (pretty x) ++ ")"
 lineup defs (Send c x p : ps) (sends, recvs, inps, news) =
    evalExpr x >>= \v ->
    lineup defs ps ((c,(v,p)):sends, recvs, inps, news)

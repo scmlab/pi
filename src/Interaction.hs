@@ -18,18 +18,20 @@ import PiMonad
 import Interpreter
 
 
+type Choice = Either ErrMsg (Res, BkSt)
 data State = State
-  { env :: Env
-  , states :: [Either ErrMsg (Res, BkSt)]
+  { env     :: Env      -- source code
+  , choices :: [Choice] -- choices of the next steps
   }
- -- Either ErrMsg (Res, BkSt)
 type Error = String
 type InteractionM m = ExceptT Error (StateT State m)
 
-data Request = Test Prog | Load Prog | Run Int | Feed Int Val | Err String
-  deriving (Show)
-
-data Response = ResError String | ResSuccess String
+data Request
+  = Test Prog
+  | Load Prog       -- load the program into the env
+  | Run Int         -- choose and run the nth choice
+  | Feed Int Val    -- feed the nth process with some value
+  | Err String      -- report error
   deriving (Show)
 
 initialEnv :: Env
@@ -38,18 +40,8 @@ initialEnv = []
 initialStates :: Pi
 initialStates = Call (NS "p0") `Par` Call (NS "p1")
 
--- liftIO :: IO a -> InteractionM IO a
--- liftIO = lift . lift
-{-
-commands:
- load
- trace
- run n
--}
-
 --------------------------------------------------------------------------------
 -- | Interaction Monad
-
 
 -- start
 runInteraction :: Monad m => Env -> Pi -> InteractionM m a -> m (Either Error a, State)
@@ -57,25 +49,24 @@ runInteraction env p handler = runStateT (runExceptT handler) (State env initial
   where initialState = map (fmap (Silent *** id))
           (runPiM 0 (lineup env [p] ([],[],[],[])))
 
-ppStates :: [Either ErrMsg (Res, BkSt)] -> Doc n
-ppStates states = vsep (map ppSts (zip [0..] states))
-    where ppSts (i,st) = vsep [ pretty ("= " ++ show i ++ " ====")
+-- pretty print Choices
+ppChoices :: [Choice] -> Doc n
+ppChoices states = vsep (map ppSts (zip [0..] states))
+    where ppSts (i,st) = vsep [ pretty ("==== " ++ show i ++ " ====")
                               , ppMsgRes st
                               , line]
 
-
 -- safe (!!)
-chooseState :: Monad m => Int -> InteractionM m (Either ErrMsg (Res, BkSt))
-chooseState i = do
-  len <- length <$> gets states
+choose :: Monad m => Int -> InteractionM m Choice
+choose i = do
+  len <- length <$> gets choices
   if (i >= len) then
     throwError "out of bound"
   else
-    (!! i) <$> gets states
+    (!! i) <$> gets choices
 
-
-updateStates :: Monad m => [Either ErrMsg (Res, BkSt)] -> InteractionM m ()
-updateStates new = modify (\state -> state { states = new })
+updateChoices :: Monad m => [Choice] -> InteractionM m ()
+updateChoices new = modify (\state -> state { choices = new })
 
 updateEnv :: Monad m => Env -> InteractionM m ()
 updateEnv new = modify (\state -> state { env = new })
@@ -87,35 +78,35 @@ load = updateEnv
 -- down
 run ::  Monad m => Int -> InteractionM m ()
 run i = do
-  state <- chooseState i
-  case state of
+  choice <- choose i
+  case choice of
     Left err ->
-      updateStates [Left err]
+      updateChoices [Left err]
     Right (Output v p st, i) -> do
       defs <- gets env
-      updateStates $ runPiM i (lineup defs [p] st >>= step defs)
+      updateChoices $ runPiM i (lineup defs [p] st >>= step defs)
     Right (Input pps st, i) -> do
-      updateStates [Right (Input pps st, i)]
+      updateChoices [Right (Input pps st, i)]
     Right (Silent st, i) -> do
       defs <- gets env
-      updateStates $ runPiM i (step defs st)
+      updateChoices $ runPiM i (step defs st)
 
 -- feed
 feed :: Monad m => Int -> Val -> InteractionM m ()
 feed i val = do
-  state <- chooseState i
-  case state of
+  choice <- choose i
+  case choice of
     Right (Input pps st, j) -> do
       defs <- gets env
-      updateStates $ runPiM j (Silent <$> input defs val pps st)
+      updateChoices $ runPiM j (Silent <$> input defs val pps st)
     _ ->
       throwError "not expecting input"
 
 
 --------------------------------------------------------------------------------
--- | BStates
+-- | BStates (legacy)
 
-data BState = BState Env [Either ErrMsg (Res, BkSt)]
+data BState = BState Env [Choice]
 
 instance Pretty BState where
   pretty (BState _ sts) = vsep (map ppSts (zip [0..] sts))

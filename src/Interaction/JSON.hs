@@ -36,8 +36,8 @@ jsonREPL = do
           Load (Prog prog) -> do
             let env = map (\(PiDecl name p) -> (name, p)) prog
             load env
-            st <- gets states
-            liftIO $ putStrLn (pack $ show $ ppStates st)
+            choice <- gets choices
+            liftIO $ putStrLn (pack $ show $ ppChoices choice)
           Run i -> liftIO $ putStrLn $ "run"
           Feed i v -> liftIO $ putStrLn $ "feed"
       loop

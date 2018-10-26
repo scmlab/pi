@@ -7,7 +7,7 @@ import Data.Aeson
 import Data.Text (Text)
 
 --------------------------------------------------------------------------------
--- | Primitive Syntax Tree (from the tree-sitter parsers)
+-- | Primitive Syntax Tree (from the tree-sitter parser)
 
 data PointPrim = PointPrim
   { row     :: Int
