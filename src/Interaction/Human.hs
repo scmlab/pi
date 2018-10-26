@@ -23,13 +23,13 @@ humanREPL = runInputT defaultSettings $ do
   outputStrLn (show result)
   return ()
   where
-    liftH = lift . lift . lift
+    liftH = lift . lift
 
     loop :: InteractionM (InputT IO) ()
     loop = do
       -- print the current states
-      states <- get
-      liftH $ outputStrLn (show $ ppStates states)
+      st <- gets states
+      liftH $ outputStrLn (show $ ppStates st)
       -- get user input
       minput <- liftH $ getInputLine "π > "
       case minput of

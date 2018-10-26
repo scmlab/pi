@@ -2,9 +2,9 @@
 
 module Interaction.JSON where
 
-
+import Control.Monad.State hiding (State)
 import Data.Aeson
-import Data.Text hiding (pack)
+import Data.Text hiding (pack, map)
 import Data.ByteString.Char8 (getLine, putStrLn, pack)
 import Prelude hiding (getLine, putStrLn)
 import qualified Syntax.Primitive as Prim
@@ -18,14 +18,28 @@ import Syntax.Abstract
 -- | Interfacing with Machines
 
 jsonREPL :: IO ()
-jsonREPL = loop
+jsonREPL = do
+  (_, _) <- runInteraction initialEnv initialStates loop
+  return ()
+
   where
-    loop :: IO ()
+    loop :: InteractionM IO ()
     loop = do
-      raw <- getLine
+      raw <- liftIO getLine
       case (eitherDecodeStrict raw :: Either String Request) of
-        Left err -> putStrLn $ pack $ show err
-        Right val -> putStrLn $ pack $ show val
+        Left err -> liftIO $ putStrLn $ pack $ show err
+        Right req -> case req of
+          Err err -> do
+            liftIO $ putStrLn (pack $ show $ err)
+          Test prog -> do
+            liftIO $ putStrLn (pack $ show $ prog)
+          Load (Prog prog) -> do
+            let env = map (\(PiDecl name p) -> (name, p)) prog
+            load env
+            st <- gets states
+            liftIO $ putStrLn (pack $ show $ ppStates st)
+          Run i -> liftIO $ putStrLn $ "run"
+          Feed i v -> liftIO $ putStrLn $ "feed"
       loop
 
 --------------------------------------------------------------------------------
@@ -40,6 +54,11 @@ instance FromJSON Request where
         case Conc.parsePrim pst of
           Left err -> return $ Err (show err)
           Right program -> return $ Load (Abst.fromConcrete program)
+      "test"   -> do
+        pst <- obj .: "syntax-tree"
+        case Conc.parsePrim pst of
+          Left err -> return $ Err (show err)
+          Right program -> return $ Test (Abst.fromConcrete program)
       "run"   -> do
         i <- obj .: "index"
         return $ Run i
