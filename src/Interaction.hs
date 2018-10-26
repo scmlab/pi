@@ -15,7 +15,6 @@ import Control.Monad.Except
 import Data.Text.Prettyprint.Doc
 
 import Syntax.Abstract
-import qualified Syntax.Concrete as Concrete
 import PiMonad
 import Interpreter
 
@@ -24,7 +23,7 @@ type State = Either ErrMsg (Res, BkSt)
 type Error = String
 type InteractionM m = ExceptT Error (StateT [State] (ReaderT Env m))
 
-data Request = Load Concrete.Program | Run Int | Feed Int Val
+data Request = Load Prog | Run Int | Feed Int Val
   deriving (Show)
 
 data Response = ResError String | ResSuccess String

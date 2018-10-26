@@ -1,4 +1,4 @@
-
+a 
 
 name = (nu x) c!3
     . c?x
@@ -8,4 +8,4 @@ name = (nu x) c!3
 
 
 name = (nu x) c!3 . end | end
-name = (nu x) c!3 . end
+abc = (nu y) c!3 . end

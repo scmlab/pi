@@ -7,8 +7,9 @@ import Data.Aeson
 import Data.Text hiding (pack)
 import Data.ByteString.Char8 (getLine, putStrLn, pack)
 import Prelude hiding (getLine, putStrLn)
-import qualified Syntax.Primitive as Primitive
-import qualified Syntax.Concrete as Concrete
+import qualified Syntax.Primitive as Prim
+import qualified Syntax.Concrete as Conc
+import qualified Syntax.Abstract as Abst
 
 import Interaction
 import Syntax.Abstract
@@ -22,7 +23,6 @@ jsonREPL = loop
     loop :: IO ()
     loop = do
       raw <- getLine
-      putStrLn raw
       case (eitherDecodeStrict raw :: Either String Request) of
         Left err -> putStrLn $ pack $ show err
         Right val -> putStrLn $ pack $ show val
@@ -37,7 +37,8 @@ instance FromJSON Request where
     case (kind :: Text) of
       "load"  -> do
         pst <- obj .: "syntax-tree"
-        return $ Load (Concrete.fromPrim pst)
+        let program = Conc.fromPrim pst :: Conc.Program
+        return $ Load (Abst.fromConcrete program)
       "run"   -> do
         i <- obj .: "index"
         return $ Run i

@@ -23,7 +23,9 @@ data ResName = StdOut | StdIn
   deriving (Eq, Show)
 
 data Prog = Prog [PiDecl]
+  deriving (Eq, Show)
 data PiDecl = PiDecl Name Pi
+  deriving (Eq, Show)
 
 data Pi = End
         | Send Name Expr Pi
