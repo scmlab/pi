@@ -37,16 +37,13 @@ data Request
 initialEnv :: Env
 initialEnv = []
 
-initialStates :: Pi
-initialStates = Call (NS "p0") `Par` Call (NS "p1")
-
 --------------------------------------------------------------------------------
 -- | Interaction Monad
 
 -- start
 runInteraction :: Monad m => Env -> Pi -> InteractionM m a -> m (Either Error a, State)
-runInteraction env p handler = runStateT (runExceptT handler) (State env initialState)
-  where initialState = map (fmap (Silent *** id))
+runInteraction env p handler = runStateT (runExceptT handler) (State env initialChoices)
+  where initialChoices = map (fmap (Silent *** id))
           (runPiM 0 (lineup env [p] ([],[],[],[])))
 
 -- pretty print Choices
@@ -73,7 +70,11 @@ updateEnv new = modify (\state -> state { env = new })
 
 -- load
 load :: Monad m => Env -> InteractionM m ()
-load = updateEnv
+load env = put $ State
+  { env = env
+  , choices = map (fmap (Silent *** id))
+          (runPiM 0 (lineup env [Call (NS "main")] ([],[],[],[])))
+  }
 
 -- down
 run ::  Monad m => Int -> InteractionM m ()

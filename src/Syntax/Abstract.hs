@@ -191,6 +191,8 @@ instance FromConcrete C.Process Pi where
     Recv (fromConcrete name) [(PN (fromConcrete name'), (fromConcrete process))]
   fromConcrete (C.Par _ procA procB) =
     Par (fromConcrete procA) (fromConcrete procB)
+  fromConcrete (C.Call _ name) =
+    Call (fromConcrete name)
   fromConcrete (C.End _) =
     End
 
@@ -199,5 +201,5 @@ instance FromConcrete C.Expr Expr where
   fromConcrete (C.Mul _ x y) = fromConcrete x
   fromConcrete (C.Div _ x y) = fromConcrete x
   fromConcrete (C.Add _ x y) = EPlus (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.Minus _ x y) = EMinus (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.Sub _ x y) = EMinus (fromConcrete x) (fromConcrete y)
   fromConcrete (C.Digit _ x) = EV (VI x)

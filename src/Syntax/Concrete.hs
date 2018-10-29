@@ -23,6 +23,7 @@ data Process  = Send      Range Name Expr Process
               | Recv      Range Name Name Process
               | Nu        Range Name      Process
               | Par       Range           Process Process
+              | Call      Range Name
               | End       Range
               deriving (Show)
 
@@ -30,7 +31,7 @@ data Process  = Send      Range Name Expr Process
 data Expr     = Mul       Range Expr Expr
               | Div       Range Expr Expr
               | Add       Range Expr Expr
-              | Minus     Range Expr Expr
+              | Sub       Range Expr Expr
               | Digit     Range Int
               deriving (Show)
 
@@ -63,7 +64,7 @@ instance FromPrim Name where
   fromPrim node = fromPrim node >>= throwError
 
 instance FromPrim Program where
-  fromPrim node@(P.Node "source_file" children _ _ _ _) =
+  fromPrim node@(P.Node "program" children _ _ _ _) =
     Program
       <$> fromPrim node
       <*> mapM fromPrim children
@@ -100,43 +101,37 @@ instance FromPrim Process where
       <$> fromPrim node
       <*> fromPrimChild node 0
       <*> fromPrimChild node 2
+  fromPrim node@(P.Node "call" children _ _ _ _) =
+    Call
+    <$> fromPrim node
+    <*> fromPrimChild node 0
   fromPrim node@(P.Node "end" children _ _ _ _) =
     End
       <$> fromPrim node
   fromPrim node = fromPrim node >>= throwError
 
 instance FromPrim Expr where
-  fromPrim node@(P.Node "expr_expr" children _ _ _ _) =
-    fromPrimChild node 1  -- wrapped in a pair of ( )
-  fromPrim node@(P.Node "expr_mul" children _ _ _ _) =
+  fromPrim node@(P.Node "mul" children _ _ _ _) =
     Mul
       <$> fromPrim node
       <*> fromPrimChild node 0
       <*> fromPrimChild node 2
-  fromPrim node@(P.Node "expr_div" children _ _ _ _) =
+  fromPrim node@(P.Node "div" children _ _ _ _) =
     Div
       <$> fromPrim node
       <*> fromPrimChild node 0
       <*> fromPrimChild node 2
-  fromPrim node@(P.Node "expr_factor" children _ _ _ _) =
-    fromPrimChild node 0  -- go down
-  fromPrim node@(P.Node "factor_expr" children _ _ _ _) =
-    fromPrimChild node 1  -- wrapped in a pair of ( )
-  fromPrim node@(P.Node "factor_add" children _ _ _ _) =
+  fromPrim node@(P.Node "add" children _ _ _ _) =
     Add
       <$> fromPrim node
       <*> fromPrimChild node 0
       <*> fromPrimChild node 2
-  fromPrim node@(P.Node "factor_minus" children _ _ _ _) =
-    Minus
+  fromPrim node@(P.Node "sub" children _ _ _ _) =
+    Sub
       <$> fromPrim node
       <*> fromPrimChild node 0
       <*> fromPrimChild node 2
-  fromPrim node@(P.Node "factor_term" children _ _ _ _) =
-    fromPrimChild node 0  -- go down
-  fromPrim node@(P.Node "term_expr" children _ _ _ _) =
-    fromPrimChild node 1  -- wrapped in a pair of ( )
-  fromPrim node@(P.Node "term_digit" children text _ _ _) =
+  fromPrim node@(P.Node "digit" children text _ _ _) =
     Digit
       <$> fromPrim node
       <*> (return $ read $ unpack text)

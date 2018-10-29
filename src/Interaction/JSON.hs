@@ -3,6 +3,7 @@
 module Interaction.JSON where
 
 import Control.Monad.State hiding (State)
+import Control.Monad.Except
 import Data.Aeson
 import Data.Text hiding (pack, map)
 import Data.ByteString.Char8 (getLine, putStrLn, pack)
@@ -19,7 +20,7 @@ import Syntax.Abstract
 
 jsonREPL :: IO ()
 jsonREPL = do
-  (_, _) <- runInteraction initialEnv initialStates loop
+  (_, _) <- runInteraction initialEnv (Call (NS "main")) loop
   return ()
 
   where
@@ -31,16 +32,25 @@ jsonREPL = do
         Right req -> case req of
           Err err -> do
             liftIO $ putStrLn (pack $ show $ err)
-          Test prog -> do
+          Test (Prog prog) -> do
             liftIO $ putStrLn (pack $ show $ prog)
           Load (Prog prog) -> do
-            let env = map (\(PiDecl name p) -> (name, p)) prog
-            load env
-            choice <- gets choices
-            liftIO $ putStrLn (pack $ show $ ppChoices choice)
-          Run i -> liftIO $ putStrLn $ "run"
-          Feed i v -> liftIO $ putStrLn $ "feed"
+            load $ map (\(PiDecl name p) -> (name, p)) prog
+            printChoices
+          Run i -> do
+            try (run i)
+            printChoices
+          Feed i v -> do
+            try (run i)
+            printChoices
       loop
+
+    printChoices :: InteractionM IO ()
+    printChoices = gets choices >>= liftIO . putStrLn . pack . show . ppChoices
+
+    try :: InteractionM IO () -> InteractionM IO ()
+    try program = do
+      program `catchError` (liftIO . putStrLn . pack . show)
 
 --------------------------------------------------------------------------------
 -- | Encoding & Decoding JSON
@@ -52,12 +62,12 @@ instance FromJSON Request where
       "load"  -> do
         pst <- obj .: "syntax-tree"
         case Conc.parsePrim pst of
-          Left err -> return $ Err (show err)
+          Left err      -> return $ Err (show err)
           Right program -> return $ Load (Abst.fromConcrete program)
       "test"   -> do
         pst <- obj .: "syntax-tree"
         case Conc.parsePrim pst of
-          Left err -> return $ Err (show err)
+          Left err      -> return $ Err (show err)
           Right program -> return $ Test (Abst.fromConcrete program)
       "run"   -> do
         i <- obj .: "index"
