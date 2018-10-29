@@ -34,6 +34,11 @@ data Request
   | Err String      -- report error
   deriving (Show)
 
+data Response
+  = ResChoices [Choice]
+  | ResError   String
+  -- deriving (Show)
+
 initialEnv :: Env
 initialEnv = []
 
@@ -44,7 +49,7 @@ initialEnv = []
 runInteraction :: Monad m => Env -> Pi -> InteractionM m a -> m (Either Error a, State)
 runInteraction env p handler = runStateT (runExceptT handler) (State env initialChoices)
   where initialChoices = map (fmap (Silent *** id))
-          (runPiM 0 (lineup env [p] ([],[],[],[])))
+          (runPiM 0 (lineup env [p] (St [] [] [] [])))
 
 -- pretty print Choices
 ppChoices :: [Choice] -> Doc n
@@ -73,7 +78,7 @@ load :: Monad m => Env -> InteractionM m ()
 load env = put $ State
   { env = env
   , choices = map (fmap (Silent *** id))
-          (runPiM 0 (lineup env [Call (NS "main")] ([],[],[],[])))
+          (runPiM 0 (lineup env [Call (NS "main")] (St [] [] [] [])))
   }
 
 -- down
@@ -103,41 +108,40 @@ feed i val = do
     _ ->
       throwError "not expecting input"
 
-
 --------------------------------------------------------------------------------
 -- | BStates (legacy)
 
-data BState = BState Env [Choice]
-
-instance Pretty BState where
-  pretty (BState _ sts) = vsep (map ppSts (zip [0..] sts))
-    where ppSts (i,st) = vsep [ pretty ("= " ++ show i ++ " ====")
-                              , ppMsgRes st
-                              , line]
-
-start :: Env -> Pi -> BState
-start defs p = BState defs $ map (fmap (Silent *** id))
-  (runPiM 0 (lineup defs [p] ([],[],[],[])))
-
-down :: Int -> BState -> BState
-down i (BState defs sts) = down' (sts !! i)
-  where
-    down' (Left err) =
-      BState defs [Left err]
-    down' (Right (Output v p st, i)) =
-      BState defs (runPiM i (lineup defs [p] st >>= step defs))
-    down' (Right (Input pps st, i)) =
-      BState defs [Right (Input pps st, i)]
-    down' (Right (Silent st, i)) =
-      BState defs (runPiM i (step defs st))
-
-readInp :: Int -> Val -> BState -> BState
-readInp i v  (BState defs sts) =
-  case sts !! i of
-    Right (Input pps st, j) ->
-      BState defs (runPiM j (Silent <$> input defs v pps st))
-    _ -> error "not expecting input."
-
-trace :: [Int] -> BState -> BState
-trace []     = id
-trace (i:is) = trace is . down i
+-- data BState = BState Env [Choice]
+--
+-- instance Pretty BState where
+--   pretty (BState _ sts) = vsep (map ppSts (zip [0..] sts))
+--     where ppSts (i,st) = vsep [ pretty ("= " ++ show i ++ " ====")
+--                               , ppMsgRes st
+--                               , line]
+--
+-- start :: Env -> Pi -> BState
+-- start defs p = BState defs $ map (fmap (Silent *** id))
+--   (runPiM 0 (lineup defs [p] ([],[],[],[])))
+--
+-- down :: Int -> BState -> BState
+-- down i (BState defs sts) = down' (sts !! i)
+--   where
+--     down' (Left err) =
+--       BState defs [Left err]
+--     down' (Right (Output v p st, i)) =
+--       BState defs (runPiM i (lineup defs [p] st >>= step defs))
+--     down' (Right (Input pps st, i)) =
+--       BState defs [Right (Input pps st, i)]
+--     down' (Right (Silent st, i)) =
+--       BState defs (runPiM i (step defs st))
+--
+-- readInp :: Int -> Val -> BState -> BState
+-- readInp i v  (BState defs sts) =
+--   case sts !! i of
+--     Right (Input pps st, j) ->
+--       BState defs (runPiM j (Silent <$> input defs v pps st))
+--     _ -> error "not expecting input."
+--
+-- trace :: [Int] -> BState -> BState
+-- trace []     = id
+-- trace (i:is) = trace is . down i

@@ -77,3 +77,22 @@ instance FromJSON Request where
         v <- obj .: "value"
         return $ Feed i (VI v)
       _       -> fail "unknown kind"
+
+-- instance ToJSON Response where
+--   toJSON (ResChoices choices) = object
+--     [ "response" .= ("choices" :: Text)
+--     , "payload"  .= choices
+--     ]
+--   toJSON (ResError err) = object
+--     [ "response" .= ("error" :: Text)
+--     , "payload"  .= err
+--     ]
+
+
+-- data Res = Silent St
+--          | Output Val Pi St
+--          | Input [(Ptrn, Pi)] St
+--          deriving (Show)
+--
+-- instance ToJSON Res where
+--   toJSON (Silent
