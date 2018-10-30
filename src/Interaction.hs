@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Interaction where
 
 import Control.Arrow ((***))
@@ -6,6 +8,7 @@ import Control.Monad.Except
 import Data.Text.Prettyprint.Doc
 
 import Syntax.Abstract
+import Syntax.Concrete (ParseError)
 import Interpreter
 
 
@@ -22,13 +25,14 @@ data Request
   | Load Prog       -- load the program into the env
   | Run Int         -- choose and run the nth choice
   | Feed Int Val    -- feed the nth process with some value
-  | Err String      -- report error
+  | Err ParseError  -- error raised when parsing this request
   deriving (Show)
 
 data Response
-  = ResChoices [Choice]
-  | ResTest    String
-  | ResError   String
+  = ResChoices      [Choice]
+  | ResTest         String
+  | ResParseError   ParseError
+  | ResGenericError String
   -- deriving (Show)
 
 initialEnv :: Env

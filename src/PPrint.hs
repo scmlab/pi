@@ -23,8 +23,8 @@ infix  8 ? !
 instance Pretty Name where
   pretty (NS x) = pretty x
   pretty (NG i) = pretty ("X"++show i)
-  pretty (NR StdOut) = pretty "StdOut"
-  pretty (NR StdIn) = pretty "StdIn"
+  pretty (NR StdOut) = pretty "stdout"
+  pretty (NR StdIn) = pretty "stdin"
 
 instance Pretty Val where
   pretty (N x) = pretty x

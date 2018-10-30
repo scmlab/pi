@@ -5,14 +5,14 @@ module Syntax.Abstract where
 import Control.Monad.Except
 import Control.Arrow ((***))
 import Data.List (nub)
-import Data.Text (unpack)
+import Data.Text (Text)
 
 import qualified Syntax.Concrete as C
 import Utilities
 
-type Label = String
+type Label = Text
 type ErrMsg = String
-type RName = String   -- row name
+type RName = Text   -- row name
 
 data Name = NS RName    -- user defined
           | NG Int      -- system generated
@@ -180,7 +180,7 @@ instance FromConcrete C.ProcDecl PiDecl where
   fromConcrete (C.ProcDecl _ name process) = PiDecl (fromConcrete name) (fromConcrete process)
 
 instance FromConcrete C.Name Name where
-  fromConcrete (C.Name _ name) = NS (unpack name)
+  fromConcrete (C.Name _ name) = NS name
 
 instance FromConcrete C.Process Pi where
   fromConcrete (C.Nu _ name process) =
@@ -203,3 +203,4 @@ instance FromConcrete C.Expr Expr where
   fromConcrete (C.Add _ x y) = EPlus (fromConcrete x) (fromConcrete y)
   fromConcrete (C.Sub _ x y) = EMinus (fromConcrete x) (fromConcrete y)
   fromConcrete (C.Digit _ x) = EV (VI x)
+  fromConcrete (C.Var _ x) = EV (N (NS x))

@@ -58,6 +58,11 @@ humanREPL = runInputT defaultSettings $ do
             program `catchError` \err ->
               liftH $ outputStrLn err
 
+-- po = (nu w) c!w .
+--       w?{ PLUS -> w?<x,y> . w!(x + y) . p0; NEG -> w?x . w!(0 - x) . p0 }
+-- p1 = c?j . stdin?x . j!NEG . j!x . j?z . stdout!z . end
+-- p2 = c?j . j!PLUS . j!<3,4> . j?z . stdout!z . end
+-- main = p0 | p1 | p2
     initialEnv :: Env
     initialEnv =
       [(NS "p0",

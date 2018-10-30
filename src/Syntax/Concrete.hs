@@ -33,24 +33,32 @@ data Expr     = Mul       Range Expr Expr
               | Add       Range Expr Expr
               | Sub       Range Expr Expr
               | Digit     Range Int
+              | Var       Range Text
               deriving (Show)
 
 --------------------------------------------------------------------------------
 -- | Converting from Primivite Syntax Tree
 
-parsePrim :: P.SyntaxTree -> Either Range Program
+data ParseError = ParseError Range String Text deriving (Show)
+
+parsePrim :: P.SyntaxTree -> Either ParseError Program
 parsePrim = runExcept . fromPrim
 
 class FromPrim a where
-  fromPrim :: P.SyntaxTree -> Except Range a
+  fromPrim :: P.SyntaxTree -> Except ParseError a
 
 -- access the nth children safely
-fromPrimChild :: FromPrim a => P.SyntaxTree -> Int -> Except Range a
+fromPrimChild :: FromPrim a => P.SyntaxTree -> Int -> Except ParseError a
 fromPrimChild node@(P.Node _ children _ _ _ _) i = do
   if i >= length children then
     fromPrim node >>= throwError
   else
     fromPrim (children !! i)
+
+instance FromPrim ParseError where
+  fromPrim node@(P.Node expected _ got _ _ _) = do
+    range <- fromPrim node
+    throwError $ ParseError range expected got
 
 instance FromPrim Range where
   fromPrim (P.Node _ _ text (P.RangePrim (P.PointPrim a b) (P.PointPrim c d)) start end) =
@@ -58,6 +66,10 @@ instance FromPrim Range where
 
 instance FromPrim Name where
   fromPrim node@(P.Node "name" _ text _ _ _) =
+    Name
+      <$> fromPrim node
+      <*> (return text)
+  fromPrim node@(P.Node "process_name" _ text _ _ _) =
     Name
       <$> fromPrim node
       <*> (return text)
@@ -131,8 +143,12 @@ instance FromPrim Expr where
       <$> fromPrim node
       <*> fromPrimChild node 0
       <*> fromPrimChild node 2
-  fromPrim node@(P.Node "digit" children text _ _ _) =
+  fromPrim node@(P.Node "integer" children text _ _ _) =
     Digit
       <$> fromPrim node
       <*> (return $ read $ unpack text)
+  fromPrim node@(P.Node "variable" children text _ _ _) =
+    Var
+      <$> fromPrim node
+      <*> (return text)
   fromPrim node = fromPrim node >>= throwError

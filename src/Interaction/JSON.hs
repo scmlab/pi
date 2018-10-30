@@ -18,6 +18,7 @@ import Data.Text.Prettyprint.Doc (pretty)
 import Interaction
 import Interpreter
 import Syntax.Abstract
+import qualified Syntax.Concrete as Conc
 
 --------------------------------------------------------------------------------
 -- | Interfacing with Machines
@@ -35,10 +36,10 @@ jsonREPL = do
     loop = do
       raw <- liftIO getLine
       case (eitherDecodeStrict raw :: Either String Request) of
-        Left err -> liftIO $ putStrLn $ pack $ show err
+        Left err -> response $ ResGenericError err
         Right req -> case req of
           Err err -> do
-            response $ ResError err
+            response $ ResParseError err
           Test (Prog prog) -> do
             response $ ResTest (show prog)
           Load (Prog prog) -> do
@@ -69,12 +70,12 @@ instance FromJSON Request where
       "load"  -> do
         pst <- obj .: "syntax-tree"
         case Conc.parsePrim pst of
-          Left err      -> return $ Err (show err)
+          Left err      -> return $ Err err
           Right program -> return $ Load (Abst.fromConcrete program)
       "test"   -> do
         pst <- obj .: "syntax-tree"
         case Conc.parsePrim pst of
-          Left err      -> return $ Err (show err)
+          Left err      -> return $ Err err
           Right program -> return $ Test (Abst.fromConcrete program)
       "run"   -> do
         i <- obj .: "index"
@@ -94,10 +95,22 @@ instance ToJSON Response where
     [ "response" .= ("test" :: Text)
     , "payload"  .= payload
     ]
-  toJSON (ResError err) = object
-    [ "response" .= ("error" :: Text)
+  toJSON (ResParseError err) = object
+    [ "response" .= ("parse-error" :: Text)
     , "payload"  .= err
     ]
+  toJSON (ResGenericError err) = object
+    [ "response" .= ("generic-error" :: Text)
+    , "payload"  .= err
+    ]
+
+instance ToJSON Conc.ParseError where
+  toJSON (Conc.ParseError range expected got) = object
+    [ "range"     .= show range
+    , "expected"  .= expected
+    , "got"       .= got
+    ]
+
 
 instance ToJSON Res where
   toJSON (Silent state) = object
