@@ -82,11 +82,11 @@ run i = do
   case choice of
     Left err ->
       updateChoices [Left err]
-    Right (Output v p st, i) -> do
+    Right (Output st (Sender v p), i) -> do
       defs <- gets env
       updateChoices $ runPiMonad defs i $ lineup [p] st >>= step
-    Right (Input pps st, i) -> do
-      updateChoices [Right (Input pps st, i)]
+    Right (Input st pps, i) -> do
+      updateChoices [Right (Input st pps, i)]
     Right (Silent st, i) -> do
       defs <- gets env
       updateChoices $ runPiMonad defs i (step st)
@@ -96,7 +96,7 @@ feed :: Monad m => Int -> Val -> InteractionM m ()
 feed i val = do
   choice <- choose i
   case choice of
-    Right (Input pps st, j) -> do
+    Right (Input st pps, j) -> do
       defs <- gets env
       updateChoices $ runPiMonad defs j (Silent <$> input val pps st)
     _ ->

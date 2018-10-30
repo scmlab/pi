@@ -26,14 +26,23 @@ instance MonadFresh PiMonad where
 
 type BkSt = Int
 type Env = FMap Name Pi
+
+data Sender = Sender Val Pi deriving (Show, Eq)
+data Receiver = Receiver [(Ptrn,Pi)] deriving (Show, Eq)
+
 data St = St
-  { stSenders   :: FMap Name (Val, Pi)      -- senders
-  , stReceivers :: FMap Name [(Ptrn, Pi)]   -- receivers
-  , stWaiting   :: [[(Ptrn, Pi)]]           -- blocked at stdin
+  { stSenders   :: FMap Name Sender      -- senders
+  , stReceivers :: FMap Name Receiver   -- receivers
+  , stWaiting   :: [Receiver]           -- blocked at stdin
   , stFreshVars :: [Name]                   -- new variables
   } deriving (Show)
 
 type PiMonad = ReaderT Env (StateT BkSt (ExceptT String []))
+
+data Res = Silent St
+         | Output St Sender
+         | Input  St Receiver
+         deriving (Show)
 
 runPiMonad :: Env -> BkSt -> PiMonad a -> [Either String (a, BkSt)]
 runPiMonad env bk m = runExceptT (runStateT (runReaderT m env) bk)
@@ -48,11 +57,11 @@ addPi (Call x) st = do
     Nothing -> throwError $ "definition not found (looking for " ++ show (pretty x) ++ ")"
 addPi (Send c x p) (St sends recvs inps news) = do
   val <- evalExpr x
-  return $ St ((c, (val, p)):sends) recvs inps news
+  return $ St ((c, (Sender val p)):sends) recvs inps news
 addPi (Recv (NR StdIn) pps) (St sends recvs inps news) =
-  return $ St sends recvs (pps:inps) news
+  return $ St sends recvs (Receiver pps:inps) news
 addPi (Recv c pps) (St sends recvs inps news) =
-  return $ St sends ((c,pps):recvs) inps news
+  return $ St sends ((c,Receiver pps):recvs) inps news
 addPi (Nu x p) (St sends recvs inps news) = do
   i <- fresh
   addPi (substPi [(x, N i)] p) (St sends recvs inps (i:news))
@@ -66,29 +75,29 @@ stToPi (St sends recvs inps news) =
             foldr par End rs `par`
             foldr par End is ) news
   where
-    ss = [ Send c (EV v) p | (c,(v,p)) <- sends ]
-    rs = [ Recv c pps | (c,pps) <- recvs ]
-    is = [ Recv (NR StdIn) pps | pps <- inps]
+    ss = [ Send c (EV v) p      | (c,(Sender v p)) <- sends ]
+    rs = [ Recv c pps           | (c, Receiver pps) <- recvs ]
+    is = [ Recv (NR StdIn) pps  | Receiver pps <- inps]
 
 step :: St -> PiMonad Res
 step (St sends recvs inps news) =
   (select inps >>= doInput) `mplus`
   (select sends >>= doSend)
   where
-    doSend :: ((Name, (Val, Pi)), FMap Name (Val,Pi)) -> PiMonad Res
-    doSend ((NR StdOut, (v,p)), sends') =
-      return (Output v p (St sends' recvs inps news))
-    doSend ((c,(v,p)), sends') = do
+    doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad Res
+    doSend ((NR StdOut, (Sender v p)), sends') =
+      return (Output (St sends' recvs inps news) (Sender v p))
+    doSend ((c,(Sender v p)), sends') = do
       (pps, recvs') <- selectByKey c recvs
-      qs <- comm (v,p) pps
+      qs <- comm (Sender v p) pps
       Silent <$> lineup qs (St sends' recvs' inps news)
 
-    doInput :: ([(Ptrn, Pi)], [[(Ptrn, Pi)]]) -> PiMonad Res
+    doInput :: (Receiver, [Receiver]) -> PiMonad Res
     doInput (pps, inps') =
-      return (Input pps (St sends recvs inps' news))
+      return (Input (St sends recvs inps' news) pps)
 
-input :: Val -> [(Ptrn, Pi)] -> St -> PiMonad St
-input val pps st =
+input :: Val -> Receiver -> St -> PiMonad St
+input val (Receiver pps) st =
   case matchPPs pps val of
     Just (th, p) -> lineup [substPi th p] st
     Nothing -> throwError "input fails to match"
@@ -99,15 +108,10 @@ select [] = mzero
 select (x:xs) = return (x,xs) `mplus`
                 ((id *** (x:)) <$> select xs)
 
-data Res = Silent St
-         | Output Val Pi St
-         | Input [(Ptrn, Pi)] St
-         deriving (Show)
-
-comm :: MonadPlus m => (Val, Pi) -> [(Ptrn, Pi)] -> m [Pi]
-comm (v,q) pps =
+comm :: MonadPlus m => Sender -> Receiver -> m [Pi]
+comm (Sender v q) (Receiver pps) =
   case matchPPs pps v of
-   Just (th, p) -> return [q,substPi th p]
+   Just (th, p) -> return [q, substPi th p]
    Nothing -> mzero
 
 -- Pretty Printing
@@ -123,9 +127,9 @@ ppSt (St sends recvs inps news) =
        indent 2 (vsep (map pretty rs)),
        encloseSep (pretty "New: ") (pretty ".") comma
           (map pretty news)]
- where ss = [ Send c (EV v) p | (c,(v,p)) <- sends ]
-       rs = [ Recv (NR StdIn) pps | pps <- inps ] ++
-            [ Recv c pps | (c,pps) <- recvs ]
+ where ss = [ Send c (EV v) p     | (c, (Sender v p)) <- sends ]
+       rs = [ Recv (NR StdIn) pps | (Receiver pps)    <- inps ] ++
+            [ Recv c pps          | (c, Receiver pps) <- recvs ]
 
 ppMsg :: Pretty st => Either ErrMsg st -> Doc a
 ppMsg (Left msg) = pretty "error:" <+> pretty msg
@@ -137,11 +141,11 @@ ppMsgSt (Right (st, _)) = ppSt st
 
 ppRes :: Res -> Doc a
 ppRes (Silent st) = ppSt st
-ppRes (Output v p st) =
+ppRes (Output st (Sender v p)) =
   vsep [pretty "Output:" <+>
          pretty (Send (NR StdOut) (EV v) p),
         ppSt st]
-ppRes (Input p st) =
+ppRes (Input st (Receiver p)) =
   vsep [pretty "Input:" <+>
          pretty (Recv (NR StdIn) p),
         ppSt st]
@@ -156,10 +160,10 @@ type St = ( [Pi]               -- processes running
           , [Name]             -- generated names
           )
 
-type Waiting = [(Val, Pi)] -- only senders wait in the queue
+type Waiting = [Sender] -- only senders wait in the queue
 
--- data Waiting = Senders [(Val, Pi)]
---              | Receivers [[(Ptrn, Pi)]]
+-- data Waiting = Senders [Sender]
+--              | Receivers [Receiver]
 --    deriving (Eq, Show)
        -- non-empty
 
@@ -213,7 +217,7 @@ doSend c v p (ps, waits, news) =
   step (ps, fMapUpdate c (v,p) ((v,p):) waits, news)
 
 doRecv :: MonadError ErrMsg m =>
-          Name -> [(Ptrn, Pi)] -> St -> m (Res St)
+          Name -> Receiver -> St -> m (Res St)
 doRecv c pps (ps, waits, news) =
   case lookup c waits of
     Nothing ->
