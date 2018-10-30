@@ -1,12 +1,4 @@
 module Interaction where
-  -- ( Request(..)
-  -- , Response(..)
-  -- , InteractionM(..)
-  -- , runInteraction
-  -- , run
-  -- , feed
-  -- , ppStates
-  -- ) where
 
 import Control.Arrow ((***))
 import Control.Monad.State hiding (State)
@@ -14,7 +6,6 @@ import Control.Monad.Except
 import Data.Text.Prettyprint.Doc
 
 import Syntax.Abstract
-import PiMonad
 import Interpreter
 
 
@@ -45,11 +36,14 @@ initialEnv = []
 --------------------------------------------------------------------------------
 -- | Interaction Monad
 
+toChoice :: Either String (St, BkSt) -> Choice
+toChoice (Left err)       = Left err
+toChoice (Right (st, i))  = Right (Silent st, i)
+
 -- start
 runInteraction :: Monad m => Env -> Pi -> InteractionM m a -> m (Either Error a, State)
 runInteraction env p handler = runStateT (runExceptT handler) (State env initialChoices)
-  where initialChoices = map (fmap (Silent *** id))
-          (runPiM 0 (lineup env [p] (St [] [] [] [])))
+  where initialChoices = map toChoice $ runPiMonad env 0 (lineup [p] (St [] [] [] []))
 
 -- pretty print Choices
 ppChoices :: [Choice] -> Doc n
@@ -78,7 +72,7 @@ load :: Monad m => Env -> InteractionM m ()
 load env = put $ State
   { env = env
   , choices = map (fmap (Silent *** id))
-          (runPiM 0 (lineup env [Call (NS "main")] (St [] [] [] [])))
+          (runPiMonad env 0 (lineup [Call (NS "main")] (St [] [] [] [])))
   }
 
 -- down
@@ -90,12 +84,12 @@ run i = do
       updateChoices [Left err]
     Right (Output v p st, i) -> do
       defs <- gets env
-      updateChoices $ runPiM i (lineup defs [p] st >>= step defs)
+      updateChoices $ runPiMonad defs i $ lineup [p] st >>= step
     Right (Input pps st, i) -> do
       updateChoices [Right (Input pps st, i)]
     Right (Silent st, i) -> do
       defs <- gets env
-      updateChoices $ runPiM i (step defs st)
+      updateChoices $ runPiMonad defs i (step st)
 
 -- feed
 feed :: Monad m => Int -> Val -> InteractionM m ()
@@ -104,7 +98,7 @@ feed i val = do
   case choice of
     Right (Input pps st, j) -> do
       defs <- gets env
-      updateChoices $ runPiM j (Silent <$> input defs val pps st)
+      updateChoices $ runPiMonad defs j (Silent <$> input val pps st)
     _ ->
       throwError "not expecting input"
 
@@ -121,7 +115,7 @@ feed i val = do
 --
 -- start :: Env -> Pi -> BState
 -- start defs p = BState defs $ map (fmap (Silent *** id))
---   (runPiM 0 (lineup defs [p] ([],[],[],[])))
+--   (runPiMonad 0 (lineup defs [p] ([],[],[],[])))
 --
 -- down :: Int -> BState -> BState
 -- down i (BState defs sts) = down' (sts !! i)
@@ -129,17 +123,17 @@ feed i val = do
 --     down' (Left err) =
 --       BState defs [Left err]
 --     down' (Right (Output v p st, i)) =
---       BState defs (runPiM i (lineup defs [p] st >>= step defs))
+--       BState defs (runPiMonad i (lineup defs [p] st >>= step defs))
 --     down' (Right (Input pps st, i)) =
 --       BState defs [Right (Input pps st, i)]
 --     down' (Right (Silent st, i)) =
---       BState defs (runPiM i (step defs st))
+--       BState defs (runPiMonad i (step defs st))
 --
 -- readInp :: Int -> Val -> BState -> BState
 -- readInp i v  (BState defs sts) =
 --   case sts !! i of
 --     Right (Input pps st, j) ->
---       BState defs (runPiM j (Silent <$> input defs v pps st))
+--       BState defs (runPiMonad j (Silent <$> input defs v pps st))
 --     _ -> error "not expecting input."
 --
 -- trace :: [Int] -> BState -> BState

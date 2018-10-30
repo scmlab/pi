@@ -37,7 +37,6 @@ executables:
     - Interaction.JSON
     - Interaction
     - Interpreter
-    - PiMonad
     - PPrint
     - Syntax.Abstract
     - Syntax.Primitive

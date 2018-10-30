@@ -5,24 +5,60 @@
 module Interpreter where
 
 import Control.Monad.State
+import Control.Monad.List
+import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Arrow ((***))
 import Syntax.Abstract
-import PiMonad
 import Utilities
 
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Util (putDocW)
 import PPrint
 
-type Env = FMap Name Pi
+class Monad m => MonadFresh m where
+  fresh :: m Name
 
+instance MonadFresh PiMonad where
+  fresh = get >>= \i ->
+          put (i+1) >>
+          return (NG i)
+
+type BkSt = Int
+type Env = FMap Name Pi
 data St = St
   { stSenders   :: FMap Name (Val, Pi)      -- senders
   , stReceivers :: FMap Name [(Ptrn, Pi)]   -- receivers
   , stWaiting   :: [[(Ptrn, Pi)]]           -- blocked at stdin
   , stFreshVars :: [Name]                   -- new variables
   } deriving (Show)
+
+type PiMonad = ReaderT Env (StateT BkSt (ExceptT String []))
+
+runPiMonad :: Env -> BkSt -> PiMonad a -> [Either String (a, BkSt)]
+runPiMonad env bk m = runExceptT (runStateT (runReaderT m env) bk)
+
+addPi :: Pi -> St -> PiMonad St
+addPi End       st = return st
+addPi (Par p q) st = addPi p st >>= addPi q
+addPi (Call x) st = do
+  defs <- ask
+  case lookup x defs of
+    Just p  -> addPi p st
+    Nothing -> throwError $ "definition not found (looking for " ++ show (pretty x) ++ ")"
+addPi (Send c x p) (St sends recvs inps news) = do
+  val <- evalExpr x
+  return $ St ((c, (val, p)):sends) recvs inps news
+addPi (Recv (NR StdIn) pps) (St sends recvs inps news) =
+  return $ St sends recvs (pps:inps) news
+addPi (Recv c pps) (St sends recvs inps news) =
+  return $ St sends ((c,pps):recvs) inps news
+addPi (Nu x p) (St sends recvs inps news) = do
+  i <- fresh
+  addPi (substPi [(x, N i)] p) (St sends recvs inps (i:news))
+
+lineup :: [Pi] -> St -> PiMonad St
+lineup = flip (foldM (flip addPi))
 
 stToPi :: St -> Pi
 stToPi (St sends recvs inps news) =
@@ -34,28 +70,29 @@ stToPi (St sends recvs inps news) =
     rs = [ Recv c pps | (c,pps) <- recvs ]
     is = [ Recv (NR StdIn) pps | pps <- inps]
 
-lineup :: (MonadFresh m, MonadError ErrMsg m) =>
-    Env -> [Pi] -> St -> m St
-lineup _ [] st = return st
-lineup defs (End : ps) st = lineup defs ps st
-lineup defs (Par p1 p2 : ps) st =
-  lineup defs (p1:p2:ps) st
-lineup defs (Call x : ps) st
-  | Just p <- lookup x defs =
-    lineup defs (p:ps) st
-  | otherwise = throwError $ "definition not found (looking for " ++ show (pretty x) ++ " from " ++ show (pretty defs) ++")"
-lineup defs (Send c x p : ps) (St sends recvs inps news) =
-   evalExpr x >>= \v ->
-   lineup defs ps (St ((c,(v,p)):sends) recvs inps news)
-lineup defs (Recv (NR StdIn) pps : ps)
-            (St sends recvs inps news) =
-   lineup defs ps (St sends recvs (pps:inps) news)
-lineup defs (Recv c pps : ps) (St sends recvs inps news) =
-   lineup defs ps (St sends ((c,pps):recvs) inps news)
-lineup defs (Nu x p : ps) (St sends recvs inps news) =
-  fresh >>= \i ->
-  lineup defs (substPi [(x, N i)] p : ps)
-      (St sends recvs inps (i:news))
+step :: St -> PiMonad Res
+step (St sends recvs inps news) =
+  (select inps >>= doInput) `mplus`
+  (select sends >>= doSend)
+  where
+    doSend :: ((Name, (Val, Pi)), FMap Name (Val,Pi)) -> PiMonad Res
+    doSend ((NR StdOut, (v,p)), sends') =
+      return (Output v p (St sends' recvs inps news))
+    doSend ((c,(v,p)), sends') = do
+      (pps, recvs') <- selectByKey c recvs
+      qs <- comm (v,p) pps
+      Silent <$> lineup qs (St sends' recvs' inps news)
+
+    doInput :: ([(Ptrn, Pi)], [[(Ptrn, Pi)]]) -> PiMonad Res
+    doInput (pps, inps') =
+      return (Input pps (St sends recvs inps' news))
+
+input :: Val -> [(Ptrn, Pi)] -> St -> PiMonad St
+input val pps st =
+  case matchPPs pps val of
+    Just (th, p) -> lineup [substPi th p] st
+    Nothing -> throwError "input fails to match"
+
 
 select :: MonadPlus m => [a] -> m (a,[a])
 select [] = mzero
@@ -66,34 +103,6 @@ data Res = Silent St
          | Output Val Pi St
          | Input [(Ptrn, Pi)] St
          deriving (Show)
-
-step :: (MonadFresh m, MonadError ErrMsg m, MonadPlus m) =>
-        Env -> St -> m Res
-step defs (St sends recvs inps news) =
-   (select inps >>= doInput) `mplus`
-   (select sends >>= doSend)
- where
-   doSend :: (MonadFresh m, MonadError ErrMsg m,
-              MonadPlus m) =>
-      ((Name, (Val, Pi)), FMap Name (Val,Pi))  -> m Res
-   doSend ((NR StdOut, (v,p)), sends') =
-     return (Output v p (St sends' recvs inps news))
-   doSend ((c,(v,p)), sends') =
-     selectByKey c recvs >>= \(pps, recvs') ->
-     comm (v,p) pps >>= \qs ->
-     Silent <$> lineup defs qs (St sends' recvs' inps news)
-   doInput :: (MonadFresh m, MonadError ErrMsg m,
-               MonadPlus m) =>
-      ([(Ptrn, Pi)], [[(Ptrn, Pi)]]) -> m Res
-   doInput (pps, inps') =
-      return (Input pps (St sends recvs inps' news))
-
-input :: (MonadFresh m, MonadError ErrMsg m) =>
-       Env -> Val -> [(Ptrn, Pi)] -> St -> m St
-input defs v pps st =
-  case matchPPs pps v of
-   Just (th, p) -> lineup defs [substPi th p] st
-   Nothing -> throwError "input fails to match"
 
 comm :: MonadPlus m => (Val, Pi) -> [(Ptrn, Pi)] -> m [Pi]
 comm (v,q) pps =
