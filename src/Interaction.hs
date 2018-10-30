@@ -27,6 +27,7 @@ data Request
 
 data Response
   = ResChoices [Choice]
+  | ResTest    String
   | ResError   String
   -- deriving (Show)
 
@@ -76,7 +77,7 @@ load env = put $ State
   }
 
 -- down
-run ::  Monad m => Int -> InteractionM m ()
+run :: Monad m => Int -> InteractionM m ()
 run i = do
   choice <- choose i
   case choice of

@@ -47,6 +47,9 @@ data Res = Silent St
 runPiMonad :: Env -> BkSt -> PiMonad a -> [Either String (a, BkSt)]
 runPiMonad env bk m = runExceptT (runStateT (runReaderT m env) bk)
 
+--------------------------------------------------------------------------------
+-- | Pi <-> St
+
 addPi :: Pi -> St -> PiMonad St
 addPi End       st = return st
 addPi (Par p q) st = addPi p st >>= addPi q
@@ -78,6 +81,9 @@ stToPi (St sends recvs inps news) =
     ss = [ Send c (EV v) p      | (c,(Sender v p)) <- sends ]
     rs = [ Recv c pps           | (c, Receiver pps) <- recvs ]
     is = [ Recv (NR StdIn) pps  | Receiver pps <- inps]
+
+--------------------------------------------------------------------------------
+-- | 
 
 step :: St -> PiMonad Res
 step (St sends recvs inps news) =
