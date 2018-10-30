@@ -40,8 +40,9 @@ jsonREPL = do
         Right req -> case req of
           Err err -> do
             response $ ResParseError err
-          Test (Prog prog) -> do
-            response $ ResTest (show prog)
+          Test -> do
+            state <- get
+            response $ ResTest (show state)
           Load (Prog prog) -> do
             load $ map (\(PiDecl name p) -> (name, p)) prog
             gets choices >>= response . ResChoices
@@ -72,11 +73,7 @@ instance FromJSON Request where
         case Conc.parsePrim pst of
           Left err      -> return $ Err err
           Right program -> return $ Load (Abst.fromConcrete program)
-      "test"   -> do
-        pst <- obj .: "syntax-tree"
-        case Conc.parsePrim pst of
-          Left err      -> return $ Err err
-          Right program -> return $ Test (Abst.fromConcrete program)
+      "test"   -> return $ Test
       "run"   -> do
         i <- obj .: "index"
         return $ Run i

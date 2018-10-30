@@ -16,12 +16,12 @@ type Choice = Either ErrMsg (Res, BkSt)
 data State = State
   { env     :: Env      -- source code
   , choices :: [Choice] -- choices of the next steps
-  }
+  } deriving (Show)
 type Error = String
 type InteractionM m = ExceptT Error (StateT State m)
 
 data Request
-  = Test Prog
+  = Test
   | Load Prog       -- load the program into the env
   | Run Int         -- choose and run the nth choice
   | Feed Int Val    -- feed the nth process with some value

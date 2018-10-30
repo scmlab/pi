@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 module Syntax.Abstract where
@@ -181,6 +182,9 @@ instance FromConcrete C.ProcDecl PiDecl where
 
 instance FromConcrete C.Name Name where
   fromConcrete (C.Name _ name) = NS name
+  fromConcrete (C.Reserved _ "stdin")  = NR StdOut
+  fromConcrete (C.Reserved _ "stdout") = NR StdOut
+  fromConcrete (C.Reserved _ name)     = NS name
 
 instance FromConcrete C.Process Pi where
   fromConcrete (C.Nu _ name process) =

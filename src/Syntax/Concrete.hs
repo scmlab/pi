@@ -14,7 +14,8 @@ data Point = Point Int Int Int  -- row / column / index
 data Range = Range Point Point Text -- start / end / text
   deriving (Show)
 
-data Name     = Name      Range Text          deriving (Show)
+data Name     = Name      Range Text
+              | Reserved  Range Text          deriving (Show)
 
 data Program  = Program   Range [ProcDecl]    deriving (Show)
 data ProcDecl = ProcDecl  Range Name Process  deriving (Show)
@@ -65,6 +66,10 @@ instance FromPrim Range where
     return $ Range (Point a b start) (Point c d end) text
 
 instance FromPrim Name where
+  fromPrim node@(P.Node "reserved_name" _ text _ _ _) =
+    Reserved
+      <$> fromPrim node
+      <*> (return text)
   fromPrim node@(P.Node "name" _ text _ _ _) =
     Name
       <$> fromPrim node
