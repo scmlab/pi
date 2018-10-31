@@ -108,8 +108,7 @@ instance ToJSON Conc.ParseError where
     , "got"       .= got
     ]
 
-
-instance ToJSON Res where
+instance ToJSON Reaction where
   toJSON (Silent state) = object
     [ "kind"  .= ("silent" :: Text)
     , "state" .= state

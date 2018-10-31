@@ -12,7 +12,7 @@ import Syntax.Concrete (ParseError)
 import Interpreter
 
 
-type Choice = Either ErrMsg (Res, BkSt)
+type Choice = Either ErrMsg (Reaction, BkSt)
 data State = State
   { env     :: Env      -- source code
   , choices :: [Choice] -- choices of the next steps

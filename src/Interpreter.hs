@@ -39,10 +39,10 @@ data St = St
 
 type PiMonad = ReaderT Env (StateT BkSt (ExceptT String []))
 
-data Res = Silent St
-         | Output St Sender
-         | Input  St Receiver
-         deriving (Show)
+data Reaction = Silent St
+              | Output St Sender
+              | Input  St Receiver
+              deriving (Show)
 
 runPiMonad :: Env -> BkSt -> PiMonad a -> [Either String (a, BkSt)]
 runPiMonad env bk m = runExceptT (runStateT (runReaderT m env) bk)
@@ -83,14 +83,14 @@ stToPi (St sends recvs inps news) =
     is = [ Recv (NR StdIn) pps  | Receiver pps <- inps]
 
 --------------------------------------------------------------------------------
--- | 
+-- |
 
-step :: St -> PiMonad Res
+step :: St -> PiMonad Reaction
 step (St sends recvs inps news) =
   (select inps >>= doInput) `mplus`
   (select sends >>= doSend)
   where
-    doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad Res
+    doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad Reaction
     doSend ((NR StdOut, (Sender v p)), sends') =
       return (Output (St sends' recvs inps news) (Sender v p))
     doSend ((c,(Sender v p)), sends') = do
@@ -98,7 +98,7 @@ step (St sends recvs inps news) =
       qs <- comm (Sender v p) pps
       Silent <$> lineup qs (St sends' recvs' inps news)
 
-    doInput :: (Receiver, [Receiver]) -> PiMonad Res
+    doInput :: (Receiver, [Receiver]) -> PiMonad Reaction
     doInput (pps, inps') =
       return (Input (St sends recvs inps' news) pps)
 
@@ -145,20 +145,20 @@ ppMsgSt :: Either ErrMsg (St, b) -> Doc a
 ppMsgSt (Left msg) = pretty "error:" <+> pretty msg
 ppMsgSt (Right (st, _)) = ppSt st
 
-ppRes :: Res -> Doc a
-ppRes (Silent st) = ppSt st
-ppRes (Output st (Sender v p)) =
+ppReaction :: Reaction -> Doc a
+ppReaction (Silent st) = ppSt st
+ppReaction (Output st (Sender v p)) =
   vsep [pretty "Output:" <+>
          pretty (Send (NR StdOut) (EV v) p),
         ppSt st]
-ppRes (Input st (Receiver p)) =
+ppReaction (Input st (Receiver p)) =
   vsep [pretty "Input:" <+>
          pretty (Recv (NR StdIn) p),
         ppSt st]
 
-ppMsgRes :: Either ErrMsg (Res, b) -> Doc a
+ppMsgRes :: Either ErrMsg (Reaction, b) -> Doc a
 ppMsgRes (Left msg) = pretty "error:" <+> pretty msg
-ppMsgRes (Right (res, _)) = ppRes res
+ppMsgRes (Right (res, _)) = ppReaction res
 
 {-
 type St = ( [Pi]               -- processes running
