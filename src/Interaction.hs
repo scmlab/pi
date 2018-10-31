@@ -12,10 +12,10 @@ import Syntax.Concrete (ParseError)
 import Interpreter
 
 
-type Choice = Either ErrMsg (Reaction, BkSt)
+type Outcome = Either ErrMsg (Reaction, BkSt)
 data State = State
-  { stateEnv     :: Env      -- source code
-  , stateChoices :: [Choice] -- choices of the next steps
+  { stateEnv      :: Env        -- source code
+  , stateOutcomes :: [Outcome]  -- outcomes
   } deriving (Show)
 type Error = String
 type InteractionM m = ExceptT Error (StateT State m)
@@ -29,7 +29,7 @@ data Request
   deriving (Show)
 
 data Response
-  = ResChoices      [Choice]
+  = ResOutcomes     [Outcome]
   | ResTest         String
   | ResParseError   ParseError
   | ResGenericError String
@@ -38,38 +38,38 @@ data Response
 --------------------------------------------------------------------------------
 -- | Interaction Monad
 
-toChoice :: Either String (St, BkSt) -> Choice
-toChoice (Left err)       = Left err
-toChoice (Right (st, i))  = Right (Silent st, i)
+toOutcome :: Either String (St, BkSt) -> Outcome
+toOutcome (Left err)       = Left err
+toOutcome (Right (st, i))  = Right (Silent st, i)
 
 -- start
 runInteraction :: Monad m => Env -> Pi -> InteractionM m a -> m (Either Error a, State)
-runInteraction env p handler = runStateT (runExceptT handler) (State env initialChoices)
-  where initialChoices = map toChoice $ runPiMonad env 0 (lineup [p] (St [] [] [] []))
+runInteraction env p handler = runStateT (runExceptT handler) (State env initialOutcomes)
+  where initialOutcomes = map toOutcome $ runPiMonad env 0 (lineup [p] (St [] [] [] []))
 
--- pretty print Choices
-ppChoice :: Either ErrMsg (Reaction, b) -> Doc a
-ppChoice (Left msg)       = pretty ("error:" :: String) <+> pretty msg
-ppChoice (Right (res, _)) = pretty res
+-- pretty print Outcomes
+ppOutcome :: Either ErrMsg (Reaction, b) -> Doc a
+ppOutcome (Left msg)       = pretty ("error:" :: String) <+> pretty msg
+ppOutcome (Right (res, _)) = pretty res
 
-ppChoices :: [Choice] -> Doc n
-ppChoices states = vsep (map ppSts (zip [0..] states))
+ppOutcomes :: [Outcome] -> Doc n
+ppOutcomes states = vsep (map ppSts (zip [0..] states))
     where   ppSts :: (Int, Either ErrMsg (Reaction, b)) -> Doc n
             ppSts (i,st) = vsep [ pretty ("==== " ++ show i ++ " ====")
-                              , ppChoice st
+                              , ppOutcome st
                               , line]
 
 -- safe (!!)
-choose :: Monad m => Int -> InteractionM m Choice
-choose i = do
-  len <- length <$> gets stateChoices
+decideOutcome :: Monad m => Int -> InteractionM m Outcome
+decideOutcome i = do
+  len <- length <$> gets stateOutcomes
   if (i >= len) then
     throwError "out of bound"
   else
-    (!! i) <$> gets stateChoices
+    (!! i) <$> gets stateOutcomes
 
-updateChoices :: Monad m => [Choice] -> InteractionM m ()
-updateChoices new = modify (\state -> state { stateChoices = new })
+updateOutcomes :: Monad m => [Outcome] -> InteractionM m ()
+updateOutcomes new = modify (\state -> state { stateOutcomes = new })
 
 updateEnv :: Monad m => Env -> InteractionM m ()
 updateEnv new = modify (\state -> state { stateEnv = new })
@@ -78,37 +78,37 @@ updateEnv new = modify (\state -> state { stateEnv = new })
 load :: Monad m => Env -> InteractionM m ()
 load env = put $ State
   { stateEnv = env
-  , stateChoices = map (fmap (Silent *** id))
+  , stateOutcomes = map (fmap (Silent *** id))
           (runPiMonad env 0 (lineup [Call (NS "main")] (St [] [] [] [])))
   }
 
 -- down
 run :: Monad m => Int -> InteractionM m ()
 run n = do
-  choice <- choose n
-  case choice of
+  outcome <- decideOutcome n
+  case outcome of
     Left err ->
-      updateChoices [Left err]
+      updateOutcomes [Left err]
     Right (Output state (Sender _ p), i) -> do
       defs <- gets stateEnv
-      updateChoices $ runPiMonad defs i $ lineup [p] state >>= step
+      updateOutcomes $ runPiMonad defs i $ lineup [p] state >>= step
     Right (React state _ _ _ _, i) -> do
       defs <- gets stateEnv
-      updateChoices $ runPiMonad defs i (step state)
+      updateOutcomes $ runPiMonad defs i (step state)
     Right (Input state pps, i) -> do
-      updateChoices [Right (Input state pps, i)]
+      updateOutcomes [Right (Input state pps, i)]
     Right (Silent state, i) -> do
       defs <- gets stateEnv
-      updateChoices $ runPiMonad defs i (step state)
+      updateOutcomes $ runPiMonad defs i (step state)
 
 -- feed
 feed :: Monad m => Int -> Val -> InteractionM m ()
 feed i val = do
-  choice <- choose i
-  case choice of
+  outcome <- decideOutcome i
+  case outcome of
     Right (Input st pps, j) -> do
       defs <- gets stateEnv
-      updateChoices $ runPiMonad defs j (Silent <$> input val pps st)
+      updateOutcomes $ runPiMonad defs j (Silent <$> input val pps st)
     _ ->
       throwError "not expecting input"
 
@@ -120,7 +120,7 @@ feed i val = do
 -- instance Pretty BState where
 --   pretty (BState _ sts) = vsep (map ppSts (zip [0..] sts))
 --     where ppSts (i,st) = vsep [ pretty ("= " ++ show i ++ " ====")
---                               , ppChoice st
+--                               , ppOutcome st
 --                               , line]
 --
 -- start :: Env -> Pi -> BState

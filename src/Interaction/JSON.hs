@@ -43,13 +43,13 @@ jsonREPL = do
             response $ ResTest (show state)
           Load (Prog prog) -> do
             load $ map (\(PiDecl name p) -> (name, p)) prog
-            gets stateChoices >>= response . ResChoices
+            gets stateOutcomes >>= response . ResOutcomes
           Run i -> do
             try (run i)
-            gets stateChoices >>= response . ResChoices
+            gets stateOutcomes >>= response . ResOutcomes
           Feed i _ -> do
             try (run i)
-            gets stateChoices >>= response . ResChoices
+            gets stateOutcomes >>= response . ResOutcomes
       loop
 
     try :: InteractionM IO () -> InteractionM IO ()
@@ -79,9 +79,9 @@ instance FromJSON Request where
       _       -> fail "unknown kind"
 
 instance ToJSON Response where
-  toJSON (ResChoices choices) = object
-    [ "response" .= ("choices" :: Text)
-    , "payload"  .= choices
+  toJSON (ResOutcomes outcomes) = object
+    [ "response" .= ("outcomes" :: Text)
+    , "payload"  .= outcomes
     ]
   toJSON (ResTest payload) = object
     [ "response" .= ("test" :: Text)

@@ -26,8 +26,8 @@ humanREPL = runInputT defaultSettings $ do
     loop :: InteractionM (InputT IO) ()
     loop = do
       -- print the current states
-      choice <- gets stateChoices
-      liftH $ outputStrLn (show $ ppChoices choice)
+      outcomes <- gets stateOutcomes
+      liftH $ outputStrLn (show $ ppOutcomes outcomes)
       -- get user input
       minput <- liftH $ getInputLine "π > "
       case minput of
