@@ -55,6 +55,11 @@ data Val = N Name
          | VL Label
    deriving (Eq, Show)
 
+data Ptrn = PN Name         -- patterns
+          | PT [Ptrn]
+          | PL Label
+   deriving (Eq, Show)
+
 unVI :: MonadError ErrMsg m => Val -> m Int
 unVI (VI n) = return n
 unVI _ = throwError "type error: Int wanted"
@@ -66,11 +71,6 @@ unVB _ = throwError "type error: Bool wanted"
 unVT :: MonadError ErrMsg m => Val -> m [Val]
 unVT (VT xs) = return xs
 unVT _ = throwError "type error: tuple wanted"
-
-data Ptrn = PN Name         -- patterns
-          | PT [Ptrn]
-          | PL Label
-   deriving (Eq, Show)
 
 eN :: Name -> Expr
 eN = EV . N
