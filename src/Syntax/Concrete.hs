@@ -88,7 +88,7 @@ instance FromPrim Program where
   fromPrim node = fromPrim node >>= throwError
 
 instance FromPrim ProcDecl where
-  fromPrim node@(P.Node "proc_declaration" children _ _ _ _) =
+  fromPrim node@(P.Node "proc_declaration" _ _ _ _ _) =
     ProcDecl
       <$> fromPrim node
       <*> fromPrimChild node 0
@@ -96,63 +96,63 @@ instance FromPrim ProcDecl where
   fromPrim node = fromPrim node >>= throwError
 
 instance FromPrim Process where
-  fromPrim node@(P.Node "nu" children _ _ _ _) =
+  fromPrim node@(P.Node "nu" _ _ _ _ _) =
     Nu
       <$> fromPrim node
       <*> fromPrimChild node 2
       <*> fromPrimChild node 4
-  fromPrim node@(P.Node "send" children _ _ _ _) =
+  fromPrim node@(P.Node "send" _ _ _ _ _) =
     Send
       <$> fromPrim node
       <*> fromPrimChild node 0
       <*> fromPrimChild node 2
       <*> fromPrimChild node 4
-  fromPrim node@(P.Node "recv" children _ _ _ _) =
+  fromPrim node@(P.Node "recv" _ _ _ _ _) =
     Recv
       <$> fromPrim node
       <*> fromPrimChild node 0
       <*> fromPrimChild node 2
       <*> fromPrimChild node 4
-  fromPrim node@(P.Node "par" children _ _ _ _) =
+  fromPrim node@(P.Node "par" _ _ _ _ _) =
     Par
       <$> fromPrim node
       <*> fromPrimChild node 0
       <*> fromPrimChild node 2
-  fromPrim node@(P.Node "call" children _ _ _ _) =
+  fromPrim node@(P.Node "call" _ _ _ _ _) =
     Call
     <$> fromPrim node
     <*> fromPrimChild node 0
-  fromPrim node@(P.Node "end" children _ _ _ _) =
+  fromPrim node@(P.Node "end" _ _ _ _ _) =
     End
       <$> fromPrim node
   fromPrim node = fromPrim node >>= throwError
 
 instance FromPrim Expr where
-  fromPrim node@(P.Node "mul" children _ _ _ _) =
+  fromPrim node@(P.Node "mul" _ _ _ _ _) =
     Mul
       <$> fromPrim node
       <*> fromPrimChild node 0
       <*> fromPrimChild node 2
-  fromPrim node@(P.Node "div" children _ _ _ _) =
+  fromPrim node@(P.Node "div" _ _ _ _ _) =
     Div
       <$> fromPrim node
       <*> fromPrimChild node 0
       <*> fromPrimChild node 2
-  fromPrim node@(P.Node "add" children _ _ _ _) =
+  fromPrim node@(P.Node "add" _ _ _ _ _) =
     Add
       <$> fromPrim node
       <*> fromPrimChild node 0
       <*> fromPrimChild node 2
-  fromPrim node@(P.Node "sub" children _ _ _ _) =
+  fromPrim node@(P.Node "sub" _ _ _ _ _) =
     Sub
       <$> fromPrim node
       <*> fromPrimChild node 0
       <*> fromPrimChild node 2
-  fromPrim node@(P.Node "integer" children text _ _ _) =
+  fromPrim node@(P.Node "integer" _ text _ _ _) =
     Digit
       <$> fromPrim node
       <*> (return $ read $ unpack text)
-  fromPrim node@(P.Node "variable" children text _ _ _) =
+  fromPrim node@(P.Node "variable" _ text _ _ _) =
     Var
       <$> fromPrim node
       <*> (return text)

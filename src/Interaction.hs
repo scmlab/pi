@@ -3,7 +3,7 @@
 module Interaction where
 
 import Control.Arrow ((***))
-import Control.Monad.State hiding (State)
+import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import Data.Text.Prettyprint.Doc
 
@@ -14,8 +14,8 @@ import Interpreter
 
 type Choice = Either ErrMsg (Reaction, BkSt)
 data State = State
-  { env     :: Env      -- source code
-  , choices :: [Choice] -- choices of the next steps
+  { stateEnv     :: Env      -- source code
+  , stateChoices :: [Choice] -- choices of the next steps
   } deriving (Show)
 type Error = String
 type InteractionM m = ExceptT Error (StateT State m)
@@ -34,9 +34,6 @@ data Response
   | ResParseError   ParseError
   | ResGenericError String
   -- deriving (Show)
-
-initialEnv :: Env
-initialEnv = []
 
 --------------------------------------------------------------------------------
 -- | Interaction Monad
@@ -57,50 +54,51 @@ ppChoice (Right (res, _)) = pretty res
 
 ppChoices :: [Choice] -> Doc n
 ppChoices states = vsep (map ppSts (zip [0..] states))
-    where ppSts (i,st) = vsep [ pretty ("==== " ++ show i ++ " ====")
+    where   ppSts :: (Int, Either ErrMsg (Reaction, b)) -> Doc n
+            ppSts (i,st) = vsep [ pretty ("==== " ++ show i ++ " ====")
                               , ppChoice st
                               , line]
 
 -- safe (!!)
 choose :: Monad m => Int -> InteractionM m Choice
 choose i = do
-  len <- length <$> gets choices
+  len <- length <$> gets stateChoices
   if (i >= len) then
     throwError "out of bound"
   else
-    (!! i) <$> gets choices
+    (!! i) <$> gets stateChoices
 
 updateChoices :: Monad m => [Choice] -> InteractionM m ()
-updateChoices new = modify (\state -> state { choices = new })
+updateChoices new = modify (\state -> state { stateChoices = new })
 
 updateEnv :: Monad m => Env -> InteractionM m ()
-updateEnv new = modify (\state -> state { env = new })
+updateEnv new = modify (\state -> state { stateEnv = new })
 
 -- load
 load :: Monad m => Env -> InteractionM m ()
 load env = put $ State
-  { env = env
-  , choices = map (fmap (Silent *** id))
+  { stateEnv = env
+  , stateChoices = map (fmap (Silent *** id))
           (runPiMonad env 0 (lineup [Call (NS "main")] (St [] [] [] [])))
   }
 
 -- down
 run :: Monad m => Int -> InteractionM m ()
-run i = do
-  choice <- choose i
+run n = do
+  choice <- choose n
   case choice of
     Left err ->
       updateChoices [Left err]
-    Right (Output state (Sender v p), i) -> do
-      defs <- gets env
+    Right (Output state (Sender _ p), i) -> do
+      defs <- gets stateEnv
       updateChoices $ runPiMonad defs i $ lineup [p] state >>= step
-    Right (React state channel sender receiver products, i) -> do
-      defs <- gets env
+    Right (React state _ _ _ _, i) -> do
+      defs <- gets stateEnv
       updateChoices $ runPiMonad defs i (step state)
     Right (Input state pps, i) -> do
       updateChoices [Right (Input state pps, i)]
     Right (Silent state, i) -> do
-      defs <- gets env
+      defs <- gets stateEnv
       updateChoices $ runPiMonad defs i (step state)
 
 -- feed
@@ -109,7 +107,7 @@ feed i val = do
   choice <- choose i
   case choice of
     Right (Input st pps, j) -> do
-      defs <- gets env
+      defs <- gets stateEnv
       updateChoices $ runPiMonad defs j (Silent <$> input val pps st)
     _ ->
       throwError "not expecting input"

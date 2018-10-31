@@ -5,7 +5,6 @@
 module Interpreter where
 
 import Control.Monad.State
-import Control.Monad.List
 import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Arrow ((***))
@@ -13,8 +12,7 @@ import Syntax.Abstract
 import Utilities
 
 import Data.Text.Prettyprint.Doc
-import Data.Text.Prettyprint.Doc.Util (putDocW)
-import PPrint
+import PPrint ()
 
 class Monad m => MonadFresh m where
   fresh :: m Name

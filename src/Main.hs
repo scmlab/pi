@@ -25,6 +25,7 @@ data Options = Options
   { optJSON :: Bool
   } deriving (Show)
 
+defaultOptions :: Options
 defaultOptions = Options
   { optJSON = False
   }

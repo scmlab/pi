@@ -5,7 +5,6 @@ module Syntax.Abstract where
 
 import Control.Monad.Except
 import Control.Arrow ((***))
-import Data.List (nub)
 import Data.Text (Text)
 
 import qualified Syntax.Concrete as C
@@ -82,6 +81,7 @@ eL = EV . VL
 eR :: ResName -> Expr
 eR = EV . N . NR
 
+par :: Pi -> Pi -> Pi
 End `par` p = p
 p `par` End = p
 p `par` q = Par p q
@@ -99,7 +99,7 @@ substVal :: Subst -> Val -> Val
 substVal th (N y) | Just v <- lookup y th = v
                   | otherwise             = N y
 substVal th (VT vs) = VT (map (substVal th) vs)
-substVal th u = u
+substVal _ u = u
 
 substExpr :: Subst -> Expr -> Expr
 substExpr th (EV u) = EV (substVal th u)
@@ -113,7 +113,7 @@ substExpr th (ETup es) = ETup (map (substExpr th) es)
 substExpr th (EPrj i e) = EPrj i (substExpr th e)
 
 substPi :: Subst -> Pi -> Pi
-substPi th End = End
+substPi _ End = End
 substPi th (Send c u p) =
    Send (substName th c) (substExpr th u) (substPi th p)
 substPi th (Recv c pps) =
@@ -125,7 +125,7 @@ substPi th (Par p q) = Par (substPi th p) (substPi th q)
 substPi th (Nu y p)
    | y `inDom` th = Nu y p       -- is this right?
    | otherwise = Nu y (substPi th p)
-substPi th (Call p) = Call p  -- perhaps this shouldn't be substituted?
+substPi _ (Call p) = Call p  -- perhaps this shouldn't be substituted?
 
 evalExpr :: MonadError ErrMsg m => Expr -> m Val
 evalExpr (EV v) = return v
@@ -157,8 +157,8 @@ joinSubs ss | nodup (map fst s) = s
   where s = concat ss
 
 matchPPs :: [(Ptrn, Pi)] -> Val -> Maybe (Subst, Pi)
-matchPPs [] v = Nothing
-matchPPs ((pt,e):pps) v
+matchPPs [] _ = Nothing
+matchPPs ((pt,e):_) v
   | Just ss <- match pt v = Just (ss,e)
 matchPPs (_:pps) v = matchPPs pps v
 
@@ -202,8 +202,8 @@ instance FromConcrete C.Process Pi where
 
 instance FromConcrete C.Expr Expr where
   -- WARNING: there's no multiplication or division here in the AST!
-  fromConcrete (C.Mul _ x y) = fromConcrete x
-  fromConcrete (C.Div _ x y) = fromConcrete x
+  fromConcrete (C.Mul _ x _) = fromConcrete x
+  fromConcrete (C.Div _ x _) = fromConcrete x
   fromConcrete (C.Add _ x y) = EPlus (fromConcrete x) (fromConcrete y)
   fromConcrete (C.Sub _ x y) = EMinus (fromConcrete x) (fromConcrete y)
   fromConcrete (C.Digit _ x) = EV (VI x)

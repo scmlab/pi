@@ -3,8 +3,6 @@ module PPrint where
 import Data.Text.Prettyprint.Doc
   -- https://hackage.haskell.org/package/prettyprinter
   -- cabal install prettyprinter
-import Control.Arrow ((***))
-import Data.Text.Prettyprint.Doc.Util (putDocW)
 
 import Syntax.Abstract
 
@@ -61,7 +59,7 @@ ppInfixL opp op pp1 pp2 p =
     (group . nest 1 . vsep $ [pp1 opp <+> op,  pp2 opp])
 
 ppExpr :: Expr -> Int -> Doc a
-ppExpr (EV v) p = pretty v
+ppExpr (EV v) _ = pretty v
 ppExpr (EPlus e1 e2) p =
   ppInfixL 6 (pretty "+") (ppExpr e1) (ppExpr e2) p
 ppExpr (EMinus e1 e2) p =
@@ -71,9 +69,11 @@ ppExpr (EIf e0 e1 e2) p =
     (sep [pretty "if" <+> nest 2 (ppExpr e0 5),
           pretty "then" <+> nest 2 (ppExpr e1 5),
           pretty "else" <+> nest 2 (ppExpr e2 5)])
-ppExpr (ETup es) p =
+ppExpr (ETup es) _ =
   encloseSep langle rangle comma
     (map (flip ppExpr 5) es)
+ppExpr (EPrj _ _) _ = error "ppExpr EPrj not defined"
+
 
 ppPi :: Pi -> Int -> Doc a
 ppPi End _ = pretty "end"
@@ -103,7 +103,7 @@ ppPi (Nu x p) pr =
    (group . nest 4 . vsep $
      [pretty "(nu " <> pretty x <> pretty ")",
       ppPi p 4])
-ppPi (Call p) pr = pretty p
+ppPi (Call p) _ = pretty p
 
 -- ppClauses [(xs,p)] =
 -- ppClauses pps =

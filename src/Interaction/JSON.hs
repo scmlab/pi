@@ -2,15 +2,13 @@
 
 module Interaction.JSON where
 
-import Control.Monad.State hiding (State)
+import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import Data.Aeson
 import Data.Text hiding (pack, map)
 import Data.ByteString.Char8 (getLine, putStrLn, pack)
 import Data.ByteString.Lazy.Char8 (toStrict)
 import Prelude hiding (getLine, putStrLn)
-import qualified Syntax.Primitive as Prim
-import qualified Syntax.Concrete as Conc
 import qualified Syntax.Abstract as Abst
 
 import Data.Text.Prettyprint.Doc (pretty)
@@ -25,7 +23,7 @@ import qualified Syntax.Concrete as Conc
 
 jsonREPL :: IO ()
 jsonREPL = do
-  (_, _) <- runInteraction initialEnv (Call (NS "main")) loop
+  (_, _) <- runInteraction [] (Call (NS "main")) loop
   return ()
 
   where
@@ -45,17 +43,14 @@ jsonREPL = do
             response $ ResTest (show state)
           Load (Prog prog) -> do
             load $ map (\(PiDecl name p) -> (name, p)) prog
-            gets choices >>= response . ResChoices
+            gets stateChoices >>= response . ResChoices
           Run i -> do
             try (run i)
-            gets choices >>= response . ResChoices
-          Feed i v -> do
+            gets stateChoices >>= response . ResChoices
+          Feed i _ -> do
             try (run i)
-            gets choices >>= response . ResChoices
+            gets stateChoices >>= response . ResChoices
       loop
-
-    printChoices :: InteractionM IO ()
-    printChoices = gets choices >>= liftIO . putStrLn . pack . show . ppChoices
 
     try :: InteractionM IO () -> InteractionM IO ()
     try program = do
@@ -133,7 +128,7 @@ instance ToJSON Reaction where
     ]
 
 instance ToJSON St where
-  toJSON (St senders receivers blocked freshVars) = object
+  toJSON (St senders receivers blocked _) = object
     [ "senders"     .= senders
     , "receivers"   .= receivers
     , "blocked"     .= blocked
@@ -158,7 +153,7 @@ instance ToJSON Sender where
     ]
 
 instance ToJSON Receiver where
-  toJSON (Receiver pairs) = toJSON pairs
+  toJSON (Receiver receivers) = toJSON receivers
 
 -- instance ToJSON Val where
 --   toJSON
