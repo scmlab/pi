@@ -120,45 +120,31 @@ comm (Sender v q) (Receiver pps) =
    Just (th, p) -> return [q, substPi th p]
    Nothing -> mzero
 
--- Pretty Printing
+--------------------------------------------------------------------------------
+-- | Pretty printing
 
-ppStPi :: St -> Doc a
-ppStPi = pretty . stToPi
+instance Pretty Reaction where
+  pretty (Silent st) = pretty st
+  pretty (Output st (Sender v p)) =
+    vsep  [ pretty "Output:" <+> pretty (Send (NR StdOut) (EV v) p)
+          , pretty st
+          ]
+  pretty (Input st (Receiver p)) =
+    vsep  [ pretty "Input:" <+> pretty (Recv (NR StdIn) p)
+          , pretty st
+          ]
 
-ppSt :: St -> Doc a
-ppSt (St sends recvs inps news) =
- vsep [pretty "Senders:",
-       indent 2 (vsep (map pretty ss)),
-       pretty "Receivers:",
-       indent 2 (vsep (map pretty rs)),
-       encloseSep (pretty "New: ") (pretty ".") comma
-          (map pretty news)]
- where ss = [ Send c (EV v) p     | (c, (Sender v p)) <- sends ]
-       rs = [ Recv (NR StdIn) pps | (Receiver pps)    <- inps ] ++
-            [ Recv c pps          | (c, Receiver pps) <- recvs ]
-
-ppMsg :: Pretty st => Either ErrMsg st -> Doc a
-ppMsg (Left msg) = pretty "error:" <+> pretty msg
-ppMsg (Right st) = pretty st
-
-ppMsgSt :: Either ErrMsg (St, b) -> Doc a
-ppMsgSt (Left msg) = pretty "error:" <+> pretty msg
-ppMsgSt (Right (st, _)) = ppSt st
-
-ppReaction :: Reaction -> Doc a
-ppReaction (Silent st) = ppSt st
-ppReaction (Output st (Sender v p)) =
-  vsep [pretty "Output:" <+>
-         pretty (Send (NR StdOut) (EV v) p),
-        ppSt st]
-ppReaction (Input st (Receiver p)) =
-  vsep [pretty "Input:" <+>
-         pretty (Recv (NR StdIn) p),
-        ppSt st]
-
-ppMsgRes :: Either ErrMsg (Reaction, b) -> Doc a
-ppMsgRes (Left msg) = pretty "error:" <+> pretty msg
-ppMsgRes (Right (res, _)) = ppReaction res
+instance Pretty St where
+  pretty (St sends recvs inps news) =
+    vsep  [ pretty "Senders:"
+          , indent 2 (vsep (map pretty ss))
+          , pretty "Receivers:"
+          , indent 2 (vsep (map pretty rs))
+          , encloseSep (pretty "New: ") (pretty ".") comma (map pretty news)
+          ]
+    where ss = [ Send c (EV v) p     | (c, (Sender v p)) <- sends ]
+          rs = [ Recv (NR StdIn) pps | (Receiver pps)    <- inps ] ++
+               [ Recv c pps          | (c, Receiver pps) <- recvs ]
 
 {-
 type St = ( [Pi]               -- processes running

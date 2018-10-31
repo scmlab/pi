@@ -3,10 +3,10 @@ module PPrint where
 import Data.Text.Prettyprint.Doc
   -- https://hackage.haskell.org/package/prettyprinter
   -- cabal install prettyprinter
-import Data.Text.Prettyprint.Doc.Util (putDocW)
 import Control.Arrow ((***))
-import Syntax.Abstract
+import Data.Text.Prettyprint.Doc.Util (putDocW)
 
+import Syntax.Abstract
 
 {-
 Operator Precedences
@@ -19,6 +19,9 @@ infixl 7 * /
 infix  8 ? !
 
 -}
+
+--------------------------------------------------------------------------------
+-- | Syntax
 
 instance Pretty Name where
   pretty (NS x) = pretty x

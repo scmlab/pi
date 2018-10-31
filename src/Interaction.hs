@@ -51,10 +51,14 @@ runInteraction env p handler = runStateT (runExceptT handler) (State env initial
   where initialChoices = map toChoice $ runPiMonad env 0 (lineup [p] (St [] [] [] []))
 
 -- pretty print Choices
+ppChoice :: Either ErrMsg (Reaction, b) -> Doc a
+ppChoice (Left msg)       = pretty ("error:" :: String) <+> pretty msg
+ppChoice (Right (res, _)) = pretty res
+
 ppChoices :: [Choice] -> Doc n
 ppChoices states = vsep (map ppSts (zip [0..] states))
     where ppSts (i,st) = vsep [ pretty ("==== " ++ show i ++ " ====")
-                              , ppMsgRes st
+                              , ppChoice st
                               , line]
 
 -- safe (!!)
@@ -115,7 +119,7 @@ feed i val = do
 -- instance Pretty BState where
 --   pretty (BState _ sts) = vsep (map ppSts (zip [0..] sts))
 --     where ppSts (i,st) = vsep [ pretty ("= " ++ show i ++ " ====")
---                               , ppMsgRes st
+--                               , ppChoice st
 --                               , line]
 --
 -- start :: Env -> Pi -> BState
