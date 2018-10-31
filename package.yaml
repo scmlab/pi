@@ -21,6 +21,7 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- array
 - aeson
 - bytestring
 - haskeline
@@ -42,12 +43,16 @@ executables:
     - Syntax.Primitive
     - Syntax.Concrete
     - Utilities
+    - Parser
+    - Parser.Base
+    - Parser.Lexer
+    - Parser.Parser
     ghc-options:
     - -Wall
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
     - -fno-warn-orphans
-# build-tools:
-#   - happy
-#   - alex
+build-tools:
+  - happy
+  - alex

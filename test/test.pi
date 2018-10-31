@@ -1,8 +1,8 @@
 a = (nu d) (nu c) d!3 . c?x . end
 
 p0 = c?x
-    . c!4 * (3 + 2)
+    . c!4 + (3 + 2)
     . c!4 - (3 + 2)
     . c?x
-    . end 
+    . end
 p1 = c!3 . end
