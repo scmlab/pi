@@ -43,6 +43,7 @@ executables:
     - Syntax.Concrete
     - Utilities
     ghc-options:
+    - -Wall
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N

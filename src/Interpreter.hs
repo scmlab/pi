@@ -39,9 +39,10 @@ data St = St
 
 type PiMonad = ReaderT Env (StateT BkSt (ExceptT String []))
 
-data Reaction = Silent St
-              | Output St Sender
-              | Input  St Receiver
+data Reaction = Silent St                       -- nothing ever happened
+              | React  St Name Sender Receiver [Pi]  -- some chemical reaction
+              | Output St Sender                -- stdout
+              | Input  St Receiver              -- stdin
               deriving (Show)
 
 runPiMonad :: Env -> BkSt -> PiMonad a -> [Either String (a, BkSt)]
@@ -91,16 +92,20 @@ step (St sends recvs inps news) =
   (select sends >>= doSend)
   where
     doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad Reaction
-    doSend ((NR StdOut, (Sender v p)), sends') =
-      return (Output (St sends' recvs inps news) (Sender v p))
-    doSend ((c,(Sender v p)), sends') = do
-      (pps, recvs') <- selectByKey c recvs
-      qs <- comm (Sender v p) pps
-      Silent <$> lineup qs (St sends' recvs' inps news)
+    doSend ((NR StdOut, sender), otherSenders) =
+      return $ Output (St otherSenders recvs inps news) sender
+    doSend ((channel, sender), otherSenders) = do
+      -- selected a reagent from the lists of receivers
+      (receiver, otherReceivers) <- selectByKey channel recvs
+      -- react!
+      products <- react sender receiver
+      -- adjust the state accordingly
+      st <- lineup products (St otherSenders otherReceivers inps news)
+      return $ React st channel sender receiver products
 
     doInput :: (Receiver, [Receiver]) -> PiMonad Reaction
-    doInput (pps, inps') =
-      return (Input (St sends recvs inps' news) pps)
+    doInput (blocked, otherBlocked) =
+      return $ Input (St sends recvs otherBlocked news) blocked
 
 input :: Val -> Receiver -> St -> PiMonad St
 input val (Receiver pps) st =
@@ -114,8 +119,8 @@ select [] = mzero
 select (x:xs) = return (x,xs) `mplus`
                 ((id *** (x:)) <$> select xs)
 
-comm :: MonadPlus m => Sender -> Receiver -> m [Pi]
-comm (Sender v q) (Receiver pps) =
+react :: MonadPlus m => Sender -> Receiver -> m [Pi]
+react (Sender v q) (Receiver pps) =
   case matchPPs pps v of
    Just (th, p) -> return [q, substPi th p]
    Nothing -> mzero
@@ -125,18 +130,29 @@ comm (Sender v q) (Receiver pps) =
 
 instance Pretty Reaction where
   pretty (Silent st) = pretty st
-  pretty (Output st (Sender v p)) =
-    vsep  [ pretty "Output:" <+> pretty (Send (NR StdOut) (EV v) p)
+  pretty (React st channel (Sender v p) (Receiver ps) products) =
+    vsep  [ pretty "React!"
+          , pretty "Channel  :" <+> pretty channel
+          , pretty "Sender   :" <+> pretty (Send channel (EV v) p)
+          , pretty "Receiver :" <+> pretty (Recv channel ps)
+          , pretty "Products :" <+> pretty products
+          , pretty "------------"
           , pretty st
           ]
-  pretty (Input st (Receiver p)) =
-    vsep  [ pretty "Input:" <+> pretty (Recv (NR StdIn) p)
+  pretty (Output st (Sender v p)) =
+    vsep  [ pretty "Output   :" <+> pretty (Send (NR StdOut) (EV v) p)
+          , pretty "------------"
+          , pretty st
+          ]
+  pretty (Input st (Receiver ps)) =
+    vsep  [ pretty "Input    :" <+> pretty (Recv (NR StdIn) ps)
+          , pretty "------------"
           , pretty st
           ]
 
 instance Pretty St where
   pretty (St sends recvs inps news) =
-    vsep  [ pretty "Senders:"
+    vsep  [ pretty "Senders  :"
           , indent 2 (vsep (map pretty ss))
           , pretty "Receivers:"
           , indent 2 (vsep (map pretty rs))

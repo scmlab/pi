@@ -113,10 +113,18 @@ instance ToJSON Reaction where
     [ "kind"  .= ("silent" :: Text)
     , "state" .= state
     ]
+  toJSON (React state channel sender receiver products) = object
+    [ "kind"      .= ("react" :: Text)
+    , "state"     .= state
+    , "channel"   .= channel
+    , "sender"    .= sender
+    , "receiver"  .= receiver
+    , "products"  .= products
+    ]
   toJSON (Output state sender) = object
-    [ "kind"    .= ("output" :: Text)
-    , "state"   .= state
-    , "sender"  .= sender
+    [ "kind"      .= ("output" :: Text)
+    , "state"     .= state
+    , "sender"    .= sender
     ]
   toJSON (Input state receiver) = object
     [ "kind"      .= ("input" :: Text)

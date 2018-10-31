@@ -91,14 +91,17 @@ run i = do
   case choice of
     Left err ->
       updateChoices [Left err]
-    Right (Output st (Sender v p), i) -> do
+    Right (Output state (Sender v p), i) -> do
       defs <- gets env
-      updateChoices $ runPiMonad defs i $ lineup [p] st >>= step
-    Right (Input st pps, i) -> do
-      updateChoices [Right (Input st pps, i)]
-    Right (Silent st, i) -> do
+      updateChoices $ runPiMonad defs i $ lineup [p] state >>= step
+    Right (React state channel sender receiver products, i) -> do
       defs <- gets env
-      updateChoices $ runPiMonad defs i (step st)
+      updateChoices $ runPiMonad defs i (step state)
+    Right (Input state pps, i) -> do
+      updateChoices [Right (Input state pps, i)]
+    Right (Silent state, i) -> do
+      defs <- gets env
+      updateChoices $ runPiMonad defs i (step state)
 
 -- feed
 feed :: Monad m => Int -> Val -> InteractionM m ()
