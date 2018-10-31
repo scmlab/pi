@@ -14,6 +14,8 @@ data Point = Point Int Int Int  -- row / column / index
 data Range = Range Point Point Text -- start / end / text
   deriving (Show)
 
+
+data Label    = Label     Range Text          deriving (Show)
 data Name     = Name      Range Text
               | Reserved  Range Text          deriving (Show)
 
@@ -28,13 +30,18 @@ data Process  = Send      Range Name Expr Process
               | End       Range
               deriving (Show)
 
+-- data Pattern  = PatName
+--               = PatLabel  Text
+-- data Clause   = Clause
+
 -- Expressions and all that
 data Expr     = Mul       Range Expr Expr
               | Div       Range Expr Expr
               | Add       Range Expr Expr
               | Sub       Range Expr Expr
-              | Digit     Range Int
-              | Var       Range Text
+              | ExprDigit Range Int
+              | ExprName        Name
+              | ExprLabel       Label
               deriving (Show)
 
 --------------------------------------------------------------------------------
@@ -64,6 +71,13 @@ instance FromPrim ParseError where
 instance FromPrim Range where
   fromPrim (P.Node _ _ text (P.RangePrim (P.PointPrim a b) (P.PointPrim c d)) start end) =
     return $ Range (Point a b start) (Point c d end) text
+
+instance FromPrim Label where
+  fromPrim node@(P.Node "label" _ text _ _ _) =
+    Label
+      <$> fromPrim node
+      <*> (return text)
+  fromPrim node = fromPrim node >>= throwError
 
 instance FromPrim Name where
   fromPrim node@(P.Node "reserved_name" _ text _ _ _) =
@@ -149,11 +163,13 @@ instance FromPrim Expr where
       <*> fromPrimChild node 0
       <*> fromPrimChild node 2
   fromPrim node@(P.Node "integer" _ text _ _ _) =
-    Digit
+    ExprDigit
       <$> fromPrim node
       <*> (return $ read $ unpack text)
   fromPrim node@(P.Node "variable" _ text _ _ _) =
-    Var
+    ExprName
       <$> fromPrim node
-      <*> (return text)
+  fromPrim node@(P.Node "label" _ text _ _ _) =
+    ExprLabel
+      <$> fromPrim node
   fromPrim node = fromPrim node >>= throwError

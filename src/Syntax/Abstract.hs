@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 module Syntax.Abstract where
 
@@ -180,11 +181,14 @@ instance FromConcrete C.Program Prog where
 instance FromConcrete C.ProcDecl PiDecl where
   fromConcrete (C.ProcDecl _ name process) = PiDecl (fromConcrete name) (fromConcrete process)
 
+instance FromConcrete C.Label Label where
+  fromConcrete (C.Label    _ label)     = label
+
 instance FromConcrete C.Name Name where
-  fromConcrete (C.Name _ name) = NS name
-  fromConcrete (C.Reserved _ "stdin")  = NR StdOut
-  fromConcrete (C.Reserved _ "stdout") = NR StdOut
-  fromConcrete (C.Reserved _ name)     = NS name
+  fromConcrete (C.Name     _ name)      = NS name
+  fromConcrete (C.Reserved _ "stdin")   = NR StdOut
+  fromConcrete (C.Reserved _ "stdout")  = NR StdOut
+  fromConcrete (C.Reserved _ name)      = NS name
 
 instance FromConcrete C.Process Pi where
   fromConcrete (C.Nu _ name process) =
@@ -206,5 +210,6 @@ instance FromConcrete C.Expr Expr where
   fromConcrete (C.Div _ x _) = fromConcrete x
   fromConcrete (C.Add _ x y) = EPlus (fromConcrete x) (fromConcrete y)
   fromConcrete (C.Sub _ x y) = EMinus (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.Digit _ x) = EV (VI x)
-  fromConcrete (C.Var _ x) = EV (N (NS x))
+  fromConcrete (C.ExprDigit _ x) = EV (VI x)
+  fromConcrete (C.ExprName  x) = EV (N (fromConcrete x))
+  fromConcrete (C.ExprLabel x) = EV (VL (fromConcrete x))
