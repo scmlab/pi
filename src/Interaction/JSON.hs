@@ -153,7 +153,13 @@ instance ToJSON Sender where
     ]
 
 instance ToJSON Receiver where
-  toJSON (Receiver receivers) = toJSON receivers
+  toJSON (Receiver clauses) = toJSON clauses
+
+instance ToJSON Clause where
+  toJSON (Clause pattern process) = object
+    [ "pattern"   .= pattern
+    , "process"   .= process
+    ]
 
 -- instance ToJSON Val where
 --   toJSON

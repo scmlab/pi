@@ -23,16 +23,17 @@ data Program  = Program   Range [ProcDecl]    deriving (Show)
 data ProcDecl = ProcDecl  Range Name Process  deriving (Show)
 
 data Process  = Send      Range Name Expr Process
-              | Recv      Range Name Name Process
+              | Recv      Range Name      [Clause]
               | Nu        Range Name      Process
               | Par       Range           Process Process
               | Call      Range Name
               | End       Range
               deriving (Show)
 
--- data Pattern  = PatName
---               = PatLabel  Text
--- data Clause   = Clause
+data Pattern  = PtrnName  Name
+              | PtrnLabel Label
+              deriving (Show)
+data Clause   = Clause    Range Pattern Process        deriving (Show)
 
 -- Expressions and all that
 data Expr     = Mul       Range Expr Expr
@@ -55,13 +56,22 @@ parsePrim = runExcept . fromPrim
 class FromPrim a where
   fromPrim :: P.SyntaxTree -> Except ParseError a
 
--- access the nth children safely
-fromPrimChild :: FromPrim a => P.SyntaxTree -> Int -> Except ParseError a
-fromPrimChild node@(P.Node _ children _ _ _ _) i = do
+-- access the nth child safely
+pickChild :: P.SyntaxTree -> Int -> Except ParseError P.SyntaxTree
+pickChild node@(P.Node _ children _ _ _ _) i = do
   if i >= length children then
     fromPrim node >>= throwError
   else
-    fromPrim (children !! i)
+    return (children !! i)
+
+fromPrimChild :: FromPrim a => P.SyntaxTree -> Int -> Except ParseError a
+fromPrimChild node i = do
+  pickChild node i >>= fromPrim
+
+-- returns the kind of the nth child
+kindOfChild :: P.SyntaxTree -> Int -> Except ParseError String
+kindOfChild node i = do
+  P.kind <$> pickChild node i
 
 instance FromPrim ParseError where
   fromPrim node@(P.Node expected _ got _ _ _) = do
@@ -106,32 +116,31 @@ instance FromPrim ProcDecl where
     ProcDecl
       <$> fromPrim node
       <*> fromPrimChild node 0
-      <*> fromPrimChild node 2
+      <*> fromPrimChild node 1
   fromPrim node = fromPrim node >>= throwError
 
 instance FromPrim Process where
   fromPrim node@(P.Node "nu" _ _ _ _ _) =
     Nu
       <$> fromPrim node
-      <*> fromPrimChild node 2
-      <*> fromPrimChild node 4
+      <*> fromPrimChild node 0
+      <*> fromPrimChild node 1
   fromPrim node@(P.Node "send" _ _ _ _ _) =
     Send
       <$> fromPrim node
       <*> fromPrimChild node 0
+      <*> fromPrimChild node 1
       <*> fromPrimChild node 2
-      <*> fromPrimChild node 4
-  fromPrim node@(P.Node "recv" _ _ _ _ _) =
+  fromPrim node@(P.Node "recv" children _ _ _ _) = do
     Recv
       <$> fromPrim node
       <*> fromPrimChild node 0
-      <*> fromPrimChild node 2
-      <*> fromPrimChild node 4
+      <*> mapM fromPrim (tail children)
   fromPrim node@(P.Node "par" _ _ _ _ _) =
     Par
       <$> fromPrim node
       <*> fromPrimChild node 0
-      <*> fromPrimChild node 2
+      <*> fromPrimChild node 1
   fromPrim node@(P.Node "call" _ _ _ _ _) =
     Call
     <$> fromPrim node
@@ -141,35 +150,52 @@ instance FromPrim Process where
       <$> fromPrim node
   fromPrim node = fromPrim node >>= throwError
 
+instance FromPrim Pattern where
+  fromPrim node@(P.Node "pattern" _ _ _ _ _) = do
+    kind <- kindOfChild node 0
+    case kind of
+      "name"  -> PtrnName  <$> fromPrimChild node 0
+      "label" -> PtrnLabel <$> fromPrimChild node 0
+      _       -> fromPrim node >>= throwError
+  fromPrim node = fromPrim node >>= throwError
+
+instance FromPrim Clause where
+  fromPrim node@(P.Node "clause" _ _ _ _ _) =
+    Clause
+      <$> fromPrim node
+      <*> fromPrimChild node 0
+      <*> fromPrimChild node 1
+  fromPrim node = fromPrim node >>= throwError
+
 instance FromPrim Expr where
   fromPrim node@(P.Node "mul" _ _ _ _ _) =
     Mul
       <$> fromPrim node
       <*> fromPrimChild node 0
-      <*> fromPrimChild node 2
+      <*> fromPrimChild node 1
   fromPrim node@(P.Node "div" _ _ _ _ _) =
     Div
       <$> fromPrim node
       <*> fromPrimChild node 0
-      <*> fromPrimChild node 2
+      <*> fromPrimChild node 1
   fromPrim node@(P.Node "add" _ _ _ _ _) =
     Add
       <$> fromPrim node
       <*> fromPrimChild node 0
-      <*> fromPrimChild node 2
+      <*> fromPrimChild node 1
   fromPrim node@(P.Node "sub" _ _ _ _ _) =
     Sub
       <$> fromPrim node
       <*> fromPrimChild node 0
-      <*> fromPrimChild node 2
+      <*> fromPrimChild node 1
   fromPrim node@(P.Node "integer" _ text _ _ _) =
     ExprDigit
       <$> fromPrim node
       <*> (return $ read $ unpack text)
-  fromPrim node@(P.Node "variable" _ text _ _ _) =
+  fromPrim node@(P.Node "variable" _ _ _ _ _) =
     ExprName
-      <$> fromPrim node
-  fromPrim node@(P.Node "label" _ text _ _ _) =
+      <$> fromPrimChild node 0
+  fromPrim node@(P.Node "label" _ _ _ _ _) =
     ExprLabel
       <$> fromPrim node
   fromPrim node = fromPrim node >>= throwError

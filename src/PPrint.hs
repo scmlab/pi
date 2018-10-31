@@ -83,17 +83,17 @@ ppPi (Send c e p) pr =
         [pretty c <> pretty "!" <>
            ppExpr e 8 <+> pretty ".",
          ppPi p 4])
-ppPi (Recv c [(xs,p)]) pr =
+ppPi (Recv c [Clause xs p]) pr =
   shParen (pr > 4)
    (group . nest 4 . vsep $
      [pretty c <> pretty "?" <> pretty xs <+> pretty ".",
       ppPi p 4])
-ppPi (Recv c pps) pr =
+ppPi (Recv c clauses) pr =
   shParen (pr > 4)
    (pretty c <> pretty "?{" <+>
-    align (encloseSep mempty (pretty " }") sepa (map clause pps)))
+    align (encloseSep mempty (pretty " }") sepa (map clause clauses)))
  where sepa = flatAlt mempty (pretty "; ")
-       clause (xs,p) =
+       clause (Clause xs p) =
           pretty xs <+> pretty "->" <+>
            ppPi p 4
 ppPi (Par p1 p2) pr =

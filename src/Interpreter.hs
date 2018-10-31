@@ -26,7 +26,7 @@ type BkSt = Int
 type Env = FMap Name Pi
 
 data Sender = Sender Val Pi deriving (Show, Eq)
-data Receiver = Receiver [(Ptrn,Pi)] deriving (Show, Eq)
+data Receiver = Receiver [Clause] deriving (Show, Eq)
 
 data St = St
   { stSenders   :: FMap Name Sender      -- senders
@@ -107,7 +107,7 @@ step (St sends recvs inps news) =
 
 input :: Val -> Receiver -> St -> PiMonad St
 input val (Receiver pps) st =
-  case matchPPs pps val of
+  case matchClauses pps val of
     Just (th, p) -> lineup [substPi th p] st
     Nothing -> throwError "input fails to match"
 
@@ -118,8 +118,8 @@ select (x:xs) = return (x,xs) `mplus`
                 ((id *** (x:)) <$> select xs)
 
 react :: MonadPlus m => Sender -> Receiver -> m [Pi]
-react (Sender v q) (Receiver pps) =
-  case matchPPs pps v of
+react (Sender v q) (Receiver clauses) =
+  case matchClauses clauses v of
    Just (th, p) -> return [q, substPi th p]
    Nothing -> mzero
 
@@ -142,8 +142,8 @@ instance Pretty Reaction where
           , pretty "------------"
           , pretty st
           ]
-  pretty (Input st (Receiver ps)) =
-    vsep  [ pretty "Input    :" <+> pretty (Recv (NR StdIn) ps)
+  pretty (Input st (Receiver clauses)) =
+    vsep  [ pretty "Input    :" <+> pretty (Recv (NR StdIn) clauses)
           , pretty "------------"
           , pretty st
           ]
@@ -156,9 +156,9 @@ instance Pretty St where
           , indent 2 (vsep (map pretty rs))
           , encloseSep (pretty "New: ") (pretty ".") comma (map pretty news)
           ]
-    where ss = [ Send c (EV v) p     | (c, (Sender v p)) <- sends ]
-          rs = [ Recv (NR StdIn) pps | (Receiver pps)    <- inps ] ++
-               [ Recv c pps          | (c, Receiver pps) <- recvs ]
+    where ss = [ Send c (EV v) p         | (c, (Sender v p)) <- sends ]
+          rs = [ Recv (NR StdIn) clauses | (Receiver clauses)    <- inps ] ++
+               [ Recv c          clauses | (c, Receiver clauses) <- recvs ]
 
 {-
 type St = ( [Pi]               -- processes running
@@ -231,7 +231,7 @@ doRecv c pps (ps, waits, news) =
     Just (Receivers _) ->
       return . Silent $ (ps, fMapUpdate c (addReceiver pps) waits, news)
     Just (Senders ((v,q):qs)) ->
-       case matchPPs pps v of
+       case matchClauses pps v of
         Just (th, p) ->
           return . Silent$ ( [q] ++ ps ++ [substPi th p]
                  , popSender c qs waits, news)

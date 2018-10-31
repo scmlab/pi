@@ -2,7 +2,6 @@
 
 module Interaction.Human where
 
-import Control.Arrow ((***))
 import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import Data.List (isPrefixOf)
@@ -87,9 +86,9 @@ humanREPL = runInputT defaultSettings $ do
                      (Send (NR StdOut) (eN z) End))))))
            ]
       where
-        recv channel xs p = Recv channel [(xs,p)]
+        recv channel xs p = Recv channel [Clause xs p]
         send channel v p = Send channel v p
-        choices channel xss = Recv channel (map (PL *** id) xss)
+        choices channel xss = Recv channel (map (\(l, p) -> Clause (PL l) p) xss)
 
         neg v = EMinus (EV (VI 0)) v
 

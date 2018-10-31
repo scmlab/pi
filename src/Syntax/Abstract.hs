@@ -5,7 +5,6 @@
 module Syntax.Abstract where
 
 import Control.Monad.Except
-import Control.Arrow ((***))
 import Data.Text (Text)
 
 import qualified Syntax.Concrete as C
@@ -30,10 +29,13 @@ data PiDecl = PiDecl Name Pi
 
 data Pi = End
         | Send Name Expr Pi
-        | Recv Name [(Ptrn,Pi)]
+        | Recv Name [Clause]
         | Par Pi Pi
         | Nu Name Pi
         | Call Name
+   deriving (Eq, Show)
+
+data Clause = Clause Ptrn Pi
    deriving (Eq, Show)
 
 data Expr = EV Val
@@ -117,11 +119,11 @@ substPi :: Subst -> Pi -> Pi
 substPi _ End = End
 substPi th (Send c u p) =
    Send (substName th c) (substExpr th u) (substPi th p)
-substPi th (Recv c pps) =
-    if isEmpty th' then Recv c pps
+substPi th (Recv c clauses) =
+    if isEmpty th' then Recv c clauses
         else Recv (substName th' c)
-                  (map (id *** substPi th') pps)
-  where th' = foldr mask th (map fst pps)
+                  (map (\(Clause ptrn p) -> Clause ptrn (substPi th' p)) clauses)
+  where th' = foldr mask th (map (\(Clause ptrn _) -> ptrn) clauses)
 substPi th (Par p q) = Par (substPi th p) (substPi th q)
 substPi th (Nu y p)
    | y `inDom` th = Nu y p       -- is this right?
@@ -157,11 +159,11 @@ joinSubs ss | nodup (map fst s) = s
             | otherwise = error "non-linear pattern"
   where s = concat ss
 
-matchPPs :: [(Ptrn, Pi)] -> Val -> Maybe (Subst, Pi)
-matchPPs [] _ = Nothing
-matchPPs ((pt,e):_) v
+matchClauses :: [Clause] -> Val -> Maybe (Subst, Pi)
+matchClauses [] _ = Nothing
+matchClauses ((Clause pt e):_) v
   | Just ss <- match pt v = Just (ss,e)
-matchPPs (_:pps) v = matchPPs pps v
+matchClauses (_:pps) v = matchClauses pps v
 
 mask :: Ptrn -> Subst -> Subst
 mask (PN x)      = rmEntry x
@@ -190,13 +192,21 @@ instance FromConcrete C.Name Name where
   fromConcrete (C.Reserved _ "stdout")  = NR StdOut
   fromConcrete (C.Reserved _ name)      = NS name
 
+instance FromConcrete C.Pattern Ptrn where
+  fromConcrete (C.PtrnName name) = PN (fromConcrete name)
+  fromConcrete (C.PtrnLabel label) = PL (fromConcrete label)
+
+instance FromConcrete C.Clause Clause where
+  fromConcrete (C.Clause _ pattern process) =
+    Clause (fromConcrete pattern) (fromConcrete process)
+
 instance FromConcrete C.Process Pi where
   fromConcrete (C.Nu _ name process) =
     Nu (fromConcrete name) (fromConcrete process)
   fromConcrete (C.Send _ name expr process) =
     Send (fromConcrete name) (fromConcrete expr) (fromConcrete process)
-  fromConcrete (C.Recv _ name name' process) =
-    Recv (fromConcrete name) [(PN (fromConcrete name'), (fromConcrete process))]
+  fromConcrete (C.Recv _ name clauses) =
+    Recv (fromConcrete name) (map fromConcrete clauses)
   fromConcrete (C.Par _ procA procB) =
     Par (fromConcrete procA) (fromConcrete procB)
   fromConcrete (C.Call _ name) =
