@@ -83,9 +83,12 @@ ResName :: {ResName}
 Expr :: {Expr}
       : Expr '+' Term       { EPlus $1 $3 }
       | Expr '-' Term       { EMinus $1 $3 }
+      | Term                { $1 }
+      | '(' Expr ')'        { $2 }
 
 Term :: {Expr}
       : Val                 { EV $1 }
+      | '(' Expr ')'        { $2 }
 
 Val :: {Val}
      : Name                 { N $1 }

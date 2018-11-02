@@ -38,6 +38,7 @@ jsonREPL = do
         Right req -> case req of
           Err err -> do
             response $ ResParseError err
+          Err2 _ -> error "panic"
           Test -> do
             state <- get
             response $ ResTest (show state)
@@ -102,6 +103,8 @@ instance ToJSON Conc.ParseError where
     , "expected"  .= expected
     , "got"       .= got
     ]
+  toJSON (Conc.ParseError2 _) = error "panic"
+
 
 instance ToJSON Reaction where
   toJSON (Silent state) = object

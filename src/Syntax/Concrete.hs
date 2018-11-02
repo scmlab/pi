@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 
 module Syntax.Concrete where
+
 import qualified Syntax.Primitive as P
 
 import Control.Monad.Except
@@ -48,7 +49,10 @@ data Expr     = Mul       Range Expr Expr
 --------------------------------------------------------------------------------
 -- | Converting from Primivite Syntax Tree
 
-data ParseError = ParseError Range String Text deriving (Show)
+
+data ParseError = ParseError Range String Text
+                | ParseError2 String
+                deriving (Show)
 
 parsePrim :: P.SyntaxTree -> Either ParseError Program
 parsePrim = runExcept . fromPrim

@@ -26,6 +26,7 @@ data Request
   | Run Int         -- choose and run the nth choice
   | Feed Int Val    -- feed the nth process with some value
   | Err ParseError  -- error raised when parsing this request
+  | Err2 String  -- error raised when parsing this request
   deriving (Show)
 
 data Response

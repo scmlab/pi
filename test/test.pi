@@ -1,8 +1,8 @@
-a = (nu d) (nu c) d!3 . c?x . end
 
-p0 = c?x
-    . c!4 + (3 + 2)
-    . c!4 - (3 + 2)
-    . c?x
-    . end
-p1 = c!3 . end
+p0 = (nu w) c!w
+    . w?{ PLUS -> w?x . w?y . w!(x + y) . p0
+        ; NEG -> w?x . w!(0 - x) . p0 }
+p1 = c?j . j!NEG . j!6 . j?z . stdout!z . end
+p2 = c?j . j!PLUS . j!3 . j!4 . j?z . stdout!z . end
+
+main = p0 | p1

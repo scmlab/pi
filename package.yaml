@@ -24,6 +24,7 @@ dependencies:
 - array
 - aeson
 - bytestring
+- directory
 - haskeline
 - mtl
 - prettyprinter

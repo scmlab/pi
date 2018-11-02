@@ -5,18 +5,21 @@ module Interaction.Human where
 import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import Data.List (isPrefixOf)
+import Data.ByteString.Lazy (readFile)
 import System.Console.Haskeline
+import System.Directory (makeAbsolute)
 
 import Interaction
-import Interpreter
 import Syntax.Abstract
+import Syntax.Parser (parse)
+import Prelude hiding (readFile)
 
 --------------------------------------------------------------------------------
 -- | Interfacing with Humans
 
 humanREPL :: IO ()
 humanREPL = runInputT defaultSettings $ do
-  (result, _) <- runInteraction initialEnv initialPi loop
+  (result, _) <- runInteraction [] (Call (NS "main")) loop
   outputStrLn (show result)
   return ()
   where
@@ -32,25 +35,40 @@ humanREPL = runInputT defaultSettings $ do
       case minput of
         Nothing -> return ()
         Just s -> do
-          case parseInput s of
+          request <- parseRequest s
+          case request of
             Just (Run n)   -> do
               try (run n)
               loop
             Just (Feed i v) -> do
               try (feed i v)
               loop
+            Just (Load (Prog prog)) -> do
+              load $ map (\(PiDecl name p) -> (name, p)) prog
+              loop
+            Just (Err2 err) -> do
+              liftH $ outputStrLn err
+              loop
             Just _ -> do
               loop
             Nothing -> do
               loop
         where
-          parseInput :: String -> Maybe Request
-          parseInput s
-            | "run " `isPrefixOf` s = Just $ Run (read $ drop 4 s)
+          parseRequest :: String -> InteractionM (InputT IO) (Maybe Request)
+          parseRequest s
+            | "run " `isPrefixOf` s = return $ Just $ Run (read $ drop 4 s)
             | "feed " `isPrefixOf` s =
-                let [i, v] = (map read $ words $ drop 5 s) :: [Int]
-                in Just $ Feed i (VI v)
-            | otherwise = Nothing
+              let [i, v] = (map read $ words $ drop 5 s) :: [Int]
+              in return $ Just $ Feed i (VI v)
+            | "load " `isPrefixOf` s = do
+              filepath <- liftIO $ makeAbsolute (init $ drop 5 s)
+              raw <- liftIO $ readFile filepath
+              case parse raw of
+                Left err -> return $ Just $ Err2 (show err)
+                Right prog -> return $ Just $ Load prog
+            | otherwise = return Nothing
+
+          -- loadAndParse :: String ->
 
           try :: InteractionM (InputT IO) () -> InteractionM (InputT IO) ()
           try program = do
@@ -62,40 +80,40 @@ humanREPL = runInputT defaultSettings $ do
 -- p1 = c?j . stdin?x . j!NEG . j!x . j?z . stdout!z . end
 -- p2 = c?j . j!PLUS . j!<3,4> . j?z . stdout!z . end
 -- main = p0 | p1 | p2
-    initialEnv :: Env
-    initialEnv =
-      [(NS "p0",
-             Nu i (send c (eN i)
-              (choices i
-                [("PLUS", (recv i (PT [PN x, PN y])
-                      (send i (EPlus (eN x) (eN y)) (Call (NS "p0"))))),
-                 ("NEG", (recv i (PN x)
-                     (send i (neg (eN x)) (Call (NS "p0")))))])))
-           ,(NS "p1",
-              recv c (PN j)
-                  (send j (eL "PLUS")
-                    (send j (ETup [eI 3, eI 4])
-                      (recv j (PN z)
-                        (Send (NR StdOut) (eN z) End)))))
-           ,(NS "p2",
-              recv c (PN j)
-               (recv (NR StdIn) (PN x)
-                (send j (eL "NEG")
-                 (send j (eN x)
-                   (recv j (PN z)
-                     (Send (NR StdOut) (eN z) End))))))
-           ]
-      where
-        recv channel xs p = Recv channel [Clause xs p]
-        send channel v p = Send channel v p
-        choices channel xss = Recv channel (map (\(l, p) -> Clause (PL l) p) xss)
-
-        neg v = EMinus (EV (VI 0)) v
-
-        [i,j,c,x,y,z] = map NS ["i","j","c","x","y","z"]
-
-    initialPi :: Pi
-    initialPi = Call (NS "p0") `Par` Call (NS "p1") `Par` Call (NS "p2")
+    -- initialEnv :: Env
+    -- initialEnv =
+    --   [(NS "p0",
+    --          Nu i (send c (eN i)
+    --           (choices i
+    --             [("PLUS", (recv i (PT [PN x, PN y])
+    --                   (send i (EPlus (eN x) (eN y)) (Call (NS "p0"))))),
+    --              ("NEG", (recv i (PN x)
+    --                  (send i (neg (eN x)) (Call (NS "p0")))))])))
+    --        ,(NS "p1",
+    --           recv c (PN j)
+    --               (send j (eL "PLUS")
+    --                 (send j (ETup [eI 3, eI 4])
+    --                   (recv j (PN z)
+    --                     (Send (NR StdOut) (eN z) End)))))
+    --        ,(NS "p2",
+    --           recv c (PN j)
+    --            (recv (NR StdIn) (PN x)
+    --             (send j (eL "NEG")
+    --              (send j (eN x)
+    --                (recv j (PN z)
+    --                  (Send (NR StdOut) (eN z) End))))))
+    --        ]
+    --   where
+    --     recv channel xs p = Recv channel [Clause xs p]
+    --     send channel v p = Send channel v p
+    --     choices channel xss = Recv channel (map (\(l, p) -> Clause (PL l) p) xss)
+    --
+    --     neg v = EMinus (EV (VI 0)) v
+    --
+    --     [i,j,c,x,y,z] = map NS ["i","j","c","x","y","z"]
+    --
+    -- initialPi :: Pi
+    -- initialPi = Call (NS "p0") `Par` Call (NS "p1") `Par` Call (NS "p2")
 
 
 -- try in GHCi:
