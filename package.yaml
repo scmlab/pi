@@ -42,11 +42,11 @@ executables:
     - Syntax.Abstract
     - Syntax.Primitive
     - Syntax.Concrete
+    - Syntax.Parser
+    - Syntax.Parser.Base
+    - Syntax.Parser.Lexer
+    - Syntax.Parser.Parser
     - Utilities
-    - Parser
-    - Parser.Base
-    - Parser.Lexer
-    - Parser.Parser
     ghc-options:
     - -Wall
     - -threaded

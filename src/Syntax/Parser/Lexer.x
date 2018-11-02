@@ -10,7 +10,7 @@
 {-# OPTIONS_GHC -fno-warn-tabs                  #-}
 {-# OPTIONS_GHC -funbox-strict-fields           #-}
 
-module Parser.Lexer
+module Syntax.Parser.Lexer
     ( Alex(..)
     , AlexPosn(..)
     , AlexState(..)
@@ -47,6 +47,7 @@ tokens :-
   if                                    { tok          TokenIf }
   then                                  { tok          TokenThen }
   else                                  { tok          TokenElse }
+  [\=]                                  { tok          TokenDefn }
   [\!]                                  { tok          TokenSend }
   [\?]                                  { tok          TokenRecv }
   [\.]                                  { tok          TokenSeq }
@@ -81,7 +82,8 @@ tokenToPosN :: Token -> AlexPosn
 tokenToPosN (Token p _) = p
 
 data TokenClass
-  = TokenEnd
+  = TokenDefn
+  | TokenEnd
   | TokenSend
   | TokenRecv
   | TokenStdOut

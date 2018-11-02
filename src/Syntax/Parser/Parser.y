@@ -1,7 +1,7 @@
 {
-module Parser.Parser where
+module Syntax.Parser.Parser where
 
-import Parser.Base
+import Syntax.Parser.Base
 import Syntax.Abstract
 }
 
@@ -24,6 +24,7 @@ import Syntax.Abstract
         'if'            { Token _ TokenIf }
         'then'          { Token _ TokenThen }
         'else'          { Token _ TokenElse }
+        '='             { Token _ TokenDefn      }
         '!'             { Token _ TokenSend      }
         '?'             { Token _ TokenRecv      }
         '.'             { Token _ TokenSeq       }
@@ -41,6 +42,16 @@ import Syntax.Abstract
         '->'            { Token _ TokenArrow }
 
 %%
+
+Program :: {Prog}
+    : PiDecls                   { Prog $1 }
+
+PiDecls :: {[PiDecl]}
+    : PiDecl                    { [$1] }
+    | PiDecl PiDecls            { $1:$2 }
+
+PiDecl :: {PiDecl}
+    : Name '=' Pi               { PiDecl $1 $3 }
 
 Pi :: {Pi}
     : Name '!' Expr '.' Pi      { Send $1 $3 $5  }

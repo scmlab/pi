@@ -1,4 +1,4 @@
-module Parser
+module Syntax.Parser
   ( parse
   , Error(..)
   , ErrClass(..)
@@ -7,9 +7,9 @@ module Parser
 
 import Data.ByteString.Lazy (ByteString)
 import Data.List (isPrefixOf)
-import Parser.Base (runAlex)
-import Parser.Parser (happyParser)
-import Syntax.Abstract (Pi)
+import Syntax.Parser.Base (runAlex)
+import Syntax.Parser.Parser (happyParser)
+import Syntax.Abstract (Prog)
 
 data ErrClass
     = Syntactical (Maybe String)
@@ -23,7 +23,7 @@ data Error = Error
     , errClass :: ErrClass
     } deriving (Show, Eq)
 
-parse :: ByteString -> Either Error Pi
+parse :: ByteString -> Either Error Prog
 parse s =
     -- Alex's error type is a String, that we have to parse here,
     -- otherwise we cannot get type-safe information out of 'parse'.
