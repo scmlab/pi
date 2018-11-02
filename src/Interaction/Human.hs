@@ -11,7 +11,7 @@ import System.Directory (makeAbsolute)
 
 import Interaction
 import Syntax.Abstract
-import Syntax.Parser (parse)
+import Syntax.Parser (parseByteString)
 import Prelude hiding (readFile)
 
 --------------------------------------------------------------------------------
@@ -63,7 +63,7 @@ humanREPL = runInputT defaultSettings $ do
             | "load " `isPrefixOf` s = do
               filepath <- liftIO $ makeAbsolute (init $ drop 5 s)
               raw <- liftIO $ readFile filepath
-              case parse raw of
+              case parseByteString raw of
                 Left err -> return $ Just $ Err2 (show err)
                 Right prog -> return $ Just $ Load prog
             | otherwise = return Nothing

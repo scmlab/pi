@@ -3,18 +3,13 @@
 module Syntax.Concrete where
 
 import qualified Syntax.Primitive as P
+import Syntax.Parser.Error
 
 import Control.Monad.Except
 import Data.Text (Text, unpack)
 
 --------------------------------------------------------------------------------
 -- | Concrete Syntax Tree
-
-data Point = Point Int Int Int  -- row / column / index
-  deriving (Show)
-data Range = Range Point Point Text -- start / end / text
-  deriving (Show)
-
 
 data Label    = Label     Range Text          deriving (Show)
 data Name     = Name      Range Text
@@ -49,11 +44,6 @@ data Expr     = Mul       Range Expr Expr
 --------------------------------------------------------------------------------
 -- | Converting from Primivite Syntax Tree
 
-
-data ParseError = ParseError Range String Text
-                | ParseError2 String
-                deriving (Show)
-
 parsePrim :: P.SyntaxTree -> Either ParseError Program
 parsePrim = runExcept . fromPrim
 
@@ -80,7 +70,7 @@ kindOfChild node i = do
 instance FromPrim ParseError where
   fromPrim node@(P.Node expected _ got _ _ _) = do
     range <- fromPrim node
-    throwError $ ParseError range expected got
+    throwError $ TreeSitterParseError range expected got
 
 instance FromPrim Range where
   fromPrim (P.Node _ _ text (P.RangePrim (P.PointPrim a b) (P.PointPrim c d)) start end) =

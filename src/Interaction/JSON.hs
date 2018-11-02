@@ -16,6 +16,7 @@ import Data.Text.Prettyprint.Doc (pretty)
 import Interaction
 import Interpreter
 import Syntax.Abstract
+import Syntax.Parser.Error
 import qualified Syntax.Concrete as Conc
 
 --------------------------------------------------------------------------------
@@ -97,13 +98,15 @@ instance ToJSON Response where
     , "payload"  .= err
     ]
 
-instance ToJSON Conc.ParseError where
-  toJSON (Conc.ParseError range expected got) = object
+instance ToJSON ParseError where
+  toJSON (HaskellParseError _ _ _) = object
+    [
+    ]
+  toJSON (TreeSitterParseError range expected got) = object
     [ "range"     .= show range
     , "expected"  .= expected
     , "got"       .= got
     ]
-  toJSON (Conc.ParseError2 _) = error "panic"
 
 
 instance ToJSON Reaction where
