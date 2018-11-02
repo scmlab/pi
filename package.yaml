@@ -49,6 +49,10 @@ executables:
     - Syntax.Parser.TreeSitter.SyntaxTree
     - Syntax.Parser.Type
     - Utilities
+    - Parser
+    - Parser.Base
+    - Parser.Lexer
+    - Parser.Parser
     ghc-options:
     - -Wall
     - -threaded
