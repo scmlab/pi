@@ -41,12 +41,13 @@ executables:
     - Interpreter
     - PPrint
     - Syntax.Abstract
-    - Syntax.Primitive
     - Syntax.Concrete
     - Syntax.Parser
-    - Syntax.Parser.Base
-    - Syntax.Parser.Lexer
-    - Syntax.Parser.Parser
+    - Syntax.Parser.AlexHappy.Base
+    - Syntax.Parser.AlexHappy.Lexer
+    - Syntax.Parser.AlexHappy.Parser
+    - Syntax.Parser.TreeSitter.SyntaxTree
+    - Syntax.Parser.Type
     - Utilities
     ghc-options:
     - -Wall

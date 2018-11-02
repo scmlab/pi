@@ -7,12 +7,11 @@ module Syntax.Parser
 
 import Data.ByteString.Lazy (ByteString)
 import Data.List (isPrefixOf)
-import Syntax.Parser.Base (runAlex)
-import Syntax.Parser.Parser (happyParser)
-import Syntax.Primitive (SyntaxTree)
-import Syntax.Concrete (parsePrim)
+import Syntax.Parser.AlexHappy.Base (runAlex)
+import Syntax.Parser.AlexHappy.Parser (happyParser)
 import Syntax.Abstract (Prog, fromConcrete)
-import Syntax.Parser.Error
+import Syntax.Parser.TreeSitter.SyntaxTree (parse)
+import Syntax.Parser.Type
 
 -- | Haskell parser
 parseByteString :: ByteString -> Either ParseError Prog
@@ -24,9 +23,9 @@ parseByteString s =
     in case runAlex s $ happyParser of
         Right x -> Right x
         Left str | showErrPrefix `isPrefixOf` str ->
-                      let (line, column, m) =
+                      let (line, col, m) =
                               (read (drop (length showErrPrefix) str) :: (Int, Int, Maybe String))
-                      in Left (HaskellParseError line column (Syntactical m))
+                      in Left (HaskellParseError line col (Syntactical m))
                  | lexicalErrorPrefix `isPrefixOf` str ->
                       let info = drop (length lexicalErrorPrefix) str
                           lineStr = takeWhile (/= ',') info
@@ -37,6 +36,6 @@ parseByteString s =
 -- | Tree-sitter parser
 parseSyntaxTree :: SyntaxTree -> Either ParseError Prog
 parseSyntaxTree tree =
-    case parsePrim tree of
+    case parse tree of
       Left  err     -> Left $ err
       Right program -> Right $ fromConcrete program

@@ -8,7 +8,7 @@ import Control.Monad.Except
 import Data.Text.Prettyprint.Doc
 
 import Syntax.Abstract
-import Syntax.Parser.Error
+import Syntax.Parser.Type (ParseError(..))
 import Interpreter
 
 
@@ -26,7 +26,6 @@ data Request
   | Run Int         -- choose and run the nth choice
   | Feed Int Val    -- feed the nth process with some value
   | Err ParseError  -- error raised when parsing this request
-  | Err2 String  -- error raised when parsing this request
   deriving (Show)
 
 data Response

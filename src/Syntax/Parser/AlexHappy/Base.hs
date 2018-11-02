@@ -1,4 +1,4 @@
-module Syntax.Parser.Base
+module Syntax.Parser.AlexHappy.Base
   ( thenP
   , returnP
   , happyError
@@ -13,7 +13,7 @@ module Syntax.Parser.Base
   )
   where
 
-import Syntax.Parser.Lexer
+import Syntax.Parser.AlexHappy.Lexer
 
 type Parser a = Alex a
 

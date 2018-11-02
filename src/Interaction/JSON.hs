@@ -9,15 +9,14 @@ import Data.Text hiding (pack, map)
 import Data.ByteString.Char8 (getLine, putStrLn, pack)
 import Data.ByteString.Lazy.Char8 (toStrict)
 import Prelude hiding (getLine, putStrLn)
-import qualified Syntax.Abstract as Abst
 
 import Data.Text.Prettyprint.Doc (pretty)
 
 import Interaction
 import Interpreter
 import Syntax.Abstract
-import Syntax.Parser.Error
-import qualified Syntax.Concrete as Conc
+import Syntax.Parser (parseSyntaxTree)
+import Syntax.Parser.Type
 
 --------------------------------------------------------------------------------
 -- | Interfacing with Machines
@@ -39,7 +38,6 @@ jsonREPL = do
         Right req -> case req of
           Err err -> do
             response $ ResParseError err
-          Err2 _ -> error "panic"
           Test -> do
             state <- get
             response $ ResTest (show state)
@@ -67,9 +65,9 @@ instance FromJSON Request where
     case (kind :: Text) of
       "load"  -> do
         pst <- obj .: "syntax-tree"
-        case Conc.parsePrim pst of
+        case parseSyntaxTree pst of
           Left err      -> return $ Err err
-          Right program -> return $ Load (Abst.fromConcrete program)
+          Right program -> return $ Load program
       "test"   -> return $ Test
       "run"   -> do
         i <- obj .: "index"

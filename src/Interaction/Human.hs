@@ -46,9 +46,6 @@ humanREPL = runInputT defaultSettings $ do
             Just (Load (Prog prog)) -> do
               load $ map (\(PiDecl name p) -> (name, p)) prog
               loop
-            Just (Err2 err) -> do
-              liftH $ outputStrLn err
-              loop
             Just _ -> do
               loop
             Nothing -> do
@@ -64,7 +61,7 @@ humanREPL = runInputT defaultSettings $ do
               filepath <- liftIO $ makeAbsolute (init $ drop 5 s)
               raw <- liftIO $ readFile filepath
               case parseByteString raw of
-                Left err -> return $ Just $ Err2 (show err)
+                Left err -> return $ Just $ Err err
                 Right prog -> return $ Just $ Load prog
             | otherwise = return Nothing
 

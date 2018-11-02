@@ -1,7 +1,7 @@
 {
-module Syntax.Parser.Parser where
+module Syntax.Parser.AlexHappy.Parser where
 
-import Syntax.Parser.Base
+import Syntax.Parser.AlexHappy.Base
 import Syntax.Abstract
 }
 

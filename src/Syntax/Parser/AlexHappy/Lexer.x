@@ -10,7 +10,7 @@
 {-# OPTIONS_GHC -fno-warn-tabs                  #-}
 {-# OPTIONS_GHC -funbox-strict-fields           #-}
 
-module Syntax.Parser.Lexer
+module Syntax.Parser.AlexHappy.Lexer
     ( Alex(..)
     , AlexPosn(..)
     , AlexState(..)
