@@ -1,8 +1,12 @@
 {
+{-# LANGUAGE OverloadedStrings                  #-}
+
 module Syntax.Parser.AlexHappy.Parser where
 
 import Syntax.Parser.AlexHappy.Base
-import Syntax.Abstract
+import Syntax.Concrete
+
+import Data.Text (Text)
 }
 
 %name happyParser
@@ -38,57 +42,58 @@ import Syntax.Abstract
 
 %%
 
-Program :: {Prog}
-    : PiDecls                   { Prog $1 }
+Program :: {Program Token}
+    : ProcDecls                             {%^ return . Program $1 }
 
-PiDecls :: {[PiDecl]}
-    : PiDecl                    { [$1] }
-    | PiDecl PiDecls            { $1:$2 }
+ProcDecls :: {[ProcDecl Token]}
+    : ProcDecl                              { [$1] }
+    | ProcDecl ProcDecls                    { $1:$2 }
 
-PiDecl :: {PiDecl}
-    : Name '=' ParalleledPi     { PiDecl $1 $3 }
+ProcDecl :: {ProcDecl Token}
+    : Name '=' ParalleledProcess            {%^ return . ProcDecl $1 $3 }
 
-ParalleledPi :: {Pi}
-    : ParalleledPi '|' Pi       { Par $1 $3 }
-    | Pi '|' Pi                 { Par $1 $3 }
+ParalleledProcess :: {Process Token}
+    : ParalleledProcess '|' Process         {%^ return . Par $1 $3 }
+    | Process '|' Process                   {%^ return . Par $1 $3 }
 
 
-Pi :: {Pi}
-    : Name '!' Expr '.' Pi      { Send $1 $3 $5  }
-    | Name '?' '{' Clauses '}'  { Recv $1 (reverse $4)  }
-    | Name '?' Pattern '.' Pi   { Recv $1 [Clause $3 $5]  }
-    | 'end'                     { End }
-    | '(' 'nu' Name ')' Pi      { Nu $3 $5 }
-    | Name                      { Call $1 }
+Process :: {Process Token}
+    : Name '!' Expr '.' Process             {%^ return . Send $1 $3 $5  }
+    | Name '?' '{' Clauses '}'              {%^ return . Recv $1 (reverse $4)  }
+    | Name '?' ClauseDot                    {%^ return . Recv $1 [$3]  }
+    | 'end'                                 {%^ return . End }
+    | '(' 'nu' Name ')' Process             {%^ return . Nu $3 $5 }
+    | Name                                  {%^ return . Call $1 }
 
-Pattern :: {Ptrn}
-         : Name                 { PN $1 }
-         | label                { PL $1 }
+Pattern :: {Pattern Token}
+         : Name                             {%^ return . PtrnName $1 }
+         | Label                            {%^ return . PtrnLabel $1 }
 
-Clause :: {Clause}
-        : Pattern '->' Pi       { Clause $1 $3 }
-Clauses :: {[Clause]}
-        : Clauses ';' Clause    { $3 : $1 }
-        | Clause                { [ $1 ] }
+ClauseDot :: {Clause Token}
+        : Pattern '.' Process               {%^ return .  Clause $1 $3 }
+ClauseArr :: {Clause Token}
+        : Pattern '->' Process              {%^ return .  Clause $1 $3 }
+Clauses :: {[Clause Token]}
+        : Clauses ';' ClauseArr             { $3 : $1 }
+        | ClauseArr                         { [ $1 ] }
 
-Name :: {Name}
-      : name                    { NS $1 }
-      | ResName                 { NR $1 }
+Name :: {Name Token}
+      : name                                {%^ return . Name $1 }
+      | ReservedName                        {%^ return . Reserved $1 }
 
-ResName :: {ResName}
-         : 'stdout'             { StdOut }
-         | 'stdin'              { StdIn }
+ReservedName :: {Text}
+     : 'stdout'                             { "StdOut" }
+     | 'stdin'                              { "StdIn" }
 
-Expr :: {Expr}
-      : Expr '+' Expr           { EPlus $1 $3 }
-      | Expr '-' Expr           { EMinus $1 $3 }
-      | '(' Expr ')'            { $2 }
-      | Val                     { EV $1 }
+Expr :: {Expr Token}
+      : Expr '+' Expr                       {%^ return . Add $1 $3 }
+      | Expr '-' Expr                       {%^ return . Sub $1 $3 }
+      | '(' Expr ')'                        { $2 }
+      | Name                                {%^ return . ExprName $1 }
+      | int                                 {%^ return . ExprDigit $1 }
+      | Label                               {%^ return . ExprLabel $1 }
 
-Val :: {Val}
-     : Name                     { N $1 }
-     | int                      { VI $1 }
-     | label                    { VL $1 }
-
+Label :: {Label Token}
+    : label                                 {%^ return . Label $1 }
 
 {}

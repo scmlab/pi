@@ -178,48 +178,48 @@ class FromConcrete a b | a -> b where
   fromConcrete :: a -> b
 
 instance FromConcrete (C.Program ann) Prog where
-  fromConcrete (C.Program _ declarations) = Prog (map fromConcrete declarations)
+  fromConcrete (C.Program  declarations _) = Prog (map fromConcrete declarations)
 
 instance FromConcrete (C.ProcDecl ann) PiDecl where
-  fromConcrete (C.ProcDecl _ name process) = PiDecl (fromConcrete name) (fromConcrete process)
+  fromConcrete (C.ProcDecl name process _) = PiDecl (fromConcrete name) (fromConcrete process)
 
 instance FromConcrete (C.Label ann) Label where
-  fromConcrete (C.Label    _ label)     = label
+  fromConcrete (C.Label    label _)     = label
 
 instance FromConcrete (C.Name ann) Name where
-  fromConcrete (C.Name     _ name)      = NS name
-  fromConcrete (C.Reserved _ "stdin")   = NR StdOut
-  fromConcrete (C.Reserved _ "stdout")  = NR StdOut
-  fromConcrete (C.Reserved _ name)      = NS name
+  fromConcrete (C.Name     name _)      = NS name
+  fromConcrete (C.Reserved "stdin" _)   = NR StdOut
+  fromConcrete (C.Reserved "stdout" _)  = NR StdOut
+  fromConcrete (C.Reserved name _)      = NS name
 
 instance FromConcrete (C.Pattern ann) Ptrn where
-  fromConcrete (C.PtrnName _ name) = PN (fromConcrete name)
-  fromConcrete (C.PtrnLabel _ label) = PL (fromConcrete label)
+  fromConcrete (C.PtrnName name _) = PN (fromConcrete name)
+  fromConcrete (C.PtrnLabel label _) = PL (fromConcrete label)
 
 instance FromConcrete (C.Clause ann) Clause where
-  fromConcrete (C.Clause _ pattern process) =
+  fromConcrete (C.Clause pattern process _) =
     Clause (fromConcrete pattern) (fromConcrete process)
 
 instance FromConcrete (C.Process ann) Pi where
-  fromConcrete (C.Nu _ name process) =
+  fromConcrete (C.Nu name process _) =
     Nu (fromConcrete name) (fromConcrete process)
-  fromConcrete (C.Send _ name expr process) =
+  fromConcrete (C.Send name expr process _) =
     Send (fromConcrete name) (fromConcrete expr) (fromConcrete process)
-  fromConcrete (C.Recv _ name clauses) =
+  fromConcrete (C.Recv name clauses _) =
     Recv (fromConcrete name) (map fromConcrete clauses)
-  fromConcrete (C.Par _ procA procB) =
+  fromConcrete (C.Par procA procB _) =
     Par (fromConcrete procA) (fromConcrete procB)
-  fromConcrete (C.Call _ name) =
+  fromConcrete (C.Call name _) =
     Call (fromConcrete name)
   fromConcrete (C.End _) =
     End
 
 instance FromConcrete (C.Expr ann) Expr where
   -- WARNING: there's no multiplication or division here in the AST!
-  fromConcrete (C.Mul _ x _) = fromConcrete x
-  fromConcrete (C.Div _ x _) = fromConcrete x
-  fromConcrete (C.Add _ x y) = EPlus (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.Sub _ x y) = EMinus (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.ExprDigit _ x) = EV (VI x)
-  fromConcrete (C.ExprName  _ x) = EV (N (fromConcrete x))
-  fromConcrete (C.ExprLabel _ x) = EV (VL (fromConcrete x))
+  fromConcrete (C.Mul x _ _) = fromConcrete x
+  fromConcrete (C.Div x _ _) = fromConcrete x
+  fromConcrete (C.Add x y _) = EPlus (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.Sub x y _) = EMinus (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.ExprDigit x _) = EV (VI x)
+  fromConcrete (C.ExprName  x _) = EV (N (fromConcrete x))
+  fromConcrete (C.ExprLabel x _) = EV (VL (fromConcrete x))
