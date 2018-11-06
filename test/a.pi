@@ -1,0 +1,3 @@
+p0 = (nu x) (x!3 . end | x?y . stdout!y . end)
+
+main = p0

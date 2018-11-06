@@ -37,25 +37,27 @@ import Data.Text (Text)
         ';'             { Token _ TokenSemi }
         '->'            { Token _ TokenArrow }
 
+%right '|'
 %right '.'
 %left '+' '-'
 
 %%
 
 Program :: {Program Token}
-    : ProcDecls                             {%^ return . Program $1 }
+    : ProcDecls                             {%^ return . Program (reverse $1) }
 
+-- left recursive
 ProcDecls :: {[ProcDecl Token]}
     : ProcDecl                              { [$1] }
-    | ProcDecl ProcDecls                    { $1:$2 }
+    | ProcDecls ProcDecl                    { $2:$1 }
 
 ProcDecl :: {ProcDecl Token}
-    : Name '=' ParalleledProcess            {%^ return . ProcDecl $1 $3 }
+    : Name '=' ProcessPar                   {%^ return . ProcDecl $1 $3 }
 
-ParalleledProcess :: {Process Token}
-    : ParalleledProcess '|' Process         {%^ return . Par $1 $3 }
-    | Process '|' Process                   {%^ return . Par $1 $3 }
-
+-- left recursive
+ProcessPar :: {Process Token}
+    : ProcessPar '|' Process                {%^ return . Par $1 $3 }
+    | Process                               { $1 }
 
 Process :: {Process Token}
     : Name '!' Expr '.' Process             {%^ return . Send $1 $3 $5  }
@@ -64,6 +66,7 @@ Process :: {Process Token}
     | 'end'                                 {%^ return . End }
     | '(' 'nu' Name ')' Process             {%^ return . Nu $3 $5 }
     | Name                                  {%^ return . Call $1 }
+    | '(' ProcessPar ')'                    { $2 }
 
 Pattern :: {Pattern Token}
          : Name                             {%^ return . PtrnName $1 }

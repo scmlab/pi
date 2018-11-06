@@ -5,7 +5,8 @@ module Interaction.JSON where
 import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import Data.Aeson
-import Data.Text hiding (pack, map)
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.ByteString.Char8 (getLine, putStrLn, pack)
 import Data.ByteString.Lazy.Char8 (toStrict)
 import Prelude hiding (getLine, putStrLn)
@@ -34,7 +35,7 @@ jsonREPL = do
     loop = do
       raw <- liftIO getLine
       case (eitherDecodeStrict raw :: Either String Request) of
-        Left err -> response $ ResGenericError err
+        Left err -> response $ ResParseError (RequestParseError (Text.pack err))
         Right req -> case req of
           Err err -> do
             response $ ResParseError err
@@ -104,6 +105,9 @@ instance ToJSON ParseError where
     [ "range"     .= show range
     , "expected"  .= expected
     , "got"       .= got
+    ]
+  toJSON (RequestParseError _) = object
+    [
     ]
 
 

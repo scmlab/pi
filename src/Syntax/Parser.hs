@@ -2,6 +2,8 @@ module Syntax.Parser
   ( parseByteString
   , parseSyntaxTree
   , SyntaxTree
+  , Point(..), Range(..)
+  , ParseError(..)
   )
   where
 
