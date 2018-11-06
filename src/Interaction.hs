@@ -2,7 +2,6 @@
 
 module Interaction where
 
-import Control.Arrow ((***))
 import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import Data.Text.Prettyprint.Doc
@@ -53,11 +52,14 @@ ppOutcome (Left msg)       = pretty ("error:" :: String) <+> pretty msg
 ppOutcome (Right (res, _)) = pretty res
 
 ppOutcomes :: [Outcome] -> Doc n
-ppOutcomes states = vsep (map ppSts (zip [0..] states))
-    where   ppSts :: (Int, Either ErrMsg (Reaction, b)) -> Doc n
-            ppSts (i,st) = vsep [ pretty ("==== " ++ show i ++ " ====")
-                              , ppOutcome st
-                              , line]
+ppOutcomes outcomes = vsep $
+  [ pretty $ show (length outcomes) ++ " possible outcomes"
+  ] ++ map ppSts (zip [0..] outcomes)
+  where   ppSts :: (Int, Either ErrMsg (Reaction, b)) -> Doc n
+          ppSts (i, outcome) = vsep
+            [ pretty ("==== " ++ show i ++ " ====")
+            , ppOutcome outcome
+            , line]
 
 -- safe (!!)
 decideOutcome :: Monad m => Int -> InteractionM m Outcome
@@ -78,8 +80,7 @@ updateEnv new = modify (\state -> state { stateEnv = new })
 load :: Monad m => Env -> InteractionM m ()
 load env = put $ State
   { stateEnv = env
-  , stateOutcomes = map (fmap (Silent *** id))
-          (runPiMonad env 0 (lineup [Call (NS "main")] (St [] [] [] [])))
+  , stateOutcomes = map toOutcome (runPiMonad env 0 (lineup [Call (NS "main")] (St [] [] [] [])))
   }
 
 -- down
@@ -87,7 +88,7 @@ run :: Monad m => Int -> InteractionM m ()
 run n = do
   outcome <- decideOutcome n
   case outcome of
-    Left err ->
+    Left err -> do
       updateOutcomes [Left err]
     Right (Output state (Sender _ p), i) -> do
       defs <- gets stateEnv
@@ -111,41 +112,3 @@ feed i val = do
       updateOutcomes $ runPiMonad defs j (Silent <$> input val pps st)
     _ ->
       throwError "not expecting input"
-
---------------------------------------------------------------------------------
--- | BStates (legacy)
-
--- data BState = BState Env [Choice]
---
--- instance Pretty BState where
---   pretty (BState _ sts) = vsep (map ppSts (zip [0..] sts))
---     where ppSts (i,st) = vsep [ pretty ("= " ++ show i ++ " ====")
---                               , ppOutcome st
---                               , line]
---
--- start :: Env -> Pi -> BState
--- start defs p = BState defs $ map (fmap (Silent *** id))
---   (runPiMonad 0 (lineup defs [p] ([],[],[],[])))
---
--- down :: Int -> BState -> BState
--- down i (BState defs sts) = down' (sts !! i)
---   where
---     down' (Left err) =
---       BState defs [Left err]
---     down' (Right (Output v p st, i)) =
---       BState defs (runPiMonad i (lineup defs [p] st >>= step defs))
---     down' (Right (Input pps st, i)) =
---       BState defs [Right (Input pps st, i)]
---     down' (Right (Silent st, i)) =
---       BState defs (runPiMonad i (step defs st))
---
--- readInp :: Int -> Val -> BState -> BState
--- readInp i v  (BState defs sts) =
---   case sts !! i of
---     Right (Input pps st, j) ->
---       BState defs (runPiMonad j (Silent <$> input defs v pps st))
---     _ -> error "not expecting input."
---
--- trace :: [Int] -> BState -> BState
--- trace []     = id
--- trace (i:is) = trace is . down i

@@ -112,24 +112,27 @@ input val (Receiver pps) st =
     Nothing -> throwError "input fails to match"
 
 
-select :: MonadPlus m => [a] -> m (a,[a])
+select :: [a] -> PiMonad (a,[a])
 select [] = mzero
 select (x:xs) = return (x,xs) `mplus`
                 ((id *** (x:)) <$> select xs)
 
-react :: MonadPlus m => Sender -> Receiver -> m [Pi]
+react :: Sender -> Receiver -> PiMonad [Pi]
 react (Sender v q) (Receiver clauses) =
   case matchClauses clauses v of
    Just (th, p) -> return [q, substPi th p]
-   Nothing -> mzero
+   Nothing -> undefined
 
 --------------------------------------------------------------------------------
 -- | Pretty printing
 
 instance Pretty Reaction where
-  pretty (Silent st) = pretty st
+  pretty (Silent st) =
+    vsep  [ pretty "[Silent]"
+          , pretty st
+          ]
   pretty (React st channel (Sender v p) (Receiver ps) products) =
-    vsep  [ pretty "React!"
+    vsep  [ pretty "[React]"
           , pretty "Channel  :" <+> pretty channel
           , pretty "Sender   :" <+> pretty (Send channel (EV v) p)
           , pretty "Receiver :" <+> pretty (Recv channel ps)
@@ -138,12 +141,12 @@ instance Pretty Reaction where
           , pretty st
           ]
   pretty (Output st (Sender v p)) =
-    vsep  [ pretty "Output   :" <+> pretty (Send (NR StdOut) (EV v) p)
+    vsep  [ pretty "[Output]   :" <+> pretty (Send (NR StdOut) (EV v) p)
           , pretty "------------"
           , pretty st
           ]
   pretty (Input st (Receiver clauses)) =
-    vsep  [ pretty "Input    :" <+> pretty (Recv (NR StdIn) clauses)
+    vsep  [ pretty "[Input]    :" <+> pretty (Recv (NR StdIn) clauses)
           , pretty "------------"
           , pretty st
           ]
