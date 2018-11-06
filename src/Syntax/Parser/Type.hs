@@ -6,7 +6,7 @@ import Data.Text (Text)
 import Data.Aeson (FromJSON)
 import GHC.Generics
 
-data Point = Point Int Int Int  -- row / column / index
+data Point = Point Int Int Int  -- offset / line / column
   deriving (Show, Eq)
 data Range = Range Point Point Text -- start / end / text
   deriving (Show, Eq)
@@ -25,6 +25,7 @@ data ParseError
   , errClass :: HaskellErrClass
   }
   | TreeSitterParseError Range String Text
+  | RequestParseError Text
   deriving (Show, Eq)
 
 --------------------------------------------------------------------------------

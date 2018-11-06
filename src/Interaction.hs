@@ -8,7 +8,7 @@ import Control.Monad.Except
 import Data.Text.Prettyprint.Doc
 
 import Syntax.Abstract
-import Syntax.Parser.Type (ParseError(..))
+import Syntax.Parser (ParseError(..))
 import Interpreter
 
 

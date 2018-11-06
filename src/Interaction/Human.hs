@@ -11,7 +11,7 @@ import System.Directory (makeAbsolute)
 
 import Interaction
 import Syntax.Abstract
-import Syntax.Parser (parseByteString)
+import Syntax.Parser (ParseError(..), parseByteString)
 import Prelude hiding (readFile)
 
 --------------------------------------------------------------------------------
@@ -37,33 +37,34 @@ humanREPL = runInputT defaultSettings $ do
         Just s -> do
           request <- parseRequest s
           case request of
-            Just (Run n)   -> do
+            Run n -> do
               try (run n)
               loop
-            Just (Feed i v) -> do
+            Feed i v -> do
               try (feed i v)
               loop
-            Just (Load (Prog prog)) -> do
+            Load (Prog prog) -> do
               load $ map (\(PiDecl name p) -> (name, p)) prog
               loop
-            Just _ -> do
+            Err err -> do
+              liftH $ outputStrLn (show err)
               loop
-            Nothing -> do
+            _ -> do
               loop
         where
-          parseRequest :: String -> InteractionM (InputT IO) (Maybe Request)
+          parseRequest :: String -> InteractionM (InputT IO) Request
           parseRequest s
-            | "run " `isPrefixOf` s = return $ Just $ Run (read $ drop 4 s)
+            | "run " `isPrefixOf` s = return $ Run (read $ drop 4 s)
             | "feed " `isPrefixOf` s =
               let [i, v] = (map read $ words $ drop 5 s) :: [Int]
-              in return $ Just $ Feed i (VI v)
+              in return $ Feed i (VI v)
             | "load " `isPrefixOf` s = do
               filepath <- liftIO $ makeAbsolute (init $ drop 5 s)
               raw <- liftIO $ readFile filepath
               case parseByteString raw of
-                Left err -> return $ Just $ Err err
-                Right prog -> return $ Just $ Load prog
-            | otherwise = return Nothing
+                Left err -> return $ Err err
+                Right prog -> return $ Load prog
+            | otherwise = return $ Err (RequestParseError "cannot understand your command")
 
           -- loadAndParse :: String ->
 

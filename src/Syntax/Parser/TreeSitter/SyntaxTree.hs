@@ -42,7 +42,7 @@ instance ToConcrete ParseError where
 
 instance ToConcrete Range where
   toConcrete (Node _ _ text (RangeST (PointST a b) (PointST c d)) start end) =
-    return $ Range (Point a b start) (Point c d end) text
+    return $ Range (Point start a b) (Point end c d) text
 
 instance ToConcrete ann => ToConcrete (Label ann) where
   toConcrete node@(Node "label" _ text _ _ _) =
