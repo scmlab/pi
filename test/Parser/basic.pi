@@ -1,0 +1,6 @@
+p0 = end
+p1 = end | end
+p2 = x!3 . end
+p3 = x?v . end
+p4 = (nu x) end
+p5 = p4

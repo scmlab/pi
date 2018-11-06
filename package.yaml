@@ -30,31 +30,42 @@ dependencies:
 - prettyprinter
 - text
 
-executables:
-  pi:
-    main:                Main.hs
-    source-dirs:         src
-    other-modules:
-    - Interaction.Human
-    - Interaction.JSON
-    - Interaction
-    - Interpreter
-    - PPrint
-    - Syntax.Abstract
-    - Syntax.Concrete
-    - Syntax.Parser
-    - Syntax.Parser.AlexHappy.Base
-    - Syntax.Parser.AlexHappy.Lexer
-    - Syntax.Parser.AlexHappy.Parser
-    - Syntax.Parser.TreeSitter.SyntaxTree
-    - Syntax.Parser.Type
-    - Utilities
-    ghc-options:
-    - -Wall
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    - -fno-warn-orphans
 build-tools:
-  - happy
-  - alex
+- happy
+- alex
+
+executable:
+  main:                Main.hs
+  source-dirs:         src
+  other-modules:
+  - Interaction.Human
+  - Interaction.JSON
+  - Interaction
+  - Interpreter
+  - PPrint
+  - Syntax.Abstract
+  - Syntax.Concrete
+  - Syntax.Parser
+  - Syntax.Parser.AlexHappy.Base
+  - Syntax.Parser.AlexHappy.Lexer
+  - Syntax.Parser.AlexHappy.Parser
+  - Syntax.Parser.TreeSitter.SyntaxTree
+  - Syntax.Parser.Type
+  - Utilities
+  ghc-options:
+  - -Wall
+  - -threaded
+  - -rtsopts
+  - -with-rtsopts=-N
+  - -fno-warn-orphans
+
+tests:
+  pi-tests:
+    main: Test.hs
+    source-dirs:
+      - test
+      - src
+    dependencies:
+      - tasty
+      - tasty-hunit
+      - tasty-quickcheck
