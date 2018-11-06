@@ -12,7 +12,7 @@ import Data.Text (unpack)
 --------------------------------------------------------------------------------
 -- | Converting from Primivite Syntax Tree
 
-parse :: SyntaxTree -> Either ParseError Program
+parse :: SyntaxTree -> Either ParseError (Program Range)
 parse = runExcept . toConcrete
 
 class ToConcrete a where
@@ -44,14 +44,14 @@ instance ToConcrete Range where
   toConcrete (Node _ _ text (RangeST (PointST a b) (PointST c d)) start end) =
     return $ Range (Point a b start) (Point c d end) text
 
-instance ToConcrete Label where
+instance ToConcrete ann => ToConcrete (Label ann) where
   toConcrete node@(Node "label" _ text _ _ _) =
     Label
       <$> toConcrete node
       <*> (return text)
   toConcrete node = toConcrete node >>= throwError
 
-instance ToConcrete Name where
+instance ToConcrete ann => ToConcrete (Name ann) where
   toConcrete node@(Node "reserved_name" _ text _ _ _) =
     Reserved
       <$> toConcrete node
@@ -66,14 +66,14 @@ instance ToConcrete Name where
       <*> (return text)
   toConcrete node = toConcrete node >>= throwError
 
-instance ToConcrete Program where
+instance ToConcrete ann => ToConcrete (Program ann) where
   toConcrete node@(Node "program" children _ _ _ _) =
     Program
       <$> toConcrete node
       <*> mapM toConcrete children
   toConcrete node = toConcrete node >>= throwError
 
-instance ToConcrete ProcDecl where
+instance ToConcrete ann => ToConcrete (ProcDecl ann) where
   toConcrete node@(Node "proc_declaration" _ _ _ _ _) =
     ProcDecl
       <$> toConcrete node
@@ -81,7 +81,7 @@ instance ToConcrete ProcDecl where
       <*> toConcreteChild node 1
   toConcrete node = toConcrete node >>= throwError
 
-instance ToConcrete Process where
+instance ToConcrete ann => ToConcrete (Process ann) where
   toConcrete node@(Node "nu" _ _ _ _ _) =
     Nu
       <$> toConcrete node
@@ -112,16 +112,20 @@ instance ToConcrete Process where
       <$> toConcrete node
   toConcrete node = toConcrete node >>= throwError
 
-instance ToConcrete Pattern where
+instance ToConcrete ann => ToConcrete (Pattern ann) where
   toConcrete node@(Node "pattern" _ _ _ _ _) = do
     kind <- kindOfChild node 0
     case kind of
-      "name"  -> PtrnName  <$> toConcreteChild node 0
-      "label" -> PtrnLabel <$> toConcreteChild node 0
+      "name"  -> PtrnName
+                  <$> toConcrete node
+                  <*> toConcreteChild node 0
+      "label" -> PtrnLabel
+                  <$> toConcrete node
+                  <*> toConcreteChild node 0
       _       -> toConcrete node >>= throwError
   toConcrete node = toConcrete node >>= throwError
 
-instance ToConcrete Clause where
+instance ToConcrete ann => ToConcrete (Clause ann) where
   toConcrete node@(Node "clause" _ _ _ _ _) =
     Clause
       <$> toConcrete node
@@ -129,7 +133,7 @@ instance ToConcrete Clause where
       <*> toConcreteChild node 1
   toConcrete node = toConcrete node >>= throwError
 
-instance ToConcrete Expr where
+instance ToConcrete ann => ToConcrete (Expr ann) where
   toConcrete node@(Node "mul" _ _ _ _ _) =
     Mul
       <$> toConcrete node
@@ -156,8 +160,10 @@ instance ToConcrete Expr where
       <*> (return $ read $ unpack text)
   toConcrete node@(Node "variable" _ _ _ _ _) =
     ExprName
-      <$> toConcreteChild node 0
+      <$> toConcrete node
+      <*> toConcreteChild node 0
   toConcrete node@(Node "label" _ _ _ _ _) =
     ExprLabel
       <$> toConcrete node
+      <*> toConcreteChild node 0
   toConcrete node = toConcrete node >>= throwError
