@@ -49,3 +49,6 @@ nodup (x:xs) = not (x `elem` xs) && nodup xs
 
 fork3 :: (x -> a) -> (y -> b) -> (z -> c) -> (x, y, z) -> (a, b, c)
 fork3 f g h (x,y,z) = (f x, g y, h z)
+
+xor :: Bool -> Bool -> Bool
+xor a b = not (a == b)

@@ -5,7 +5,7 @@
 module Syntax.Abstract where
 
 import Control.Monad.Except
-import Data.Text (Text)
+import Data.Text (Text, pack)
 
 import qualified Syntax.Concrete as C
 import Utilities
@@ -14,26 +14,48 @@ type Label = Text
 type ErrMsg = String
 type RName = Text   -- row name
 
-data Name = NS RName    -- user defined
-          | NG Int      -- system generated
-          | NR ResName  -- reserved name
+data Chan = CH (PN RName)   -- user defined
+          | CG (PN Int)     -- system generated
+          | CR ResName      -- reserved name
     deriving (Eq, Show)
+
+data Name = NH RName        -- Just names, without polarization
+          | NG Int
+   deriving (Eq, Show)
+
+data PN a = Pos a | Neg a
+    deriving (Eq, Show)
+
+depolar :: PN a -> a
+depolar (Pos x) = x
+depolar (Neg x) = x
+
+depolarCh :: Chan -> Name
+depolarCh (CH c) = NH (depolar c)
+depolarCh (CG c) = NG (depolar c)
+depolarCh (CR _) = error "bug: shouldn't call depolar without checking"
+
+depolarCH :: Chan -> RName
+depolarCH = depolar . unCH
+
+unCH (CH n) = n
 
 data ResName = StdOut | StdIn
   deriving (Eq, Show)
 
 data Prog = Prog [PiDecl]
   deriving (Eq, Show)
-data PiDecl = PiDecl Name Pi
+data PiDecl = PiDecl RName Pi
   deriving (Eq, Show)
 
 data Pi = End
-        | Send Name Expr Pi
-        | Recv Name [Clause]
+        | Send Chan Expr Pi
+        | Recv Chan [Clause]
         | Par Pi Pi
-        | Nu Name Pi
-        | Call Name
+        | Nu RName Pi
+        | Call RName
    deriving (Eq, Show)
+
 
 data Clause = Clause Ptrn Pi
    deriving (Eq, Show)
@@ -48,14 +70,14 @@ data Expr = EV Val
           | EPrj Int Expr   -- projection of tuples
    deriving (Eq, Show)
 
-data Val = N Name
+data Val = N Chan
          | VI Int
          | VB Bool
          | VT [Val]    -- n-tuples
          | VL Label
    deriving (Eq, Show)
 
-data Ptrn = PN Name         -- patterns
+data Ptrn = PN RName         -- patterns
           | PT [Ptrn]
           | PL Label
    deriving (Eq, Show)
@@ -72,17 +94,29 @@ unVT :: MonadError ErrMsg m => Val -> m [Val]
 unVT (VT xs) = return xs
 unVT _ = throwError "type error: tuple wanted"
 
-eN :: Name -> Expr
-eN = EV . N
+ePN :: String -> Expr
+ePN = EV . N . CH . Pos . pack
+
+eNN :: String -> Expr
+eNN = EV . N . CH . Neg . pack
 
 eI :: Int -> Expr
 eI = EV . VI
+
+eB :: Bool -> Expr
+eB = EV . VB
 
 eL :: Label -> Expr
 eL = EV . VL
 
 eR :: ResName -> Expr
-eR = EV . N . NR
+eR = EV . N . CR
+
+cP :: String -> Chan
+cP = CH . Pos . pack
+
+cN :: String -> Chan
+cN = CH . Neg . pack
 
 par :: Pi -> Pi -> Pi
 End `par` p = p
@@ -91,16 +125,18 @@ p `par` q = Par p q
 
 type Subst = FMap Name Val
 
-substName :: Subst -> Name -> Name
-substName th x =
-  case lookup x th of
+substChan :: Subst -> Chan -> Chan
+substChan th (CR r) = CR r
+substChan th c =
+  case lookup (depolarCh c) th of
     Just (N y) -> y
     Just _ -> error "not a name"
-    Nothing -> x
+    Nothing -> c
 
 substVal :: Subst -> Val -> Val
-substVal th (N y) | Just v <- lookup y th = v
-                  | otherwise             = N y
+substVal th (N (CR r)) = N (CR r)
+substVal th (N c) | Just v <- lookup (depolarCh c) th = v
+                  | otherwise                       = N c
 substVal th (VT vs) = VT (map (substVal th) vs)
 substVal _ u = u
 
@@ -118,15 +154,15 @@ substExpr th (EPrj i e) = EPrj i (substExpr th e)
 substPi :: Subst -> Pi -> Pi
 substPi _ End = End
 substPi th (Send c u p) =
-   Send (substName th c) (substExpr th u) (substPi th p)
+   Send (substChan th c) (substExpr th u) (substPi th p)
 substPi th (Recv c clauses) =
     if isEmpty th' then Recv c clauses
-        else Recv (substName th' c)
+        else Recv (substChan th' c)
                   (map (\(Clause ptrn p) -> Clause ptrn (substPi th' p)) clauses)
   where th' = foldr mask th (map (\(Clause ptrn _) -> ptrn) clauses)
 substPi th (Par p q) = Par (substPi th p) (substPi th q)
 substPi th (Nu y p)
-   | y `inDom` th = Nu y p       -- is this right?
+   | NH y `inDom` th = Nu y p       -- is this right?
    | otherwise = Nu y (substPi th p)
 substPi _ (Call p) = Call p  -- perhaps this shouldn't be substituted?
 
@@ -148,7 +184,7 @@ evalExpr (EPrj i e) =
 -- substitution related stuffs
 
 match :: Ptrn -> Val -> Maybe Subst
-match (PN x) v = Just [(x,v)]
+match (PN x) v = Just [(NH x,v)]
 match (PL x) (VL y) | x == y = Just []
 match (PT xs) (VT vs) | length xs == length vs =
   joinSubs <$> mapM (uncurry match) (zip xs vs)
@@ -166,10 +202,11 @@ matchClauses ((Clause pt e):_) v
 matchClauses (_:pps) v = matchClauses pps v
 
 mask :: Ptrn -> Subst -> Subst
-mask (PN x)      = rmEntry x
+mask (PN x)      = rmEntry (NH x)
 mask (PT [])     = id
 mask (PT (p:ps)) = mask (PT ps) . mask p
 mask (PL _)      = id
+
 
 --------------------------------------------------------------------------------
 -- | Converting from Concrete Syntax Tree
@@ -181,20 +218,25 @@ instance FromConcrete (C.Program ann) Prog where
   fromConcrete (C.Program  declarations _) = Prog (map fromConcrete declarations)
 
 instance FromConcrete (C.ProcDecl ann) PiDecl where
+  fromConcrete = undefined -- help!
+{-
   fromConcrete (C.ProcDecl name process _) = PiDecl (fromConcrete name) (fromConcrete process)
-
+-}
 instance FromConcrete (C.Label ann) Label where
   fromConcrete (C.Label    label _)     = label
 
-instance FromConcrete (C.Name ann) Name where
-  fromConcrete (C.Name     name _)      = NS name
-  fromConcrete (C.Reserved "stdin" _)   = NR StdOut
-  fromConcrete (C.Reserved "stdout" _)  = NR StdOut
-  fromConcrete (C.Reserved name _)      = NS name
+instance FromConcrete (C.Name ann) Chan where
+  fromConcrete (C.Name     name _)      = CH (Pos name)
+  fromConcrete (C.Reserved "stdin" _)   = CR StdIn
+  fromConcrete (C.Reserved "stdout" _)  = CR StdOut
+  fromConcrete (C.Reserved name _)      = CH (Pos name)
 
 instance FromConcrete (C.Pattern ann) Ptrn where
+  fromConcrete = undefined -- help!
+{-
   fromConcrete (C.PtrnName name _) = PN (fromConcrete name)
   fromConcrete (C.PtrnLabel label _) = PL (fromConcrete label)
+-}
 
 instance FromConcrete (C.Clause ann) Clause where
   fromConcrete (C.Clause pattern process _) =
@@ -202,7 +244,8 @@ instance FromConcrete (C.Clause ann) Clause where
 
 instance FromConcrete (C.Process ann) Pi where
   fromConcrete (C.Nu name process _) =
-    Nu (fromConcrete name) (fromConcrete process)
+    undefined -- help!
+    -- Nu (fromConcrete name) (fromConcrete process)
   fromConcrete (C.Send name expr process _) =
     Send (fromConcrete name) (fromConcrete expr) (fromConcrete process)
   fromConcrete (C.Recv name clauses _) =
@@ -210,7 +253,8 @@ instance FromConcrete (C.Process ann) Pi where
   fromConcrete (C.Par procA procB _) =
     Par (fromConcrete procA) (fromConcrete procB)
   fromConcrete (C.Call name _) =
-    Call (fromConcrete name)
+    undefined -- help!
+    -- Call (fromConcrete name)
   fromConcrete (C.End _) =
     End
 
