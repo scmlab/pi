@@ -42,6 +42,7 @@ executable:
   - Interaction.JSON
   - Interaction
   - Interpreter
+  - Interpreter.Monad
   - PPrint
   - Syntax.Abstract
   - Syntax.Concrete
