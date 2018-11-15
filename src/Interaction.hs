@@ -11,7 +11,7 @@ import Syntax.Parser (ParseError(..))
 import Interpreter
 
 
-type Outcome = Either ErrMsg (Reaction, BkSt)
+type Outcome = Either ErrMsg ((St, Reaction), BkSt)
 data State = State
   { stateEnv      :: Env        -- source code
   , stateOutcomes :: [Outcome]  -- outcomes
@@ -39,7 +39,7 @@ data Response
 
 toOutcome :: Either String (St, BkSt) -> Outcome
 toOutcome (Left err)       = Left err
-toOutcome (Right (st, i))  = Right (Silent st, i)
+toOutcome (Right (st, i))  = Right ((st, Silent), i)
 
 -- start
 runInteraction :: Monad m => Env -> Pi -> InteractionM m a -> m (Either Error a, State)
@@ -47,7 +47,7 @@ runInteraction env p handler = runStateT (runExceptT handler) (State env initial
   where initialOutcomes = map toOutcome $ runPiMonad env 0 (lineup [p] (St [] [] [] []))
 
 -- pretty print Outcomes
-ppOutcome :: Either ErrMsg (Reaction, b) -> Doc a
+ppOutcome :: Either ErrMsg ((St, Reaction), b) -> Doc a
 ppOutcome (Left msg)       = pretty ("error:" :: String) <+> pretty msg
 ppOutcome (Right (res, _)) = pretty res
 
@@ -55,7 +55,7 @@ ppOutcomes :: [Outcome] -> Doc n
 ppOutcomes outcomes = vsep $
   [ pretty $ show (length outcomes) ++ " possible outcomes"
   ] ++ map ppSts (zip [0..] outcomes)
-  where   ppSts :: (Int, Either ErrMsg (Reaction, b)) -> Doc n
+  where   ppSts :: (Int, Either ErrMsg ((St, Reaction), b)) -> Doc n
           ppSts (i, outcome) = vsep
             [ pretty ("==== " ++ show i ++ " ====")
             , ppOutcome outcome
@@ -90,15 +90,15 @@ run n = do
   case outcome of
     Left err -> do
       updateOutcomes [Left err]
-    Right (Output state (Sender _ p), i) -> do
+    Right ((state, Output (Sender _ p)), i) -> do
       defs <- gets stateEnv
       updateOutcomes $ runPiMonad defs i $ lineup [p] state >>= step
-    Right (React state _ _ _ _, i) -> do
+    Right ((state, React _ _ _ _), i) -> do
       defs <- gets stateEnv
       updateOutcomes $ runPiMonad defs i (step state)
-    Right (Input state pps, i) -> do
-      updateOutcomes [Right (Input state pps, i)]
-    Right (Silent state, i) -> do
+    Right ((state, Input pps), i) -> do
+      updateOutcomes [Right ((state, Input pps), i)]
+    Right ((state, Silent), i) -> do
       defs <- gets stateEnv
       updateOutcomes $ runPiMonad defs i (step state)
 
@@ -107,8 +107,10 @@ feed :: Monad m => Int -> Val -> InteractionM m ()
 feed i val = do
   outcome <- decideOutcome i
   case outcome of
-    Right (Input st pps, j) -> do
+    Right ((state, Input pps), j) -> do
       defs <- gets stateEnv
-      updateOutcomes $ runPiMonad defs j (Silent <$> input val pps st)
+      updateOutcomes $ runPiMonad defs j $ do
+        state' <- input val pps state
+        return (state', Silent)
     _ ->
       throwError "not expecting input"

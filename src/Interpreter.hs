@@ -30,10 +30,10 @@ data St = St
   , stFreshVars :: [Name]                   -- new variables
   } deriving (Show)
 
-data Reaction = Silent St                       -- nothing ever happened
-              | React  St Name Sender Receiver [Pi]  -- some chemical reaction
-              | Output St Sender                -- stdout
-              | Input  St Receiver              -- stdin
+data Reaction = Silent                       -- nothing ever happened
+              | React  Name Sender Receiver [Pi]  -- some chemical reaction
+              | Output Sender                -- stdout
+              | Input  Receiver              -- stdin
               deriving (Show)
 
 --------------------------------------------------------------------------------
@@ -74,13 +74,13 @@ stToPi (St sends recvs inps news) =
 --------------------------------------------------------------------------------
 -- |
 
-step :: St -> PiMonad Reaction
+step :: St -> PiMonad (St, Reaction)
 step (St sends recvs inps news) = do
   (select inps >>= doInput) `mplus` (select sends >>= doSend)
   where
-    doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad Reaction
+    doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad (St, Reaction)
     doSend ((NR StdOut, sender), otherSenders) =
-      return $ Output (St otherSenders recvs inps news) sender
+      return (St otherSenders recvs inps news, Output sender)
     doSend ((channel, sender), otherSenders) = do
       -- selected a reagent from the lists of receivers
       (receiver, otherReceivers) <- selectByKey channel recvs
@@ -88,11 +88,11 @@ step (St sends recvs inps news) = do
       products <- react sender receiver
       -- adjust the state accordingly
       st <- lineup products (St otherSenders otherReceivers inps news)
-      return $ React st channel sender receiver products
+      return (st, React channel sender receiver products)
 
-    doInput :: (Receiver, [Receiver]) -> PiMonad Reaction
+    doInput :: (Receiver, [Receiver]) -> PiMonad (St, Reaction)
     doInput (blocked, otherBlocked) =
-      return $ Input (St sends recvs otherBlocked news) blocked
+      return (St sends recvs otherBlocked news, Input blocked)
 
 input :: Val -> Receiver -> St -> PiMonad St
 input val (Receiver pps) st =
@@ -116,28 +116,21 @@ react (Sender v q) (Receiver clauses) =
 -- | Pretty printing
 
 instance Pretty Reaction where
-  pretty (Silent st) =
+  pretty Silent =
     vsep  [ pretty "[Silent]"
-          , pretty st
           ]
-  pretty (React st channel (Sender v p) (Receiver ps) products) =
+  pretty (React channel (Sender v p) (Receiver ps) products) =
     vsep  [ pretty "[React]"
           , pretty "Channel  :" <+> pretty channel
           , pretty "Sender   :" <+> pretty (Send channel (EV v) p)
           , pretty "Receiver :" <+> pretty (Recv channel ps)
           , pretty "Products :" <+> pretty products
-          , pretty "------------"
-          , pretty st
           ]
-  pretty (Output st (Sender v p)) =
+  pretty (Output (Sender v p)) =
     vsep  [ pretty "[Output]   :" <+> pretty (Send (NR StdOut) (EV v) p)
-          , pretty "------------"
-          , pretty st
           ]
-  pretty (Input st (Receiver clauses)) =
+  pretty (Input (Receiver clauses)) =
     vsep  [ pretty "[Input]    :" <+> pretty (Recv (NR StdIn) clauses)
-          , pretty "------------"
-          , pretty st
           ]
 
 instance Pretty St where

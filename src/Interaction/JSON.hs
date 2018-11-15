@@ -112,26 +112,26 @@ instance ToJSON ParseError where
 
 
 instance ToJSON Reaction where
-  toJSON (Silent state) = object
+  toJSON Silent = object
     [ "kind"  .= ("silent" :: Text)
-    , "state" .= state
+    -- , "state" .= state
     ]
-  toJSON (React state channel sender receiver products) = object
+  toJSON (React channel sender receiver products) = object
     [ "kind"      .= ("react" :: Text)
-    , "state"     .= state
+    -- , "state"     .= state
     , "channel"   .= channel
     , "sender"    .= sender
     , "receiver"  .= receiver
     , "products"  .= products
     ]
-  toJSON (Output state sender) = object
+  toJSON (Output sender) = object
     [ "kind"      .= ("output" :: Text)
-    , "state"     .= state
+    -- , "state"     .= state
     , "sender"    .= sender
     ]
-  toJSON (Input state receiver) = object
+  toJSON (Input receiver) = object
     [ "kind"      .= ("input" :: Text)
-    , "state"     .= state
+    -- , "state"     .= state
     , "receiver"  .= receiver
     ]
 
