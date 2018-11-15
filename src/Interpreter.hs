@@ -61,15 +61,15 @@ addPi (Nu x p) (St sends recvs inps news) = do
 lineup :: [Pi] -> St -> PiMonad St
 lineup = flip (foldM (flip addPi))
 
-stToPi :: St -> Pi
-stToPi (St sends recvs inps news) =
-  foldr Nu (foldr par End ss `par`
-            foldr par End rs `par`
-            foldr par End is ) news
-  where
-    ss = [ Send c (EV v) p      | (c,(Sender v p)) <- sends ]
-    rs = [ Recv c pps           | (c, Receiver pps) <- recvs ]
-    is = [ Recv (NR StdIn) pps  | Receiver pps <- inps]
+-- stToPi :: St -> Pi
+-- stToPi (St sends recvs inps news) =
+--   foldr Nu (foldr par End ss `par`
+--             foldr par End rs `par`
+--             foldr par End is ) news
+--   where
+--     ss = [ Send c (EV v) p      | (c,(Sender v p)) <- sends ]
+--     rs = [ Recv c pps           | (c, Receiver pps) <- recvs ]
+--     is = [ Recv (NR StdIn) pps  | Receiver pps <- inps]
 
 --------------------------------------------------------------------------------
 -- |

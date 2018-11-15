@@ -11,7 +11,14 @@ import Syntax.Parser (ParseError(..))
 import Interpreter
 
 
-type Outcome = Either ErrMsg ((St, Reaction), BkSt)
+data Outcome = Success St Reaction BkSt
+             | Failure ErrMsg
+             deriving (Show)
+
+instance Pretty Outcome where
+  pretty (Failure msg)          = pretty ("error:" :: String) <+> pretty msg
+  pretty (Success _ reaction _) = pretty reaction
+
 data State = State
   { stateEnv      :: Env        -- source code
   , stateOutcomes :: [Outcome]  -- outcomes
@@ -37,79 +44,71 @@ data Response
 --------------------------------------------------------------------------------
 -- | Interaction Monad
 
-toOutcome :: Either String (St, BkSt) -> Outcome
-toOutcome (Left err)       = Left err
-toOutcome (Right (st, i))  = Right ((st, Silent), i)
+runInteraction :: Monad m => InteractionM m a -> m (Either Error a, State)
+runInteraction handler = runStateT (runExceptT handler) (State [] initialOutcomes)
+  where initialOutcomes = interpret [] 0 $ hush $ lineup [Call (NS "main")] (St [] [] [] [])
 
--- start
-runInteraction :: Monad m => Env -> Pi -> InteractionM m a -> m (Either Error a, State)
-runInteraction env p handler = runStateT (runExceptT handler) (State env initialOutcomes)
-  where initialOutcomes = map toOutcome $ runPiMonad env 0 (lineup [p] (St [] [] [] []))
+interpret :: Env -> BkSt -> PiMonad (St, Reaction) -> [Outcome]
+interpret env i program = map toOutcome (runPiMonad env i program)
+  where
+    toOutcome :: Either String ((St, Reaction), BkSt) -> Outcome
+    toOutcome (Left err)                     = Failure err
+    toOutcome (Right ((state, reaction), j)) = Success state reaction j
 
--- pretty print Outcomes
-ppOutcome :: Either ErrMsg ((St, Reaction), b) -> Doc a
-ppOutcome (Left msg)       = pretty ("error:" :: String) <+> pretty msg
-ppOutcome (Right (res, _)) = pretty res
+update :: Monad m => [Outcome] -> InteractionM m ()
+update outcomes = modify (\state -> state { stateOutcomes = outcomes })
 
-ppOutcomes :: [Outcome] -> Doc n
-ppOutcomes outcomes = vsep $
-  [ pretty $ show (length outcomes) ++ " possible outcomes"
-  ] ++ map ppSts (zip [0..] outcomes)
-  where   ppSts :: (Int, Either ErrMsg ((St, Reaction), b)) -> Doc n
-          ppSts (i, outcome) = vsep
-            [ pretty ("==== " ++ show i ++ " ====")
-            , ppOutcome outcome
-            , line]
+hush :: PiMonad St -> PiMonad (St, Reaction)
+hush program = do
+  state <- program
+  return (state, Silent)
 
 -- safe (!!)
-decideOutcome :: Monad m => Int -> InteractionM m Outcome
-decideOutcome i = do
+decide :: Monad m => Int -> InteractionM m Outcome
+decide i = do
   len <- length <$> gets stateOutcomes
   if (i >= len) then
     throwError "out of bound"
   else
     (!! i) <$> gets stateOutcomes
 
-updateOutcomes :: Monad m => [Outcome] -> InteractionM m ()
-updateOutcomes new = modify (\state -> state { stateOutcomes = new })
-
-updateEnv :: Monad m => Env -> InteractionM m ()
-updateEnv new = modify (\state -> state { stateEnv = new })
+--------------------------------------------------------------------------------
+-- | Commands
 
 -- load
 load :: Monad m => Env -> InteractionM m ()
 load env = put $ State
   { stateEnv = env
-  , stateOutcomes = map toOutcome (runPiMonad env 0 (lineup [Call (NS "main")] (St [] [] [] [])))
+  , stateOutcomes = interpret env 0 $ hush $ lineup [Call (NS "main")] (St [] [] [] [])
   }
 
 -- down
 run :: Monad m => Int -> InteractionM m ()
 run n = do
-  outcome <- decideOutcome n
+  outcome <- decide n
   case outcome of
-    Left err -> do
-      updateOutcomes [Left err]
-    Right ((state, Output (Sender _ p)), i) -> do
+    Failure err -> do
+      update $ [Failure err]
+    Success state (Output (Sender _ p)) i -> do
       defs <- gets stateEnv
-      updateOutcomes $ runPiMonad defs i $ lineup [p] state >>= step
-    Right ((state, React _ _ _ _), i) -> do
+      update $ interpret defs i $ lineup [p] state >>= step
+    Success state (React _ _ _ _) i -> do
       defs <- gets stateEnv
-      updateOutcomes $ runPiMonad defs i (step state)
-    Right ((state, Input pps), i) -> do
-      updateOutcomes [Right ((state, Input pps), i)]
-    Right ((state, Silent), i) -> do
+      update $ interpret defs i (step state)
+    Success state (Input pps) i -> do
+      update $ [Success state (Input pps) i]
+    Success state Silent i -> do
       defs <- gets stateEnv
-      updateOutcomes $ runPiMonad defs i (step state)
+      update $ interpret defs i (step state)
 
 -- feed
 feed :: Monad m => Int -> Val -> InteractionM m ()
-feed i val = do
-  outcome <- decideOutcome i
+feed n val = do
+  outcome <- decide n
   case outcome of
-    Right ((state, Input pps), j) -> do
+    Success state (Input pps) i -> do
       defs <- gets stateEnv
-      updateOutcomes $ runPiMonad defs j $ do
+      update $ interpret defs i $ do
         state' <- input val pps state
         return (state', Silent)
     _ ->

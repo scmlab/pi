@@ -6,6 +6,7 @@ import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import Data.List (isPrefixOf)
 import Data.ByteString.Lazy (readFile)
+import Data.Text.Prettyprint.Doc (pretty)
 import System.Console.Haskeline
 import System.Directory (makeAbsolute)
 
@@ -19,7 +20,7 @@ import Prelude hiding (readFile)
 
 humanREPL :: IO ()
 humanREPL = runInputT defaultSettings $ do
-  (result, _) <- runInteraction [] (Call (NS "main")) loop
+  (result, _) <- runInteraction loop
   outputStrLn (show result)
   return ()
   where
@@ -29,7 +30,7 @@ humanREPL = runInputT defaultSettings $ do
     loop = do
       -- print the current states
       outcomes <- gets stateOutcomes
-      liftH $ outputStrLn (show $ ppOutcomes outcomes)
+      liftH $ outputStrLn (show $ pretty outcomes)
       -- get user input
       minput <- liftH $ getInputLine "π > "
       case minput of

@@ -4,7 +4,7 @@ module Interaction.JSON where
 
 import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
-import Data.Aeson
+import Data.Aeson hiding (Success)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.ByteString.Char8 (getLine, putStrLn, pack)
@@ -24,7 +24,7 @@ import Syntax.Parser.Type
 
 jsonREPL :: IO ()
 jsonREPL = do
-  (_, _) <- runInteraction [] (Call (NS "main")) loop
+  (_, _) <- runInteraction loop
   return ()
 
   where
@@ -110,6 +110,16 @@ instance ToJSON ParseError where
     [
     ]
 
+instance ToJSON Outcome where
+  toJSON (Failure msg) = object
+    [ "outcome"   .= ("failure" :: Text)
+    , "message"   .= msg
+    ]
+  toJSON (Success state reaction _) = object
+    [ "outcome"   .= ("success" :: Text)
+    , "state"     .= state
+    , "reaction"  .= reaction
+    ]
 
 instance ToJSON Reaction where
   toJSON Silent = object
