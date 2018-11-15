@@ -2,28 +2,23 @@
 
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 
-module Interpreter where
+module Interpreter
+  ( step, lineup, input
+  , Reaction(..), St(..), Sender(..), Receiver(..)
+  , module Interpreter.Monad
+  ) where
 
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Arrow ((***))
-import Syntax.Abstract
-import Utilities
 
 import Data.Text.Prettyprint.Doc
 import PPrint ()
 
-class Monad m => MonadFresh m where
-  fresh :: m Name
-
-instance MonadFresh PiMonad where
-  fresh = get >>= \i ->
-          put (i+1) >>
-          return (NG i)
-
-type BkSt = Int
-type Env = FMap Name Pi
+import Interpreter.Monad
+import Syntax.Abstract
+import Utilities
 
 data Sender = Sender Val Pi deriving (Show, Eq)
 data Receiver = Receiver [Clause] deriving (Show, Eq)
@@ -35,16 +30,11 @@ data St = St
   , stFreshVars :: [Name]                   -- new variables
   } deriving (Show)
 
-type PiMonad = ReaderT Env (StateT BkSt (ExceptT String []))
-
 data Reaction = Silent St                       -- nothing ever happened
               | React  St Name Sender Receiver [Pi]  -- some chemical reaction
               | Output St Sender                -- stdout
               | Input  St Receiver              -- stdin
               deriving (Show)
-
-runPiMonad :: Env -> BkSt -> PiMonad a -> [Either String (a, BkSt)]
-runPiMonad env bk m = runExceptT (runStateT (runReaderT m env) bk)
 
 --------------------------------------------------------------------------------
 -- | Pi <-> St
@@ -85,9 +75,8 @@ stToPi (St sends recvs inps news) =
 -- |
 
 step :: St -> PiMonad Reaction
-step (St sends recvs inps news) =
-  (select inps >>= doInput) `mplus`
-  (select sends >>= doSend)
+step (St sends recvs inps news) = do
+  (select inps >>= doInput) `mplus` (select sends >>= doSend)
   where
     doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad Reaction
     doSend ((NR StdOut, sender), otherSenders) =
