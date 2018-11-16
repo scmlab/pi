@@ -5,10 +5,14 @@ module Interaction.Human where
 import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import Data.List (isPrefixOf)
-import Data.ByteString.Lazy (readFile)
+import qualified Data.ByteString.Lazy as BS
+import qualified Data.Text as Text
+import qualified Data.Text.IO as Text
 import Data.Text.Prettyprint.Doc (pretty)
 import System.Console.Haskeline
 import System.Directory (makeAbsolute)
+import System.IO
+import Text.Read (readMaybe)
 
 import Interaction
 import Syntax.Abstract
@@ -38,16 +42,19 @@ humanREPL = runInputT defaultSettings $ do
         Just s -> do
           request <- parseRequest s
           case request of
-            Run n -> do
-              try (run n)
+            ReqChoose n -> do
+              try (choose n)
               loop
-            Feed i v -> do
-              try (feed i v)
+            ReqRun -> do
+              try run
               loop
-            Load (Prog prog) -> do
+            ReqFeed v -> do
+              try (feed v)
+              loop
+            ReqLoad (Prog prog) -> do
               load $ map (\(PiDecl name p) -> (name, p)) prog
               loop
-            Err err -> do
+            ReqErr err -> do
               liftH $ outputStrLn (show err)
               loop
             _ -> do
@@ -55,17 +62,17 @@ humanREPL = runInputT defaultSettings $ do
         where
           parseRequest :: String -> InteractionM (InputT IO) Request
           parseRequest s
-            | "run " `isPrefixOf` s = return $ Run (read $ drop 4 s)
-            | "feed " `isPrefixOf` s =
-              let [i, v] = (map read $ words $ drop 5 s) :: [Int]
-              in return $ Feed i (VI v)
+            | "run" `isPrefixOf` s = return ReqRun
+            | "feed " `isPrefixOf` s = return $ ReqFeed (VI . read $ drop 5 s)
             | "load " `isPrefixOf` s = do
               filepath <- liftIO $ makeAbsolute (init $ drop 5 s)
-              raw <- liftIO $ readFile filepath
+              raw <- liftIO $ BS.readFile filepath
               case parseByteString raw of
-                Left err -> return $ Err err
-                Right prog -> return $ Load prog
-            | otherwise = return $ Err (RequestParseError "cannot understand your command")
+                Left err -> return $ ReqErr err
+                Right prog -> return $ ReqLoad prog
+            | otherwise = case readMaybe s of
+                Just n  -> return $ ReqChoose n
+                Nothing -> return $ ReqErr (RequestParseError "cannot understand your command")
 
           -- loadAndParse :: String ->
 
@@ -73,6 +80,86 @@ humanREPL = runInputT defaultSettings $ do
           try program = do
             program `catchError` \err ->
               liftH $ outputStrLn err
+
+
+newREPL :: FilePath -> IO ()
+newREPL filePath = do
+  -- IO settings
+  hSetBuffering stdin NoBuffering
+  hSetEcho stdin False
+
+  -- start looping
+  void $ runInteraction $ do
+    -- read file
+    req <- parseFile filePath
+    handleRequest req
+
+    loop
+  where
+    loop :: InteractionM IO ()
+    loop = do
+      getKey >>= parseRequest >>= handleRequest
+      loop
+
+    parseRequest :: String -> InteractionM IO Request
+    parseRequest key = case key of
+      "\ESC[A" -> prev >>= return . ReqChoose
+      "\ESC[B" -> next >>= return . ReqChoose
+      "\ESC[C" -> return $ ReqRun
+      "\ESC[D" -> return $ ReqErr $ RequestParseError "←"
+      "\n"     -> return $ ReqRun
+      "\DEL"   -> return $ ReqErr $ RequestParseError "⎋"
+      _        -> return $ ReqErr $ RequestParseError (Text.pack key)
+
+    handleRequest :: Request -> InteractionM IO ()
+    handleRequest (ReqChoose n) = do
+      try (choose n)
+      outcome <- retrieve
+      liftIO $ putStrLn $ show $ pretty outcome
+      printStatusBar
+    handleRequest ReqRun = do
+      try run
+      outcome <- retrieve
+      liftIO $ putStrLn $ show $ pretty outcome
+      printStatusBar
+    handleRequest (ReqLoad (Prog prog)) = do
+      load $ map (\(PiDecl name p) -> (name, p)) prog
+      -- choose the first outcome and print its state
+      state <- retrieveNth 0 >>= toState
+      -- liftIO $ putStrLn $ show (length outcomes) ++ " possible outcomes"
+      liftIO $ putStrLn $ show $ pretty state
+      printStatusBar
+    handleRequest (ReqErr (RequestParseError msg)) = liftIO $ Text.putStrLn msg
+    handleRequest (ReqErr msg) = liftIO $ putStrLn (show msg)
+
+    printStatusBar :: InteractionM IO ()
+    printStatusBar = do
+      outcomes <- gets stateOutcomes
+      cursor <- gets stateCursor
+      case cursor of
+        Nothing -> liftIO $ putStrLn $ "0/0 outcomes"
+        Just n  -> liftIO $ putStrLn $ show (n + 1) ++ "/" ++ show (length outcomes) ++ " outcomes"
+
+    parseFile :: FilePath -> InteractionM IO Request
+    parseFile path = do
+      rawFile <- liftIO $ BS.readFile path
+      case parseByteString rawFile of
+        Left err   -> return $ ReqErr err
+        Right prog -> return $ ReqLoad prog
+
+    getKey :: InteractionM IO String
+    getKey = reverse <$> getKey' ""
+      where getKey' chars = do
+              char <- liftIO $ getChar
+              more <- liftIO $ hReady stdin
+              if more
+                then getKey' (char:chars)
+                else return  (char:chars)
+
+    try :: InteractionM IO () -> InteractionM IO ()
+    try program = do
+      program `catchError` \err ->
+        liftIO $ putStrLn $ show $ pretty err
 
 -- po = (nu w) c!w .
 --       w?{ PLUS -> w?<x,y> . w!(x + y) . p0; NEG -> w?x . w!(0 - x) . p0 }

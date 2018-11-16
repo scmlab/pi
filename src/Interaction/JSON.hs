@@ -37,19 +37,22 @@ jsonREPL = do
       case (eitherDecodeStrict raw :: Either String Request) of
         Left err -> response $ ResParseError (RequestParseError (Text.pack err))
         Right req -> case req of
-          Err err -> do
+          ReqErr err -> do
             response $ ResParseError err
-          Test -> do
+          ReqTest -> do
             state <- get
             response $ ResTest (show state)
-          Load (Prog prog) -> do
+          ReqLoad (Prog prog) -> do
             load $ map (\(PiDecl name p) -> (name, p)) prog
             gets stateOutcomes >>= response . ResOutcomes
-          Run i -> do
-            try (run i)
+          ReqChoose i -> do
+            try (choose i)
             gets stateOutcomes >>= response . ResOutcomes
-          Feed i _ -> do
-            try (run i)
+          ReqRun -> do
+            try run
+            gets stateOutcomes >>= response . ResOutcomes
+          ReqFeed _ -> do
+            try run
             gets stateOutcomes >>= response . ResOutcomes
       loop
 
@@ -67,16 +70,17 @@ instance FromJSON Request where
       "load"  -> do
         pst <- obj .: "syntax-tree"
         case parseSyntaxTree pst of
-          Left err      -> return $ Err err
-          Right program -> return $ Load program
-      "test"   -> return $ Test
+          Left err      -> return $ ReqErr err
+          Right program -> return $ ReqLoad program
+      "test"   -> return $ ReqTest
+      "choose"   -> do
+        i <- obj .: "index"
+        return $ ReqChoose i
       "run"   -> do
-        i <- obj .: "index"
-        return $ Run i
+        return $ ReqRun
       "feed"  -> do
-        i <- obj .: "index"
         v <- obj .: "value"
-        return $ Feed i (VI v)
+        return $ ReqFeed (VI v)
       _       -> fail "unknown kind"
 
 instance ToJSON Response where
