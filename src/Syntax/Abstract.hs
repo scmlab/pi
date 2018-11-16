@@ -9,6 +9,7 @@ import Data.Text (Text, pack)
 import Data.List (nub)
 
 import qualified Syntax.Concrete as C
+import Type
 import Utilities
 
 type Label = Text
@@ -53,7 +54,7 @@ data Pi = End
         | Send Name Expr Pi
         | Recv Name [Clause]
         | Par Pi Pi
-        | Nu RName Pi
+        | Nu RName (Maybe SType) Pi
         | Call RName
    deriving (Eq, Show)
 
@@ -162,9 +163,9 @@ substPi th (Recv c clauses) =
                   (map (\(Clause ptrn p) -> Clause ptrn (substPi th' p)) clauses)
   where th' = foldr mask th (map (\(Clause ptrn _) -> ptrn) clauses)
 substPi th (Par p q) = Par (substPi th p) (substPi th q)
-substPi th (Nu y p)
-   | PH y `inDom` th = Nu y p       -- is this right?
-   | otherwise = Nu y (substPi th p)
+substPi th (Nu y t p)
+   | PH y `inDom` th = Nu y t p       -- is this right?
+   | otherwise = Nu y t (substPi th p)
 substPi _ (Call p) = Call p  -- perhaps this shouldn't be substituted?
 
 evalExpr :: MonadError ErrMsg m => Expr -> m Val
@@ -238,7 +239,7 @@ freePi (Send c e p) =
 freePi (Recv c ps) =
   freeN c `nubapp` nubconcat (map freeClause ps)
 freePi (Par p1 p2) = freePi p1 `nubapp` freePi p2
-freePi (Nu x p) = freePi p `setminus` [Pos x, Neg x]
+freePi (Nu x _ p) = freePi p `setminus` [Pos x, Neg x]
 freePi (Call x) = undefined -- what to do here?
 
 freeClause :: Clause -> [PN RName]
