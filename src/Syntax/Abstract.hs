@@ -6,6 +6,7 @@ module Syntax.Abstract where
 
 import Control.Monad.Except
 import Data.Text (Text, pack)
+import Data.List (nub)
 
 import qualified Syntax.Concrete as C
 import Utilities
@@ -14,13 +15,13 @@ type Label = Text
 type ErrMsg = String
 type RName = Text   -- row name
 
-data Chan = CH (PN RName)   -- user defined
-          | CG (PN Int)     -- system generated
-          | CR ResName      -- reserved name
+data Name = ND (PN RName)   -- user defined
+          | NG (PN Int)     -- system generated
+          | NR ResName      -- reserved name
     deriving (Eq, Show)
 
-data Name = NH RName        -- Just names, without polarization
-          | NG Int
+data PName = PH RName        -- "pure" names, without polarization
+           | PG Int
    deriving (Eq, Show)
 
 data PN a = Pos a | Neg a
@@ -30,15 +31,15 @@ depolar :: PN a -> a
 depolar (Pos x) = x
 depolar (Neg x) = x
 
-depolarCh :: Chan -> Name
-depolarCh (CH c) = NH (depolar c)
-depolarCh (CG c) = NG (depolar c)
-depolarCh (CR _) = error "bug: shouldn't call depolar without checking"
+depolarCh :: Name -> PName
+depolarCh (ND c) = PH (depolar c)
+depolarCh (NG c) = PG (depolar c)
+depolarCh (NR _) = error "bug: shouldn't call depolar without checking"
 
-depolarCH :: Chan -> RName
-depolarCH = depolar . unCH
+depolarCH :: Name -> RName
+depolarCH = depolar . unND
 
-unCH (CH n) = n
+unND (ND n) = n
 
 data ResName = StdOut | StdIn
   deriving (Eq, Show)
@@ -49,8 +50,8 @@ data PiDecl = PiDecl RName Pi
   deriving (Eq, Show)
 
 data Pi = End
-        | Send Chan Expr Pi
-        | Recv Chan [Clause]
+        | Send Name Expr Pi
+        | Recv Name [Clause]
         | Par Pi Pi
         | Nu RName Pi
         | Call RName
@@ -70,7 +71,7 @@ data Expr = EV Val
           | EPrj Int Expr   -- projection of tuples
    deriving (Eq, Show)
 
-data Val = N Chan
+data Val = N Name
          | VI Int
          | VB Bool
          | VT [Val]    -- n-tuples
@@ -95,10 +96,10 @@ unVT (VT xs) = return xs
 unVT _ = throwError "type error: tuple wanted"
 
 ePN :: String -> Expr
-ePN = EV . N . CH . Pos . pack
+ePN = EV . N . ND . Pos . pack
 
 eNN :: String -> Expr
-eNN = EV . N . CH . Neg . pack
+eNN = EV . N . ND . Neg . pack
 
 eI :: Int -> Expr
 eI = EV . VI
@@ -110,31 +111,31 @@ eL :: Label -> Expr
 eL = EV . VL
 
 eR :: ResName -> Expr
-eR = EV . N . CR
+eR = EV . N . NR
 
-cP :: String -> Chan
-cP = CH . Pos . pack
+cP :: String -> Name
+cP = ND . Pos . pack
 
-cN :: String -> Chan
-cN = CH . Neg . pack
+cN :: String -> Name
+cN = ND . Neg . pack
 
 par :: Pi -> Pi -> Pi
 End `par` p = p
 p `par` End = p
 p `par` q = Par p q
 
-type Subst = FMap Name Val
+type Subst = FMap PName Val
 
-substChan :: Subst -> Chan -> Chan
-substChan th (CR r) = CR r
-substChan th c =
+substName :: Subst -> Name -> Name
+substName th (NR r) = NR r
+substName th c =
   case lookup (depolarCh c) th of
     Just (N y) -> y
     Just _ -> error "not a name"
     Nothing -> c
 
 substVal :: Subst -> Val -> Val
-substVal th (N (CR r)) = N (CR r)
+substVal th (N (NR r)) = N (NR r)
 substVal th (N c) | Just v <- lookup (depolarCh c) th = v
                   | otherwise                       = N c
 substVal th (VT vs) = VT (map (substVal th) vs)
@@ -154,15 +155,15 @@ substExpr th (EPrj i e) = EPrj i (substExpr th e)
 substPi :: Subst -> Pi -> Pi
 substPi _ End = End
 substPi th (Send c u p) =
-   Send (substChan th c) (substExpr th u) (substPi th p)
+   Send (substName th c) (substExpr th u) (substPi th p)
 substPi th (Recv c clauses) =
     if isEmpty th' then Recv c clauses
-        else Recv (substChan th' c)
+        else Recv (substName th' c)
                   (map (\(Clause ptrn p) -> Clause ptrn (substPi th' p)) clauses)
   where th' = foldr mask th (map (\(Clause ptrn _) -> ptrn) clauses)
 substPi th (Par p q) = Par (substPi th p) (substPi th q)
 substPi th (Nu y p)
-   | NH y `inDom` th = Nu y p       -- is this right?
+   | PH y `inDom` th = Nu y p       -- is this right?
    | otherwise = Nu y (substPi th p)
 substPi _ (Call p) = Call p  -- perhaps this shouldn't be substituted?
 
@@ -184,7 +185,7 @@ evalExpr (EPrj i e) =
 -- substitution related stuffs
 
 match :: Ptrn -> Val -> Maybe Subst
-match (PN x) v = Just [(NH x,v)]
+match (PN x) v = Just [(PH x,v)]
 match (PL x) (VL y) | x == y = Just []
 match (PT xs) (VT vs) | length xs == length vs =
   joinSubs <$> mapM (uncurry match) (zip xs vs)
@@ -202,11 +203,51 @@ matchClauses ((Clause pt e):_) v
 matchClauses (_:pps) v = matchClauses pps v
 
 mask :: Ptrn -> Subst -> Subst
-mask (PN x)      = rmEntry (NH x)
+mask (PN x)      = rmEntry (PH x)
 mask (PT [])     = id
 mask (PT (p:ps)) = mask (PT ps) . mask p
 mask (PL _)      = id
 
+--------------------------------------------------------------------------------
+-- | Free Vars
+
+-- since it is used in type checking, we return only user defined names.
+-- system generated names are supposed to exist only during execution.
+
+freeVal :: Val -> [PN RName]
+freeVal (N (ND x)) = [x]
+freeVal (VT vs) = nubconcat . map freeVal $ vs
+freeVal _ = []
+
+freeN :: Name -> [PN RName]
+freeN (ND x) = [x]
+freeN _ = []
+
+freeExpr :: Expr -> [PN RName]
+freeExpr (EV v) = freeVal v
+freeExpr (EPlus e1 e2) = freeExpr e1 `nubapp` freeExpr e2
+freeExpr (EMinus e1 e2) = freeExpr e1 `nubapp` freeExpr e2
+freeExpr (EIf e0 e1 e2) = freeExpr e0 `nubapp` freeExpr e1 `nubapp` freeExpr e2
+freeExpr (ETup es) = nubconcat (map freeExpr es)
+freeExpr (EPrj _ e) = freeExpr e
+
+freePi :: Pi -> [PN RName]
+freePi End = []
+freePi (Send c e p) =
+  freeN c `nubapp` freeExpr e `nubapp` freePi p
+freePi (Recv c ps) =
+  freeN c `nubapp` nubconcat (map freeClause ps)
+freePi (Par p1 p2) = freePi p1 `nubapp` freePi p2
+freePi (Nu x p) = freePi p `setminus` [Pos x, Neg x]
+freePi (Call x) = undefined -- what to do here?
+
+freeClause :: Clause -> [PN RName]
+freeClause (Clause ptn p) = freePi p `setminus` freePtrn ptn
+
+freePtrn :: Ptrn -> [PN RName]
+freePtrn (PN x)  = [Pos x]
+freePtrn (PT xs) = concat (map freePtrn xs)  -- linearity check?
+freePtrn _       = []
 
 --------------------------------------------------------------------------------
 -- | Converting from Concrete Syntax Tree
@@ -225,11 +266,11 @@ instance FromConcrete (C.ProcDecl ann) PiDecl where
 instance FromConcrete (C.Label ann) Label where
   fromConcrete (C.Label    label _)     = label
 
-instance FromConcrete (C.Name ann) Chan where
-  fromConcrete (C.Name     name _)      = CH (Pos name)
-  fromConcrete (C.Reserved "stdin" _)   = CR StdIn
-  fromConcrete (C.Reserved "stdout" _)  = CR StdOut
-  fromConcrete (C.Reserved name _)      = CH (Pos name)
+instance FromConcrete (C.Name ann) Name where
+  fromConcrete (C.Name     name _)      = ND (Pos name)
+  fromConcrete (C.Reserved "stdin" _)   = NR StdIn
+  fromConcrete (C.Reserved "stdout" _)  = NR StdOut
+  fromConcrete (C.Reserved name _)      = ND (Pos name)
 
 instance FromConcrete (C.Pattern ann) Ptrn where
   fromConcrete = undefined -- help!

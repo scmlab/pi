@@ -47,6 +47,20 @@ nodup :: Eq a => [a] -> Bool
 nodup [] = True
 nodup (x:xs) = not (x `elem` xs) && nodup xs
 
+nubapp :: Eq a => [a] -> [a] -> [a]
+nubapp [] ys = ys
+nubapp (x:xs) ys   -- x : filter (not . (x==)) (nubapp xs ys)
+  | x `elem` zs = zs
+  | otherwise   = x : zs
+ where zs = nubapp xs ys
+
+nubconcat :: Eq a => [[a]] -> [a]
+nubconcat = foldr nubapp []
+
+setminus :: Eq a => [a] -> [a] -> [a]
+setminus xs []     = xs
+setminus xs (y:ys) = setminus (filter (not . (y==)) xs) ys
+
 fork3 :: (x -> a) -> (y -> b) -> (z -> c) -> (x, y, z) -> (a, b, c)
 fork3 f g h (x,y,z) = (f x, g y, h z)
 

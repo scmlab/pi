@@ -46,7 +46,7 @@ liftLookup x env =
   liftMaybe ("variable " ++ show x ++ " not found") (lookup x env)
 
 inferV :: MonadError ErrMsg m => BEnv -> Val -> m BType
-inferV env (N (CR _)) = throwError "StdOut/In in expression"
+inferV env (N (NR _)) = throwError "StdOut/In in expression"
 inferV env (N c) = liftMaybe "variable not found"
                      (lookup (depolarCH c) env)
 inferV env (VI _) = return TInt
@@ -100,14 +100,14 @@ checkPi benv senv End
   | allClosed senv = return ()
   | otherwise      = throwError "not all channels closed"
 
-checkPi benv senv (Send (CR StdOut) e p) =
+checkPi benv senv (Send (NR StdOut) e p) =
   inferE benv e >>= \_ ->
   checkPi benv senv p
-checkPi benv senv (Send (CR _) e p) =
+checkPi benv senv (Send (NR _) e p) =
   throwError "cannot send to this channel"
-checkPi benv senv (Send (CG _) e p) =
+checkPi benv senv (Send (NG _) e p) =
   throwError "generated name appears in type checking. a bug?"
-checkPi benv senv (Send (CH c) e p) =
+checkPi benv senv (Send (ND c) e p) =
   liftLookup c senv >>= matchSend
     (\t s -> checkE benv e t  >>
              checkPi benv (fMapUpdate c s (const s) senv) p)
@@ -115,14 +115,20 @@ checkPi benv senv (Send (CH c) e p) =
              checkCh senv d t >>
              checkPi benv (rmEntry d (fMapUpdate c s (const s) senv)) p)
 
-checkPi benv senv (Recv (CR _) _) =
+checkPi benv senv (Recv (NR _) _) =
   throwError "not knowing what to do yet"
-checkPi benv senv (Recv (CG _) _) =
+checkPi benv senv (Recv (NG _) _) =
   throwError "generated name appears in type checking. a bug?"
-checkPi benv senv (Recv (CH c) ps) =
+checkPi benv senv (Recv (ND c) ps) =
   liftLookup c senv >>= matchRecv
     (\t s -> mapM_ (checkBClause benv senv c t s) ps)
     (\t s -> mapM_ (checkSClause benv senv c t s) ps)
+checkPi benv senv (p1 `Par` p2) =
+  splitSEnv f1 f2 senv >>= \(senv1, senv2) ->
+  checkPi benv senv1 p1 >>
+  checkPi benv senv2 p2
+ where (f1, f2) = (freePi p1, freePi p2)
+
 
 checkBClause :: MonadError ErrMsg m =>
    BEnv -> SEnv -> PN RName -> BType -> SType -> Clause -> m ()
@@ -145,7 +151,7 @@ matchSend fb fs (TSend (Right s') s) = fs s' s
 mathcSend fb fs _ = throwError "TSend expected"
 
 isChannel :: MonadError ErrMsg m => Expr -> m (PN RName)
-isChannel (EV (N (CH c))) = return c
+isChannel (EV (N (ND c))) = return c
 isChannel _ = throwError "must be a channel"
 
 matchRecv ::  MonadError ErrMsg m =>
@@ -163,13 +169,15 @@ checkPtrn (PT xs) (TTuple ts)
     concat <$> mapM (uncurry checkPtrn) (zip xs ts)
 checkPtrn _ _ = throwError "pattern fails to type check"
 
-{-
-data Ptrn = PN RName         -- patterns
-          | PT [Ptrn]
-          | PL Label
-   deriving (Eq, Show)
-
--}
+splitSEnv :: MonadError ErrMsg m =>
+  [PN RName] -> [PN RName] -> SEnv -> m (SEnv, SEnv)
+splitSEnv fl fr [] = return ([],[])
+splitSEnv fl fr ((x,t):xs)
+   | bl && br  = throwError ("channel " ++ show x ++ " not linear")
+   | bl        = (((x,t):) *** id) <$> splitSEnv fl fr xs
+   | br        = (id *** ((x,t):)) <$> splitSEnv fl fr xs
+   | otherwise = throwError ("channel " ++ show x ++ " dropped")
+  where (bl, br) = (x `elem` fl, x `elem` fr)
 
 -- Tests
 
@@ -185,7 +193,8 @@ senv0 :: SEnv
 senv0 = [(Pos (pack "c"), t1),
          (Neg (pack "c"), dual t1),
          (Pos (pack "d"), t0),
-         (Neg (pack "d"), dual t0)]
+         (Neg (pack "d"), dual t0)
+         ]
 
 recv c ptn p = Recv c [Clause ptn p]
 pn = PN . pack
@@ -199,9 +208,3 @@ p1 = recv (cP "c") (pn "z") $
        Send (cP "z") (eI 3) $
          Send (cP "z") (eB True) $
            recv (cP "z") (pn "w") End
-
--- p1 = Recv (cP "c")
---       [Clause (PN (pack "d"))
---          (undefined)]
-
--- (eI 3) (Send (cP "c") (eB True) End)
