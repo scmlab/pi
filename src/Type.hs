@@ -4,6 +4,7 @@ import Data.Text (Text, pack)
 import Control.Arrow ((***))
 
 type TName = Text   -- names of declared types
+type Label = Text
 
 data BType = TInt | TBool | TTuple [BType]
   deriving (Eq, Show)
@@ -11,8 +12,8 @@ data BType = TInt | TBool | TTuple [BType]
 data SType = TEnd
            | TSend (Either BType SType) SType
            | TRecv (Either BType SType) SType
-           | TChoi [(String, SType)]
-           | TSele [(String, SType)]
+           | TSele [(Label, SType)]
+           | TChoi [(Label, SType)]
            | TCall TName
   deriving (Eq, Show)
 

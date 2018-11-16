@@ -86,10 +86,13 @@ checkPi benv senv (Send (NG _) e p) =
 checkPi benv senv (Send (ND c) e p) =
   liftLookup c senv >>= matchSend
     (\t s -> checkE benv e t  >>
-             checkPi benv (fMapUpdate c s (const s) senv) p)
+             checkPi benv (fMapPut c s senv) p)
     (\t s -> isChannel e >>= \d ->
              checkCh senv d t >>
-             checkPi benv (rmEntry d (fMapUpdate c s (const s) senv)) p)
+             checkPi benv (rmEntry d (fMapPut c s senv)) p)
+    (\ts -> isLabel e >>= \l ->
+            liftLookup l ts >>= \s ->
+            checkPi benv (fMapPut c s senv) p)
 
 checkPi benv senv (Recv (NR _) _) =
   throwError "not knowing what to do yet"
@@ -99,6 +102,8 @@ checkPi benv senv (Recv (ND c) ps) =
   liftLookup c senv >>= matchRecv
     (\t s -> mapM_ (checkBClause benv senv c t s) ps)
     (\t s -> mapM_ (checkSClause benv senv c t s) ps)
+    (\ts -> pairChoices ts ps >>=
+            mapM_ (\(s,p) -> checkPi benv (fMapPut c s senv) p))
 
 checkPi benv senv (p1 `Par` p2) =
   splitSEnv f1 f2 senv >>= \(senv1, senv2) ->
@@ -115,32 +120,40 @@ checkBClause :: MonadError ErrMsg m =>
    BEnv -> SEnv -> PN RName -> BType -> SType -> Clause -> m ()
 checkBClause benv senv c t s (Clause ptn p) =
   checkPtrn ptn t >>= \eta ->
-  checkPi (eta ++ benv) (fMapUpdate c s (const s) senv) p
+  checkPi (eta ++ benv) (fMapPut c s senv) p
 
 checkSClause :: MonadError ErrMsg m =>
    BEnv -> SEnv -> PN RName -> SType -> SType -> Clause -> m ()
 checkSClause benv senv c t s (Clause (PN d) p) =
-  checkPi benv ((Pos d,t) : fMapUpdate c s (const s) senv) p
+  checkPi benv ((Pos d,t) : fMapPut c s senv) p
 checkSClause benv senv c t s (Clause _ p) =
   throwError "channels cannot be pattern matched"
 
 matchSend :: MonadError ErrMsg m =>
    (BType -> SType -> m a) ->
-   (SType -> SType -> m a) -> SType -> m a
-matchSend fb fs (TSend (Left t) s) = fb t s
-matchSend fb fs (TSend (Right s') s) = fs s' s
-mathcSend fb fs _ = throwError "TSend expected"
+   (SType -> SType -> m a) ->
+   ([(Label, SType)] -> m a) -> SType -> m a
+matchSend fb fs fsl (TSend (Left t) s) = fb t s
+matchSend fb fs fsl (TSend (Right s') s) = fs s' s
+matchSend fb fs fsl (TSele ts) = fsl ts
+mathcSend fb fs fsl _ = throwError "TSend expected"
 
 isChannel :: MonadError ErrMsg m => Expr -> m (PN RName)
 isChannel (EV (N (ND c))) = return c
 isChannel _ = throwError "must be a channel"
 
+isLabel :: MonadError ErrMsg m => Expr -> m Label
+isLabel (EV (VL l)) = return l
+isLabel _ = throwError "must be a label"
+
 matchRecv ::  MonadError ErrMsg m =>
   (BType -> SType -> m a) ->
-  (SType -> SType -> m a) -> SType -> m a
-matchRecv fb fs (TRecv (Left t) s) = fb t s
-matchRecv fb fs (TRecv (Right t) s) = fs t s
-matchRecv fb fs _ = throwError "TRecv expected"
+  (SType -> SType -> m a) ->
+  ([(Label, SType)] -> m a) -> SType -> m a
+matchRecv fb fs fsl (TRecv (Left t) s) = fb t s
+matchRecv fb fs fsl (TRecv (Right t) s) = fs t s
+matchRecv fb fs fsl (TChoi ts) = fsl ts
+matchRecv fb fs fsl _ = throwError "TRecv expected"
 
 checkPtrn :: MonadError ErrMsg m => Ptrn -> BType -> m BEnv
 checkPtrn (PN x) t = return [(x,t)]
@@ -160,14 +173,28 @@ splitSEnv fl fr ((x,t):xs)
    | otherwise = throwError ("channel " ++ show x ++ " dropped")
   where (bl, br) = (x `elem` fl, x `elem` fr)
 
+pairChoices :: MonadError ErrMsg m =>
+  [(Label, SType)] -> [Clause] -> m [(SType, Pi)]
+pairChoices [] [] = return []
+pairChoices ts [] =
+  throwError "choices not fully covered"
+pairChoices ts (Clause (PL l) p : ps) =
+  liftLookup l ts >>= \s ->
+  ((s,p):) <$> pairChoices (rmEntry l ts) ps
+pairChoices ts (Clause _ _ : _) =
+  throwError "not a label"
+
 -- Tests
 
 tsend t s = TSend (Left t) s
 tSend t s = TSend (Right t) s
 trecv t s = TRecv (Left t) s
 tRecv t s = TRecv (Right t) s
+tsele = TSele . map (pack *** id)
 
-t0 = tsend TInt $ tsend TBool $ trecv TInt $ TEnd
+t0 = tsele [("NEG", tsend TInt  $ trecv TInt  $ TEnd),
+            ("ID",  tsend TBool $ trecv TBool $ TEnd)]
+
 t1 = tRecv t0 TEnd
 
 senv0 :: SEnv
@@ -178,18 +205,25 @@ senv0 = [(Pos (pack "c"), t1),
          ]
 
 recv c ptn p = Recv c [Clause ptn p]
+choices c ps =
+   Recv c (map (uncurry Clause . ((PL . pack) *** id)) ps)
+
 pn = PN . pack
 
 p0 = Send (cN "c") (ePN "d") $
-      recv (cN "d") (pn "x") $
-       recv (cN "d") (pn "y") $
-         Send (cN "d") (eI 3) End
+      choices (cN "d")
+        [("NEG", recv (cN "d") (pn "x") $
+                   Send (cN "d") (eI 0 `EMinus` ePN "x") End),
+         ("ID", recv (cN "d") (pn "x") $
+                    Send (cN "d") (ePN "x") End)]
 
 p1 = recv (cP "c") (pn "z") $
+      Send (cP "z") (eL "NEG") $
        Send (cP "z") (eI 3) $
-         Send (cP "z") (eB True) $
            recv (cP "z") (pn "w") End
 
 nu c t p = Nu (pack c) (Just t) p
 
 p2 = nu "c" t1 (nu "d" t0 p0 `Par` p1)
+
+-- try: runExcept $ checkPi [] [] p2

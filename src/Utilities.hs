@@ -23,6 +23,9 @@ fMapUpdate i e f ((j,x):xs)
    | i == j    = (i,f x) : xs
    | otherwise = (j,x) : fMapUpdate i e f xs
 
+fMapPut :: Eq a => a -> b -> FMap a b -> FMap a b
+fMapPut k v = fMapUpdate k v (const v)
+
 selectAll :: Eq a => a -> FMap a b -> ([b], FMap a b)
 selectAll _ [] = ([],[])
 selectAll i ((j,x):xs)

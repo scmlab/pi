@@ -12,7 +12,7 @@ import qualified Syntax.Concrete as C
 import Type
 import Utilities
 
-type Label = Text
+-- type Label = Text  -- moved to Type
 type ErrMsg = String
 type RName = Text   -- row name
 
@@ -108,8 +108,8 @@ eI = EV . VI
 eB :: Bool -> Expr
 eB = EV . VB
 
-eL :: Label -> Expr
-eL = EV . VL
+eL :: String -> Expr
+eL = EV . VL . pack
 
 eR :: ResName -> Expr
 eR = EV . N . NR
