@@ -5,20 +5,18 @@ module Main where
 import System.Console.GetOpt
 import System.Environment
 
-import Interaction.Human (humanREPL, newREPL)
+import Interaction.Human (humanREPL)
 import Interaction.JSON (jsonREPL)
 
 import System.IO
 main :: IO ()
 main = do
   hSetBuffering stdout LineBuffering
-  hSetBuffering stdin LineBuffering
+  hSetBuffering stdin  LineBuffering
   (opts, filePaths) <- getArgs >>= parseOpts
   case optJSON opts of
     True  -> jsonREPL
-    False -> case length filePaths of
-      0 -> humanREPL
-      _ -> newREPL (head filePaths)
+    False -> humanREPL filePaths
 
 --------------------------------------------------------------------------------
 -- | Command-line arguments
