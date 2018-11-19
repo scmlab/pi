@@ -48,7 +48,6 @@ executable:
   - Syntax.Parser.AlexHappy.Base
   - Syntax.Parser.AlexHappy.Lexer
   - Syntax.Parser.AlexHappy.Parser
-  - Syntax.Parser.TreeSitter.SyntaxTree
   - Syntax.Parser.Type
   - Utilities
   ghc-options:

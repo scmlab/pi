@@ -9,13 +9,17 @@ import Data.Text (Text)
 
 data Label    ann = Label     Text                                      ann
                   deriving (Show, Functor)
-data Name     ann = Name      Text                                      ann
+data Name     ann = Positive  Text                                      ann
+                  | Negative  Text                                      ann
                   | Reserved  Text                                      ann
                   deriving (Show, Functor)
 
 data Program  ann = Program   [ProcDecl ann]                            ann
                   deriving (Show, Functor)
-data ProcDecl ann = ProcDecl  (Name ann)    (Process ann)               ann
+
+data ProcName ann = ProcName  Text                                      ann
+                  deriving (Show, Functor)
+data ProcDecl ann = ProcDecl  (ProcName ann)  (Process ann)             ann
                   deriving (Show, Functor)
 
 data Process  ann = Send      (Name ann)    (Expr ann)    (Process ann) ann

@@ -64,7 +64,8 @@ tokens :-
   [\;]                                  { tok          TokenSemi }
   \-\>                                  { tok          TokenArrow }
   $digit+                               { tok_read     TokenInt }
-  $alpha [$alpha $digit \_ \']*         { tok_text     TokenName }
+  $alpha [$alpha $digit \_ \']*         { tok_text     TokenNamePos }
+  \` $alpha [$alpha $digit \_ \']*      { tok_text     TokenNameNeg }
   $capital [$capital $digit \_ \']*     { tok_text     TokenLabel }
 {
 -- Some action helpers:
@@ -90,7 +91,8 @@ data TokenClass
   | TokenStdIn
   | TokenNu
   | TokenLabel Text
-  | TokenName Text
+  | TokenNamePos Text
+  | TokenNameNeg Text
   | TokenInt Int
   | TokenSeq
   | TokenPar

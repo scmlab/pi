@@ -268,10 +268,11 @@ instance FromConcrete (C.Label ann) Label where
   fromConcrete (C.Label    label _)     = label
 
 instance FromConcrete (C.Name ann) Name where
-  fromConcrete (C.Name     name _)      = ND (Pos name)
-  fromConcrete (C.Reserved "stdin" _)   = NR StdIn
-  fromConcrete (C.Reserved "stdout" _)  = NR StdOut
-  fromConcrete (C.Reserved name _)      = ND (Pos name)
+  fromConcrete (C.Positive name     _) = ND (Pos name)
+  fromConcrete (C.Negative name     _) = ND (Neg name)
+  fromConcrete (C.Reserved "stdin"  _) = NR StdIn
+  fromConcrete (C.Reserved "stdout" _) = NR StdOut
+  fromConcrete (C.Reserved "_"      _) = NR StdOut
 
 instance FromConcrete (C.Pattern ann) Ptrn where
   fromConcrete = undefined -- help!

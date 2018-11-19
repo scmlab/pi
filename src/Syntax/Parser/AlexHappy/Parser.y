@@ -17,7 +17,8 @@ import Data.Text (Text)
 
 %token
         label           { Token _ (TokenLabel $$) }
-        name            { Token _ (TokenName $$) }
+        namePos         { Token _ (TokenNamePos $$) }
+        nameNeg         { Token _ (TokenNameNeg $$) }
         int             { Token _ (TokenInt $$) }
         'stdout'        { Token _ TokenStdOut }
         'stdin'         { Token _ TokenStdIn }
@@ -52,7 +53,7 @@ ProcDecls :: {[ProcDecl Token]}
     | ProcDecls ProcDecl                    { $2:$1 }
 
 ProcDecl :: {ProcDecl Token}
-    : Name '=' ProcessPar                   {%^ return . ProcDecl $1 $3 }
+    : ProcName '=' ProcessPar               {%^ return . ProcDecl $1 $3 }
 
 -- left recursive
 ProcessPar :: {Process Token}
@@ -80,8 +81,12 @@ Clauses :: {[Clause Token]}
         : Clauses ';' ClauseArr             { $3 : $1 }
         | ClauseArr                         { [ $1 ] }
 
+ProcName :: {ProcName Token}
+      : namePos                             {%^ return . ProcName $1 }
+
 Name :: {Name Token}
-      : name                                {%^ return . Name $1 }
+      : namePos                             {%^ return . Positive $1 }
+      | nameNeg                             {%^ return . Negative $1 }
       | ReservedName                        {%^ return . Reserved $1 }
 
 ReservedName :: {Text}
