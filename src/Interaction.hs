@@ -110,8 +110,8 @@ load filePath = do
   case parseByteString rawFile of
     Left err          -> (throwError . show) err
     Right (Prog prog) -> do
-      let env = map (\(PiDecl name p) -> (name, p)) prog
-      let results = runPiMonad env 0 $ lineup [Call (NS "main")] (St [] [] [] [])
+      let env = map (\(PiDecl name p) -> (ND (Pos name), p)) prog
+      let results = runPiMonad env 0 $ lineup [Call "main"] (St [] [] [] [])
       case length results of
         0 -> throwError "failed to load the program"
         _ -> case (head results) of

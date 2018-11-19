@@ -44,7 +44,7 @@ addPi End       st = return st
 addPi (Par p q) st = addPi p st >>= addPi q
 addPi (Call x) st = do
   defs <- ask
-  case lookup x defs of
+  case lookup (ND (Pos x)) defs of
     Just p  -> addPi p st
     Nothing -> throwError $ "definition not found (looking for " ++ show (pretty x) ++ ")"
 addPi (Send c x p) (St sends recvs inps news) = do
@@ -54,9 +54,9 @@ addPi (Recv (NR StdIn) pps) (St sends recvs inps news) =
   return $ St sends recvs (Receiver pps:inps) news
 addPi (Recv c pps) (St sends recvs inps news) =
   return $ St sends ((c,Receiver pps):recvs) inps news
-addPi (Nu x p) (St sends recvs inps news) = do
+addPi (Nu x _ p) (St sends recvs inps news) = do
   i <- fresh
-  addPi (substPi [(x, N i)] p) (St sends recvs inps (i:news))
+  addPi (substPi [(PH x, N i)] p) (St sends recvs inps (i:news))
 
 lineup :: [Pi] -> St -> PiMonad St
 lineup = flip (foldM (flip addPi))
