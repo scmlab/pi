@@ -260,12 +260,13 @@ instance FromConcrete (C.Program ann) Prog where
   fromConcrete (C.Program  declarations _) = Prog (map fromConcrete declarations)
 
 instance FromConcrete (C.ProcDecl ann) PiDecl where
-  fromConcrete = undefined -- help!
-{-
   fromConcrete (C.ProcDecl name process _) = PiDecl (fromConcrete name) (fromConcrete process)
--}
+
 instance FromConcrete (C.Label ann) Label where
   fromConcrete (C.Label    label _)     = label
+
+instance FromConcrete (C.ProcName ann) Label where
+  fromConcrete (C.ProcName label    _) = label
 
 instance FromConcrete (C.Name ann) Name where
   fromConcrete (C.Positive name     _) = ND (Pos name)

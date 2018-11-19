@@ -136,19 +136,15 @@ instance Pretty SType where
   pretty TEnd = pretty "∅"
   pretty (TSend (Left expr) t) = pretty "!" <> pretty expr <> pretty " . " <> pretty t
   pretty (TSend (Right chan) t) = pretty "!" <> pretty chan <> pretty " . " <> pretty t
+  pretty (TRecv (Left expr) t) = pretty "?" <> pretty expr <> pretty " . " <> pretty t
+  pretty (TRecv (Right chan) t) = pretty "?" <> pretty chan <> pretty " . " <> pretty t
   pretty (TSele selections) =
     pretty "!" <+> align (encloseSep lbracket rbracket semi selections')
-    where lbracket = pretty "{"
-          rbracket = pretty "}"
-          semi     = pretty ";"
-          selections' = map (\(label, t) ->
+    where selections' = map (\(label, t) ->
               pretty label <> pretty " : " <> pretty t) selections
   pretty (TChoi choices) =
     pretty "?" <+> align (encloseSep lbracket rbracket semi choices')
-    where lbracket = pretty "{"
-          rbracket = pretty "}"
-          semi     = pretty ";"
-          choices' = map (\(label, t) ->
+    where choices' = map (\(label, t) ->
               pretty label <> pretty " : " <> pretty t) choices
   pretty (TCall name) = pretty name
 
