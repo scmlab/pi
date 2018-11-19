@@ -12,6 +12,8 @@ import System.Console.Haskeline
 import System.Directory (makeAbsolute)
 import System.IO
 import Text.Read (readMaybe)
+import Data.Char (isSpace)
+import Data.List (dropWhileEnd)
 
 import Interaction
 import Interpreter (Reaction(..))
@@ -84,7 +86,7 @@ humanREPL = runInputT defaultSettings $ do
               liftH $ outputStrLn err
 
 
-data Key = Up | Down | Next | Help | Other String
+data Key = Up | Down | Next | Help | Load String | Other String
 
 newREPL :: FilePath -> IO ()
 newREPL filePath = void $ runInteraction $ do
@@ -97,8 +99,9 @@ newREPL filePath = void $ runInteraction $ do
     displayHelp :: InteractionM IO ()
     displayHelp = liftIO $ do
       putStrLn "========================================"
-      putStrLn "  \":help\" or \":h\" for this help message"
-      putStrLn "  press arrow keys or enter to navigate"
+      putStrLn "  arrow keys          for navigation"
+      putStrLn "  :help               for this help message   (:h)"
+      putStrLn "  :load FILEPATH      for loading files       (:l)"
       putStrLn "========================================"
 
     loop :: InteractionM IO ()
@@ -107,18 +110,31 @@ newREPL filePath = void $ runInteraction $ do
       loop
 
     parseKey :: String -> Key
-    parseKey key = case key of
-      "\ESC[A" -> Up
-      "\ESC[B" -> Down
-      "\ESC[C" -> Next
-      -- "\ESC[D" -> return $ ResParseError $ RequestParseError "←"
-      "\n"     -> Next
-      "h"     -> Help
-      "help"  -> Help
-      _        -> Other key
+    parseKey key
+      | "l "    `isPrefixOf` key = (Load . drop 2 . trim) key
+      | "load " `isPrefixOf` key = (Load . drop 5 . trim) key
+      | otherwise = case key of
+          "\ESC[A"  -> Up
+          "\ESC[B"  -> Down
+          "\ESC[C"  -> Next
+          "\n"      -> Next
+          "h"       -> Help
+          "help"    -> Help
+          _         -> Other key
+      where
+        trim :: String -> String
+        trim = dropWhileEnd isSpace . dropWhile isSpace
+
+    parseFile :: FilePath -> InteractionM IO Request
+    parseFile path = do
+      rawFile <- liftIO $ BS.readFile path
+      case parseByteString rawFile of
+        Left err   -> return $ ReqParseErr err
+        Right prog -> return $ ReqLoad prog
 
     keyToRequst :: Key -> InteractionM IO Request
     keyToRequst Help = displayHelp >> return ReqNoOp
+    keyToRequst (Load newPath) = parseFile newPath
     keyToRequst Up   = withCursor (return . ReqChoose . (flip (-) 1))
     keyToRequst Down = withCursor (return . ReqChoose . (flip (+) 1))
     keyToRequst Next = do
@@ -162,12 +178,6 @@ newREPL filePath = void $ runInteraction $ do
         Nothing -> liftIO $ putStrLn $ "0/0 outcomes"
         Just n  -> liftIO $ putStrLn $ show (n + 1) ++ "/" ++ show (length outcomes) ++ " outcomes"
 
-    parseFile :: FilePath -> InteractionM IO Request
-    parseFile path = do
-      rawFile <- liftIO $ BS.readFile path
-      case parseByteString rawFile of
-        Left err   -> return $ ReqParseErr err
-        Right prog -> return $ ReqLoad prog
 
     getKey :: IO String
     getKey = do
