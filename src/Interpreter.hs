@@ -30,10 +30,10 @@ data St = St
   , stFreshVars :: [Name]                   -- new variables
   } deriving (Show)
 
-data Reaction = Silent St                       -- nothing ever happened
-              | React  St Name Sender Receiver [Pi]  -- some chemical reaction
-              | Output St Sender                -- stdout
-              | Input  St Receiver              -- stdin
+data Reaction = Silent                       -- nothing ever happened
+              | React  Name Sender Receiver [Pi]  -- some chemical reaction
+              | Output Sender                -- stdout
+              | Input  Receiver              -- stdin
               deriving (Show)
 
 --------------------------------------------------------------------------------
@@ -44,7 +44,7 @@ addPi End       st = return st
 addPi (Par p q) st = addPi p st >>= addPi q
 addPi (Call x) st = do
   defs <- ask
-  case lookup x defs of
+  case lookup (ND (Pos x)) defs of
     Just p  -> addPi p st
     Nothing -> throwError $ "definition not found (looking for " ++ show (pretty x) ++ ")"
 addPi (Send c x p) (St sends recvs inps news) = do
@@ -54,33 +54,33 @@ addPi (Recv (NR StdIn) pps) (St sends recvs inps news) =
   return $ St sends recvs (Receiver pps:inps) news
 addPi (Recv c pps) (St sends recvs inps news) =
   return $ St sends ((c,Receiver pps):recvs) inps news
-addPi (Nu x p) (St sends recvs inps news) = do
+addPi (Nu x _ p) (St sends recvs inps news) = do
   i <- fresh
-  addPi (substPi [(x, N i)] p) (St sends recvs inps (i:news))
+  addPi (substPi [(PH x, N i)] p) (St sends recvs inps (i:news))
 
 lineup :: [Pi] -> St -> PiMonad St
 lineup = flip (foldM (flip addPi))
 
-stToPi :: St -> Pi
-stToPi (St sends recvs inps news) =
-  foldr Nu (foldr par End ss `par`
-            foldr par End rs `par`
-            foldr par End is ) news
-  where
-    ss = [ Send c (EV v) p      | (c,(Sender v p)) <- sends ]
-    rs = [ Recv c pps           | (c, Receiver pps) <- recvs ]
-    is = [ Recv (NR StdIn) pps  | Receiver pps <- inps]
+-- stToPi :: St -> Pi
+-- stToPi (St sends recvs inps news) =
+--   foldr Nu (foldr par End ss `par`
+--             foldr par End rs `par`
+--             foldr par End is ) news
+--   where
+--     ss = [ Send c (EV v) p      | (c,(Sender v p)) <- sends ]
+--     rs = [ Recv c pps           | (c, Receiver pps) <- recvs ]
+--     is = [ Recv (NR StdIn) pps  | Receiver pps <- inps]
 
 --------------------------------------------------------------------------------
 -- |
 
-step :: St -> PiMonad Reaction
+step :: St -> PiMonad (St, Reaction)
 step (St sends recvs inps news) = do
   (select inps >>= doInput) `mplus` (select sends >>= doSend)
   where
-    doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad Reaction
+    doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad (St, Reaction)
     doSend ((NR StdOut, sender), otherSenders) =
-      return $ Output (St otherSenders recvs inps news) sender
+      return (St otherSenders recvs inps news, Output sender)
     doSend ((channel, sender), otherSenders) = do
       -- selected a reagent from the lists of receivers
       (receiver, otherReceivers) <- selectByKey channel recvs
@@ -88,11 +88,11 @@ step (St sends recvs inps news) = do
       products <- react sender receiver
       -- adjust the state accordingly
       st <- lineup products (St otherSenders otherReceivers inps news)
-      return $ React st channel sender receiver products
+      return (st, React channel sender receiver products)
 
-    doInput :: (Receiver, [Receiver]) -> PiMonad Reaction
+    doInput :: (Receiver, [Receiver]) -> PiMonad (St, Reaction)
     doInput (blocked, otherBlocked) =
-      return $ Input (St sends recvs otherBlocked news) blocked
+      return (St sends recvs otherBlocked news, Input blocked)
 
 input :: Val -> Receiver -> St -> PiMonad St
 input val (Receiver pps) st =
@@ -116,28 +116,21 @@ react (Sender v q) (Receiver clauses) =
 -- | Pretty printing
 
 instance Pretty Reaction where
-  pretty (Silent st) =
+  pretty Silent =
     vsep  [ pretty "[Silent]"
-          , pretty st
           ]
-  pretty (React st channel (Sender v p) (Receiver ps) products) =
+  pretty (React channel (Sender v p) (Receiver ps) products) =
     vsep  [ pretty "[React]"
           , pretty "Channel  :" <+> pretty channel
           , pretty "Sender   :" <+> pretty (Send channel (EV v) p)
           , pretty "Receiver :" <+> pretty (Recv channel ps)
           , pretty "Products :" <+> pretty products
-          , pretty "------------"
-          , pretty st
           ]
-  pretty (Output st (Sender v p)) =
+  pretty (Output (Sender v p)) =
     vsep  [ pretty "[Output]   :" <+> pretty (Send (NR StdOut) (EV v) p)
-          , pretty "------------"
-          , pretty st
           ]
-  pretty (Input st (Receiver clauses)) =
+  pretty (Input (Receiver clauses)) =
     vsep  [ pretty "[Input]    :" <+> pretty (Recv (NR StdIn) clauses)
-          , pretty "------------"
-          , pretty st
           ]
 
 instance Pretty St where

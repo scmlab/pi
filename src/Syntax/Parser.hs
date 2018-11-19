@@ -1,6 +1,6 @@
 module Syntax.Parser
   ( parseByteString
-  , parseSyntaxTree
+  -- , parseSyntaxTree
   , SyntaxTree
   , Point(..), Range(..)
   , ParseError(..)
@@ -12,7 +12,7 @@ import Data.List (isPrefixOf)
 import Syntax.Parser.AlexHappy.Base (runAlex)
 import Syntax.Parser.AlexHappy.Parser (happyParser)
 import Syntax.Abstract (Prog, fromConcrete)
-import Syntax.Parser.TreeSitter.SyntaxTree (parse)
+-- import Syntax.Parser.TreeSitter.SyntaxTree (parse)
 import Syntax.Parser.Type
 
 -- | Haskell parser
@@ -36,9 +36,9 @@ parseByteString s =
     showErrPrefix       = "show-error: " :: String
     lexicalErrorPrefix  = "lexical error at line " :: String
 
--- | Tree-sitter parser
-parseSyntaxTree :: SyntaxTree -> Either ParseError Prog
-parseSyntaxTree tree =
-  case parse tree of
-    Right program -> Right $ fromConcrete program
-    Left  err     -> Left $ err
+-- -- | Tree-sitter parser
+-- parseSyntaxTree :: SyntaxTree -> Either ParseError Prog
+-- parseSyntaxTree tree =
+--   case parse tree of
+--     Right program -> Right $ fromConcrete program
+--     Left  err     -> Left $ err

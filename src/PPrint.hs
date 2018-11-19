@@ -1,10 +1,9 @@
 module PPrint where
 
 import Data.Text.Prettyprint.Doc
-  -- https://hackage.haskell.org/package/prettyprinter
-  -- cabal install prettyprinter
 
 import Syntax.Abstract
+import Type
 
 {-
 Operator Precedences
@@ -21,12 +20,23 @@ infix  8 ? !
 --------------------------------------------------------------------------------
 -- | Syntax
 
+
+-- Names
 instance Pretty Name where
-  pretty (NS x) = pretty x
-  pretty (NG i) = pretty ("X"++show i)
+  pretty (ND x) = pretty x
+  pretty (NG i) = pretty ("X" ++ show i)
   pretty (NR StdOut) = pretty "stdout"
   pretty (NR StdIn) = pretty "stdin"
 
+instance Pretty PName where
+  pretty (PH x) = pretty x
+  pretty (PG i) = pretty ("X" ++ show i)
+
+instance Pretty a => Pretty (PN a) where
+  pretty (Pos x) = pretty x
+  pretty (Neg x) = pretty "`" <> pretty x
+
+-- Values
 instance Pretty Val where
   pretty (N x) = pretty x
   pretty (VI n) = pretty n
@@ -35,6 +45,7 @@ instance Pretty Val where
   pretty (VT xs) =
     encloseSep langle rangle comma (map pretty xs)
 
+-- Patterns
 instance Pretty Ptrn where
   pretty (PN x) = pretty x
   pretty (PT xs) =
@@ -98,11 +109,12 @@ ppPi (Recv c clauses) pr =
            ppPi p 4
 ppPi (Par p1 p2) pr =
   ppInfixL 3 (pretty "|") (ppPi p1) (ppPi p2) pr
-ppPi (Nu x p) pr =
-  shParen (pr > 4)
-   (group . nest 4 . vsep $
-     [pretty "(nu " <> pretty x <> pretty ")",
-      ppPi p 4])
+ppPi (Nu x t p) pr =
+  shParen (pr > 4) $
+    group . nest 4 . vsep $
+      [ pretty "(nu " <> pretty x <> pretty " : " <> pretty t <> pretty ")"
+      , ppPi p 4
+      ]
 ppPi (Call p) _ = pretty p
 
 -- ppClauses [(xs,p)] =
@@ -117,3 +129,30 @@ ppDef x p = pretty x <+> pretty "=" <+>
 
 ppDefs :: [(Name, Pi)] -> Doc a
 ppDefs = vsep . map (uncurry ppDef)
+
+
+-- Types
+instance Pretty SType where
+  pretty TEnd = pretty "∅"
+  pretty (TSend (Left expr) t) = pretty "!" <> pretty expr <> pretty " . " <> pretty t
+  pretty (TSend (Right chan) t) = pretty "!" <> pretty chan <> pretty " . " <> pretty t
+  pretty (TRecv (Left expr) t) = pretty "?" <> pretty expr <> pretty " . " <> pretty t
+  pretty (TRecv (Right chan) t) = pretty "?" <> pretty chan <> pretty " . " <> pretty t
+  pretty (TSele selections) =
+    pretty "!" <+> align (encloseSep lbracket rbracket semi selections')
+    where selections' = map (\(label, t) ->
+              pretty label <> pretty " : " <> pretty t) selections
+  pretty (TChoi choices) =
+    pretty "?" <+> align (encloseSep lbracket rbracket semi choices')
+    where choices' = map (\(label, t) ->
+              pretty label <> pretty " : " <> pretty t) choices
+  pretty (TCall name) = pretty name
+
+instance Pretty BType where
+  pretty TInt = pretty "Int"
+  pretty TBool = pretty "Bool"
+  pretty (TTuple elems) = encloseSep
+                    (pretty "<")
+                    (pretty ">")
+                    (pretty ", ")
+                    (map pretty elems)

@@ -5,114 +5,145 @@ module Interaction.Human where
 import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import Data.List (isPrefixOf)
-import Data.ByteString.Lazy (readFile)
+-- import qualified Data.Text as Text
+import Data.Text.Prettyprint.Doc (pretty)
 import System.Console.Haskeline
-import System.Directory (makeAbsolute)
+import System.IO
+import Data.Char (isSpace)
+import Data.List (dropWhileEnd)
 
 import Interaction
-import Syntax.Abstract
-import Syntax.Parser (ParseError(..), parseByteString)
 import Prelude hiding (readFile)
 
 --------------------------------------------------------------------------------
 -- | Interfacing with Humans
 
-humanREPL :: IO ()
-humanREPL = runInputT defaultSettings $ do
-  (result, _) <- runInteraction [] (Call (NS "main")) loop
-  outputStrLn (show result)
-  return ()
+humanREPL :: [FilePath] -> IO ()
+humanREPL [] = void $ runInteraction $ do
+  displayHelp
+  loop
+humanREPL (filePath:_) = void $ runInteraction $ do
+  handleRequest (Load (trim filePath))
+  loop
+
+displayHelp :: InteractionM IO ()
+displayHelp = liftIO $ do
+  putStrLn "========================================"
+  putStrLn "  arrow keys          for navigation"
+  putStrLn "  :help               for this help message   (:h)"
+  putStrLn "  :load FILEPATH      for loading files       (:l)"
+  putStrLn "  :reload             for reloading           (:r)"
+  putStrLn "========================================"
+
+loop :: InteractionM IO ()
+loop = do
+  liftIO getKey >>= handleRequest . parseRequest
+  loop
+
+printStatusBar :: InteractionM IO ()
+printStatusBar = do
+  outcomes <- gets stOutcomes
+  cursor <- gets stCursor
+  case cursor of
+    Nothing -> liftIO $ putStrLn $ "0/0 outcomes"
+    Just n  -> liftIO $ putStrLn $ show (n + 1) ++ "/" ++ show (length outcomes) ++ " outcomes"
+
+try :: InteractionM IO () -> InteractionM IO ()
+try program = do
+  program `catchError` (liftIO . putStrLn . (++) "\r" . show . pretty)
+
+handleRequest :: Request -> InteractionM IO ()
+handleRequest (CursorMoveTo n)  = do
+  try $ choose n
+
+  outcome <- currentOutcome
+  liftIO $ putStrLn $ show $ pretty outcome
+  printStatusBar
+handleRequest CursorUp          = withCursor $ \n -> do
+  try $ choose (n - 1)
+
+  outcome <- currentOutcome
+  liftIO $ putStrLn $ show $ pretty outcome
+  printStatusBar
+handleRequest CursorDown        = withCursor $ \n -> do
+  try $ choose (n + 1)
+
+  outcome <- currentOutcome
+  liftIO $ putStrLn $ show $ pretty outcome
+  printStatusBar
+
+handleRequest CursorNext        = do
+  try run
+  currentOutcome >>= liftIO . putStrLn . show . pretty
+  printStatusBar
+handleRequest (Load filePath)   = do
+  load filePath
+
+  currentState >>= liftIO . putStrLn . show . pretty
+  currentOutcome >>= liftIO . putStrLn . show . pretty
+  printStatusBar
+handleRequest Reload            = do
+  reload
+  currentState >>= liftIO . putStrLn . show . pretty
+  currentOutcome >>= liftIO . putStrLn . show . pretty
+  printStatusBar
+handleRequest Help              = displayHelp
+handleRequest CursorPrev        = displayHelp
+
+--------------------------------------------------------------------------------
+-- | Parsing human input
+
+parseRequest :: String -> Request
+parseRequest key
+  | "l "    `isPrefixOf` key = (Load . drop 2 . trim) key
+  | "load " `isPrefixOf` key = (Load . drop 5 . trim) key
+  | otherwise = case trim key of
+      "\ESC[A"  -> CursorUp
+      "\ESC[B"  -> CursorDown
+      "\ESC[C"  -> CursorNext
+      "\n"      -> CursorNext
+      "h"       -> Help
+      "help"    -> Help
+      "r"       -> Reload
+      "reload"  -> Reload
+      _         -> Help
+
+trim :: String -> String
+trim = dropWhileEnd isSpace . dropWhile isSpace
+
+getKey :: IO String
+getKey = do
+  controlStdin
+
+  firstChar <- getChar
+  key <- case firstChar of
+    ':' -> do
+      restoreStdin
+      runInputT defaultSettings $ do
+        minput <- getInputLine "π > "
+        case minput of
+            Nothing    -> lift getKey
+            Just input -> return input
+    _ -> reverse <$> interceptStdin [firstChar]
+
+  restoreStdin
+  return key
+
   where
-    liftH = lift . lift
+    controlStdin :: IO ()
+    controlStdin = do
+      hSetBuffering stdin NoBuffering
+      hSetEcho      stdin False
 
-    loop :: InteractionM (InputT IO) ()
-    loop = do
-      -- print the current states
-      outcomes <- gets stateOutcomes
-      liftH $ outputStrLn (show $ ppOutcomes outcomes)
-      -- get user input
-      minput <- liftH $ getInputLine "π > "
-      case minput of
-        Nothing -> return ()
-        Just s -> do
-          request <- parseRequest s
-          case request of
-            Run n -> do
-              try (run n)
-              loop
-            Feed i v -> do
-              try (feed i v)
-              loop
-            Load (Prog prog) -> do
-              load $ map (\(PiDecl name p) -> (name, p)) prog
-              loop
-            Err err -> do
-              liftH $ outputStrLn (show err)
-              loop
-            _ -> do
-              loop
-        where
-          parseRequest :: String -> InteractionM (InputT IO) Request
-          parseRequest s
-            | "run " `isPrefixOf` s = return $ Run (read $ drop 4 s)
-            | "feed " `isPrefixOf` s =
-              let [i, v] = (map read $ words $ drop 5 s) :: [Int]
-              in return $ Feed i (VI v)
-            | "load " `isPrefixOf` s = do
-              filepath <- liftIO $ makeAbsolute (init $ drop 5 s)
-              raw <- liftIO $ readFile filepath
-              case parseByteString raw of
-                Left err -> return $ Err err
-                Right prog -> return $ Load prog
-            | otherwise = return $ Err (RequestParseError "cannot understand your command")
+    restoreStdin :: IO ()
+    restoreStdin = do
+      hSetBuffering stdin LineBuffering
+      hSetEcho      stdin True
 
-          -- loadAndParse :: String ->
-
-          try :: InteractionM (InputT IO) () -> InteractionM (InputT IO) ()
-          try program = do
-            program `catchError` \err ->
-              liftH $ outputStrLn err
-
--- po = (nu w) c!w .
---       w?{ PLUS -> w?<x,y> . w!(x + y) . p0; NEG -> w?x . w!(0 - x) . p0 }
--- p1 = c?j . stdin?x . j!NEG . j!x . j?z . stdout!z . end
--- p2 = c?j . j!PLUS . j!<3,4> . j?z . stdout!z . end
--- main = p0 | p1 | p2
-    -- initialEnv :: Env
-    -- initialEnv =
-    --   [(NS "p0",
-    --          Nu i (send c (eN i)
-    --           (choices i
-    --             [("PLUS", (recv i (PT [PN x, PN y])
-    --                   (send i (EPlus (eN x) (eN y)) (Call (NS "p0"))))),
-    --              ("NEG", (recv i (PN x)
-    --                  (send i (neg (eN x)) (Call (NS "p0")))))])))
-    --        ,(NS "p1",
-    --           recv c (PN j)
-    --               (send j (eL "PLUS")
-    --                 (send j (ETup [eI 3, eI 4])
-    --                   (recv j (PN z)
-    --                     (Send (NR StdOut) (eN z) End)))))
-    --        ,(NS "p2",
-    --           recv c (PN j)
-    --            (recv (NR StdIn) (PN x)
-    --             (send j (eL "NEG")
-    --              (send j (eN x)
-    --                (recv j (PN z)
-    --                  (Send (NR StdOut) (eN z) End))))))
-    --        ]
-    --   where
-    --     recv channel xs p = Recv channel [Clause xs p]
-    --     send channel v p = Send channel v p
-    --     choices channel xss = Recv channel (map (\(l, p) -> Clause (PL l) p) xss)
-    --
-    --     neg v = EMinus (EV (VI 0)) v
-    --
-    --     [i,j,c,x,y,z] = map NS ["i","j","c","x","y","z"]
-    --
-    -- initialPi :: Pi
-    -- initialPi = Call (NS "p0") `Par` Call (NS "p1") `Par` Call (NS "p2")
-
-
--- try in GHCi:
--- start defs startE & trace [0,0] & readInp 0 (VI 10) & trace [0,0,0,0,1,1,0,0,0,0] & ppBState
+    interceptStdin :: String -> IO String
+    interceptStdin buffer = do
+      char <- getChar
+      more <- hReady stdin
+      if more
+        then interceptStdin (char:buffer)
+        else return         (char:buffer)

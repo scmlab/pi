@@ -6,17 +6,18 @@ import System.Console.GetOpt
 import System.Environment
 
 import Interaction.Human (humanREPL)
-import Interaction.JSON (jsonREPL)
+-- import Interaction.JSON (jsonREPL)
 
 import System.IO
+
 main :: IO ()
 main = do
   hSetBuffering stdout LineBuffering
-  hSetBuffering stdin LineBuffering
-  (opts, _) <- getArgs >>= parseOpts
+  hSetBuffering stdin  LineBuffering
+  (opts, filePaths) <- getArgs >>= parseOpts
   case optJSON opts of
-    True  -> jsonREPL
-    False -> humanREPL
+    True  -> putStrLn "temporarily unavailable"
+    False -> humanREPL filePaths
 
 --------------------------------------------------------------------------------
 -- | Command-line arguments
@@ -40,4 +41,4 @@ parseOpts argv =
   case getOpt Permute options argv of
     (o,n,[]  ) -> return (foldl (flip id) defaultOptions o, n)
     (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
-      where header = "Usage: pi [OPTION...]"
+      where header = "Usage: pi [OPTION...] filepath"

@@ -24,7 +24,6 @@ dependencies:
 - array
 - aeson
 - bytestring
-- directory
 - haskeline
 - mtl
 - prettyprinter
@@ -39,7 +38,6 @@ executable:
   source-dirs:         src
   other-modules:
   - Interaction.Human
-  - Interaction.JSON
   - Interaction
   - Interpreter
   - Interpreter.Monad
@@ -50,8 +48,9 @@ executable:
   - Syntax.Parser.AlexHappy.Base
   - Syntax.Parser.AlexHappy.Lexer
   - Syntax.Parser.AlexHappy.Parser
-  - Syntax.Parser.TreeSitter.SyntaxTree
   - Syntax.Parser.Type
+  - Type
+  - Type.TypeCheck
   - Utilities
   ghc-options:
   - -Wall

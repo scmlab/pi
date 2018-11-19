@@ -16,7 +16,7 @@ class Monad m => MonadFresh m where
 instance MonadFresh PiMonad where
   fresh = get >>= \i ->
           put (i+1) >>
-          return (NG i)
+          return (NG (Pos i))
 
 type BkSt = Int
 type Env = FMap Name Pi

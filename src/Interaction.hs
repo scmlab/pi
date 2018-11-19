@@ -5,110 +5,162 @@ module Interaction where
 import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import Data.Text.Prettyprint.Doc
+import qualified Data.ByteString.Lazy as BS
 
 import Syntax.Abstract
-import Syntax.Parser (ParseError(..))
+import Syntax.Parser (ParseError(..), parseByteString)
 import Interpreter
 
 
-type Outcome = Either ErrMsg (Reaction, BkSt)
-data State = State
-  { stateEnv      :: Env        -- source code
-  , stateOutcomes :: [Outcome]  -- outcomes
+data Outcome = Success St Reaction BkSt
+             | Failure ErrMsg
+             deriving (Show)
+
+instance Pretty Outcome where
+  pretty (Failure msg)          = pretty ("error:" :: String) <+> pretty msg
+  pretty (Success _ reaction _) = pretty reaction
+
+data InteractionState = State
+  { stFilePath :: Maybe String  -- loaded filepath
+  , stEnv      :: Env           -- source code
+  , stState    :: St            -- current state
+  , stOutcomes :: [Outcome]     -- next possible outcomes
+  , stCursor   :: Maybe Int     -- pointing at which outcome
   } deriving (Show)
+
 type Error = String
-type InteractionM m = ExceptT Error (StateT State m)
+type InteractionM m = ExceptT Error (StateT InteractionState m)
 
 data Request
-  = Test
-  | Load Prog       -- load the program into the env
-  | Run Int         -- choose and run the nth choice
-  | Feed Int Val    -- feed the nth process with some value
-  | Err ParseError  -- error raised when parsing this request
+  = CursorMoveTo Int
+  | CursorUp | CursorDown
+  | CursorNext | CursorPrev
+  | Help
+  | Load String
+  | Reload
   deriving (Show)
 
 data Response
   = ResOutcomes     [Outcome]
   | ResTest         String
   | ResParseError   ParseError
-  | ResGenericError String
+  | ResOtherError String
+  | ResNoOp
   -- deriving (Show)
 
 --------------------------------------------------------------------------------
 -- | Interaction Monad
 
-toOutcome :: Either String (St, BkSt) -> Outcome
-toOutcome (Left err)       = Left err
-toOutcome (Right (st, i))  = Right (Silent st, i)
+runInteraction :: Monad m => InteractionM m a -> m (Either Error a, InteractionState)
+runInteraction handler =
+  runStateT (runExceptT handler) (State Nothing [] (St [] [] [] []) initialOutcomes Nothing)
+  where initialOutcomes = [Failure "please load first"]
 
--- start
-runInteraction :: Monad m => Env -> Pi -> InteractionM m a -> m (Either Error a, State)
-runInteraction env p handler = runStateT (runExceptT handler) (State env initialOutcomes)
-  where initialOutcomes = map toOutcome $ runPiMonad env 0 (lineup [p] (St [] [] [] []))
+interpret :: Env -> BkSt -> PiMonad (St, Reaction) -> [Outcome]
+interpret env i program = map toOutcome (runPiMonad env i program)
+  where
+    toOutcome :: Either String ((St, Reaction), BkSt) -> Outcome
+    toOutcome (Left err)                     = Failure err
+    toOutcome (Right ((state, reaction), j)) = Success state reaction j
 
--- pretty print Outcomes
-ppOutcome :: Either ErrMsg (Reaction, b) -> Doc a
-ppOutcome (Left msg)       = pretty ("error:" :: String) <+> pretty msg
-ppOutcome (Right (res, _)) = pretty res
-
-ppOutcomes :: [Outcome] -> Doc n
-ppOutcomes outcomes = vsep $
-  [ pretty $ show (length outcomes) ++ " possible outcomes"
-  ] ++ map ppSts (zip [0..] outcomes)
-  where   ppSts :: (Int, Either ErrMsg (Reaction, b)) -> Doc n
-          ppSts (i, outcome) = vsep
-            [ pretty ("==== " ++ show i ++ " ====")
-            , ppOutcome outcome
-            , line]
-
--- safe (!!)
-decideOutcome :: Monad m => Int -> InteractionM m Outcome
-decideOutcome i = do
-  len <- length <$> gets stateOutcomes
-  if (i >= len) then
-    throwError "out of bound"
-  else
-    (!! i) <$> gets stateOutcomes
-
-updateOutcomes :: Monad m => [Outcome] -> InteractionM m ()
-updateOutcomes new = modify (\state -> state { stateOutcomes = new })
-
-updateEnv :: Monad m => Env -> InteractionM m ()
-updateEnv new = modify (\state -> state { stateEnv = new })
-
--- load
-load :: Monad m => Env -> InteractionM m ()
-load env = put $ State
-  { stateEnv = env
-  , stateOutcomes = map toOutcome (runPiMonad env 0 (lineup [Call (NS "main")] (St [] [] [] [])))
+update :: Monad m => [Outcome] -> InteractionM m ()
+update outcomes = modify $ \state -> state
+  { stOutcomes = outcomes
+  , stCursor = if null outcomes then Nothing else Just 0
   }
 
--- down
-run :: Monad m => Int -> InteractionM m ()
-run n = do
-  outcome <- decideOutcome n
-  case outcome of
-    Left err -> do
-      updateOutcomes [Left err]
-    Right (Output state (Sender _ p), i) -> do
-      defs <- gets stateEnv
-      updateOutcomes $ runPiMonad defs i $ lineup [p] state >>= step
-    Right (React state _ _ _ _, i) -> do
-      defs <- gets stateEnv
-      updateOutcomes $ runPiMonad defs i (step state)
-    Right (Input state pps, i) -> do
-      updateOutcomes [Right (Input state pps, i)]
-    Right (Silent state, i) -> do
-      defs <- gets stateEnv
-      updateOutcomes $ runPiMonad defs i (step state)
+--------------------------------------------------------------------------------
+-- | Cursor related operations
 
--- feed
-feed :: Monad m => Int -> Val -> InteractionM m ()
-feed i val = do
-  outcome <- decideOutcome i
+withCursor :: Monad m => (Int -> InteractionM m a) -> InteractionM m a
+withCursor f = do
+  cursor <- gets stCursor
+  case cursor of
+    Nothing -> throwError "no outcomes to choose from"
+    Just n -> f n
+
+choose :: Monad m => Int -> InteractionM m ()
+choose n = do
+  len <- length <$> gets stOutcomes
+  if (n >= len || n < 0) then
+    throwError "out of bound"
+  else do
+    modify (\state -> state { stCursor = Just n })
+
+-- retrieve the current appointed outcome
+currentOutcome :: Monad m => InteractionM m Outcome
+currentOutcome = do
+  withCursor $ \n -> (!! n) <$> gets stOutcomes
+
+currentState :: Monad m => InteractionM m St
+currentState = gets stState
+
+--------------------------------------------------------------------------------
+-- | helper functions
+toState :: Monad m => Outcome -> InteractionM m St
+toState (Success state _ _) = return state
+toState (Failure err) = throwError err
+
+--------------------------------------------------------------------------------
+-- | Commands
+
+load :: (MonadIO m, Monad m) => FilePath -> InteractionM m ()
+load filePath = do
+  rawFile <- liftIO $ BS.readFile filePath
+  case parseByteString rawFile of
+    Left err          -> (throwError . show) err
+    Right (Prog prog) -> do
+      let env = map (\(PiDecl name p) -> (ND (Pos name), p)) prog
+      let results = runPiMonad env 0 $ lineup [Call "main"] (St [] [] [] [])
+      case length results of
+        0 -> throwError "failed to load the program"
+        _ -> case (head results) of
+          Left err -> throwError err
+          Right (state, bk) -> put $ State
+            { stFilePath = Just filePath
+            , stEnv      = env
+            , stState    = state
+            , stOutcomes = [Success state Silent bk]
+            , stCursor   = Just 0
+            }
+
+-- read and parse and store program from the stored filepath
+reload :: (MonadIO m, Monad m) => InteractionM m ()
+reload = do
+  result <- gets stFilePath
+  case result of
+    Nothing -> throwError "please load the program first"
+    Just filePath -> load filePath
+
+-- run the appointed outcome
+run :: Monad m => InteractionM m ()
+run = do
+  outcome <- currentOutcome
   case outcome of
-    Right (Input st pps, j) -> do
-      defs <- gets stateEnv
-      updateOutcomes $ runPiMonad defs j (Silent <$> input val pps st)
+    Failure err -> do
+      update $ [Failure err]
+    Success state (Output (Sender _ p)) i -> do
+      defs <- gets stEnv
+      update $ interpret defs i $ lineup [p] state >>= step
+    Success state (React _ _ _ _) i -> do
+      defs <- gets stEnv
+      update $ interpret defs i (step state)
+    Success state (Input pps) i -> do
+      update $ [Success state (Input pps) i]
+    Success state Silent i -> do
+      defs <- gets stEnv
+      -- error . show . pretty $ interpret defs i (step state)
+      update $ interpret defs i (step state)
+
+-- feed the appointed outcome with something
+feed :: Monad m => Val -> InteractionM m ()
+feed val = do
+  outcome <- currentOutcome
+  case outcome of
+    Success state (Input pps) i -> do
+      defs <- gets stEnv
+      update $ interpret defs i $ do
+        state' <- input val pps state
+        return (state', Silent)
     _ ->
       throwError "not expecting input"
