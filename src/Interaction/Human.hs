@@ -113,8 +113,8 @@ newREPL filePath = void $ runInteraction $ do
       "\ESC[C" -> Next
       -- "\ESC[D" -> return $ ResParseError $ RequestParseError "←"
       "\n"     -> Next
-      ":h"     -> Help
-      ":help"  -> Help
+      "h"     -> Help
+      "help"  -> Help
       _        -> Other key
 
     keyToRequst :: Key -> InteractionM IO Request
@@ -176,10 +176,12 @@ newREPL filePath = void $ runInteraction $ do
       firstChar <- getChar
       key <- case firstChar of
         ':' -> do
-          result <- emulateStdin ":"
-          case result of
-            Just input -> return (reverse input)
-            Nothing    -> getKey
+          restoreStdin
+          runInputT defaultSettings $ do
+            minput <- getInputLine "π > "
+            case minput of
+                Nothing    -> lift getKey
+                Just input -> return input
         _ -> reverse <$> interceptStdin ""
 
       restoreStdin
@@ -203,27 +205,6 @@ newREPL filePath = void $ runInteraction $ do
           if more
             then interceptStdin (char:buffer)
             else return         (char:buffer)
-
-        emulateStdin :: String -> IO (Maybe String)
-        emulateStdin buffer = do
-          -- clear the line and display the current buffer
-          putStr ('\r' : reverse buffer)
-          hFlush stdout
-          char <- getChar
-          case char of
-            '\n'   -> do
-              putStr "\n"
-              return $ Just buffer
-            '\DEL' -> if buffer == ":"
-              then do
-                putStr "\r \r"
-                hFlush stdout
-                return Nothing
-              else do
-                putStr ('\r' : reverse (' ' : init buffer))
-                emulateStdin (tail buffer)
-            _      ->
-              emulateStdin (char:buffer)
 
     try :: InteractionM IO () -> InteractionM IO ()
     try program = do
