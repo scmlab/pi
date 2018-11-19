@@ -7,7 +7,6 @@ import Control.Monad.Except
 import Data.List (isPrefixOf)
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Text as Text
-import qualified Data.Text.IO as Text
 import Data.Text.Prettyprint.Doc (pretty)
 import System.Console.Haskeline
 import System.Directory (makeAbsolute)
@@ -15,6 +14,7 @@ import System.IO
 import Text.Read (readMaybe)
 
 import Interaction
+import Interpreter (Reaction(..))
 import Syntax.Abstract
 import Syntax.Parser (ParseError(..), parseByteString)
 import Prelude hiding (readFile)
@@ -33,8 +33,7 @@ humanREPL = runInputT defaultSettings $ do
     loop :: InteractionM (InputT IO) ()
     loop = do
       -- print the current states
-      outcomes <- gets stateOutcomes
-      liftH $ outputStrLn (show $ pretty outcomes)
+      gets stateOutcomes >>= liftH . outputStrLn . show . pretty
       -- get user input
       minput <- liftH $ getInputLine "π > "
       case minput of
@@ -54,10 +53,11 @@ humanREPL = runInputT defaultSettings $ do
             ReqLoad (Prog prog) -> do
               load $ map (\(PiDecl name p) -> (name, p)) prog
               loop
-            ReqErr err -> do
+            ReqParseErr err -> do
               liftH $ outputStrLn (show err)
               loop
-            _ -> do
+            ReqOtherErr err -> do
+              liftH $ outputStrLn (show err)
               loop
         where
           parseRequest :: String -> InteractionM (InputT IO) Request
@@ -68,11 +68,11 @@ humanREPL = runInputT defaultSettings $ do
               filepath <- liftIO $ makeAbsolute (init $ drop 5 s)
               raw <- liftIO $ BS.readFile filepath
               case parseByteString raw of
-                Left err -> return $ ReqErr err
+                Left err -> return $ ReqParseErr err
                 Right prog -> return $ ReqLoad prog
             | otherwise = case readMaybe s of
                 Just n  -> return $ ReqChoose n
-                Nothing -> return $ ReqErr (RequestParseError "cannot understand your command")
+                Nothing -> return $ ReqParseErr (RequestParseError "cannot understand your command")
 
           -- loadAndParse :: String ->
 
@@ -82,55 +82,67 @@ humanREPL = runInputT defaultSettings $ do
               liftH $ outputStrLn err
 
 
+data Key = Up | Down | Next | Other String
+
 newREPL :: FilePath -> IO ()
 newREPL filePath = do
-  -- IO settings
-  hSetBuffering stdin NoBuffering
-  hSetEcho stdin False
 
   -- start looping
   void $ runInteraction $ do
     -- read file
-    req <- parseFile filePath
-    handleRequest req
+    parseFile filePath >>= handleRequest
 
     loop
   where
     loop :: InteractionM IO ()
     loop = do
-      getKey >>= parseRequest >>= handleRequest
+      getKey >>= keyToRequst . parseKey >>= handleRequest
       loop
 
-    parseRequest :: String -> InteractionM IO Request
-    parseRequest key = case key of
-      "\ESC[A" -> prev >>= return . ReqChoose
-      "\ESC[B" -> next >>= return . ReqChoose
-      "\ESC[C" -> return $ ReqRun
-      "\ESC[D" -> return $ ReqErr $ RequestParseError "←"
-      "\n"     -> return $ ReqRun
-      "\DEL"   -> return $ ReqErr $ RequestParseError "⎋"
-      _        -> return $ ReqErr $ RequestParseError (Text.pack key)
+    parseKey :: String -> Key
+    parseKey key = case key of
+      "\ESC[A" -> Up
+      "\ESC[B" -> Down
+      "\ESC[C" -> Next
+      -- "\ESC[D" -> return $ ResParseError $ RequestParseError "←"
+      "\n"     -> Next
+      -- "\DEL"   -> return $ ResParseError $ RequestParseError "⎋"
+      _        -> Other key
+
+    keyToRequst :: Key -> InteractionM IO Request
+    keyToRequst Up   = withCursor (return . ReqChoose . (flip (-) 1))
+    keyToRequst Down = withCursor (return . ReqChoose . (flip (+) 1))
+    keyToRequst Next = do
+      outcome <- retrieveOutcome
+      case outcome of
+        Success _ (Input _) _ -> do
+          void $ error "not implemented yet"
+          return $ ReqFeed (VI 3)
+        Success _ _ _         -> return $ ReqRun
+        Failure err           -> return $ ReqOtherErr err
+    keyToRequst (Other key) = return $ ReqParseErr $ RequestParseError (Text.pack key)
 
     handleRequest :: Request -> InteractionM IO ()
-    handleRequest (ReqChoose n) = do
-      try (choose n)
-      outcome <- retrieve
+    handleRequest (ReqChoose n) = try $ do
+      choose n
+      outcome <- retrieveOutcome
       liftIO $ putStrLn $ show $ pretty outcome
       printStatusBar
     handleRequest ReqRun = do
       try run
-      outcome <- retrieve
-      liftIO $ putStrLn $ show $ pretty outcome
+      -- currentState >>= liftIO . putStrLn . show . pretty
+      retrieveOutcome >>= liftIO . putStrLn . show . pretty
       printStatusBar
     handleRequest (ReqLoad (Prog prog)) = do
       load $ map (\(PiDecl name p) -> (name, p)) prog
       -- choose the first outcome and print its state
-      state <- retrieveNth 0 >>= toState
+      state <- retrieveNthOutcome 0 >>= toState
       -- liftIO $ putStrLn $ show (length outcomes) ++ " possible outcomes"
       liftIO $ putStrLn $ show $ pretty state
       printStatusBar
-    handleRequest (ReqErr (RequestParseError msg)) = liftIO $ Text.putStrLn msg
-    handleRequest (ReqErr msg) = liftIO $ putStrLn (show msg)
+    handleRequest (ReqFeed _) = void $ error "not implemented yet"
+    handleRequest (ReqParseErr msg) = liftIO $ putStrLn (show msg)
+    handleRequest (ReqOtherErr msg) = liftIO $ putStrLn (show msg)
 
     printStatusBar :: InteractionM IO ()
     printStatusBar = do
@@ -144,11 +156,21 @@ newREPL filePath = do
     parseFile path = do
       rawFile <- liftIO $ BS.readFile path
       case parseByteString rawFile of
-        Left err   -> return $ ReqErr err
+        Left err   -> return $ ReqParseErr err
         Right prog -> return $ ReqLoad prog
 
     getKey :: InteractionM IO String
-    getKey = reverse <$> getKey' ""
+    getKey = do
+      liftIO $ hSetBuffering stdin NoBuffering
+      liftIO $ hSetEcho stdin False
+
+      key <- reverse <$> getKey' ""
+
+      liftIO $ hSetBuffering stdin LineBuffering
+      liftIO $ hSetEcho stdin True
+
+      return key
+
       where getKey' chars = do
               char <- liftIO $ getChar
               more <- liftIO $ hReady stdin
@@ -158,8 +180,8 @@ newREPL filePath = do
 
     try :: InteractionM IO () -> InteractionM IO ()
     try program = do
-      program `catchError` \err ->
-        liftIO $ putStrLn $ show $ pretty err
+      program `catchError` \_ -> return ()
+      -- program `catchError` (liftIO . putStrLn . show . pretty)
 
 -- po = (nu w) c!w .
 --       w?{ PLUS -> w?<x,y> . w!(x + y) . p0; NEG -> w?x . w!(0 - x) . p0 }

@@ -1,0 +1,4 @@
+p0 = x?v . stdout!v+1 . end
+p2 = stdin?v . x!v . end
+
+main = p2 | p0

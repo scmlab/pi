@@ -37,11 +37,10 @@ jsonREPL = do
       case (eitherDecodeStrict raw :: Either String Request) of
         Left err -> response $ ResParseError (RequestParseError (Text.pack err))
         Right req -> case req of
-          ReqErr err -> do
+          ReqParseErr err -> do
             response $ ResParseError err
-          ReqTest -> do
-            state <- get
-            response $ ResTest (show state)
+          ReqOtherErr err -> do
+            response $ ResOtherError err
           ReqLoad (Prog prog) -> do
             load $ map (\(PiDecl name p) -> (name, p)) prog
             gets stateOutcomes >>= response . ResOutcomes
@@ -70,9 +69,8 @@ instance FromJSON Request where
       "load"  -> do
         pst <- obj .: "syntax-tree"
         case parseSyntaxTree pst of
-          Left err      -> return $ ReqErr err
+          Left err      -> return $ ReqParseErr err
           Right program -> return $ ReqLoad program
-      "test"   -> return $ ReqTest
       "choose"   -> do
         i <- obj .: "index"
         return $ ReqChoose i
@@ -96,8 +94,8 @@ instance ToJSON Response where
     [ "response" .= ("parse-error" :: Text)
     , "payload"  .= err
     ]
-  toJSON (ResGenericError err) = object
-    [ "response" .= ("generic-error" :: Text)
+  toJSON (ResOtherError err) = object
+    [ "response" .= ("other-error" :: Text)
     , "payload"  .= err
     ]
 
