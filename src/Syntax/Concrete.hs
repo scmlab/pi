@@ -8,33 +8,33 @@ import Data.Text (Text)
 -- | Concrete Syntax Tree
 
 data Label    ann = Label     Text                                      ann
-                  deriving (Show, Functor)
+                  deriving (Show)
 data Name     ann = Positive  Text                                      ann
                   | Negative  Text                                      ann
                   | Reserved  Text                                      ann
-                  deriving (Show, Functor)
+                  deriving (Show)
 
 data Program  ann = Program   [ProcDecl ann]                            ann
-                  deriving (Show, Functor)
+                  deriving (Show)
 
-data ProcName ann = ProcName  Text                                      ann
-                  deriving (Show, Functor)
-data ProcDecl ann = ProcDecl  (ProcName ann)  (Process ann)             ann
-                  deriving (Show, Functor)
+data SimpName ann = SimpName  Text                                      ann
+                  deriving (Show)
+data ProcDecl ann = ProcDecl  (SimpName ann)  (Process ann)             ann
+                  deriving (Show)
 
-data Process  ann = Send      (Name ann)    (Expr ann)    (Process ann) ann
-                  | Recv      (Name ann)    [Clause ann]                ann
-                  | Nu        (Name ann)    (Process ann)               ann
-                  | Par       (Process ann) (Process ann)               ann
-                  | Call      (Name ann)                                ann
-                  | End                                                 ann
-                  deriving (Show, Functor)
+data Process  ann = Send      (Name ann)     (Expr ann)         (Process ann) ann
+                  | Recv      (Name ann)     [Clause ann]                     ann
+                  | Nu        (SimpName ann) (Maybe (Type ann)) (Process ann) ann
+                  | Par       (Process ann)  (Process ann)                    ann
+                  | Call      (SimpName ann)                                  ann
+                  | End                                                       ann
+                  deriving (Show)
 
-data Pattern  ann = PtrnName  (Name ann)                                ann
+data Pattern  ann = PtrnName  (SimpName ann)                            ann
                   | PtrnLabel (Label ann)                               ann
-                  deriving (Show, Functor)
+                  deriving (Show)
 data Clause   ann = Clause    (Pattern ann) (Process ann)               ann
-                  deriving (Show, Functor)
+                  deriving (Show)
 
 -- Expressions and all that
 data Expr     ann = Mul       (Expr ann) (Expr ann)                     ann
@@ -44,35 +44,19 @@ data Expr     ann = Mul       (Expr ann) (Expr ann)                     ann
                   | ExprDigit Int                                       ann
                   | ExprName  (Name ann)                                ann
                   | ExprLabel (Label ann)                               ann
-                  deriving (Show, Functor)
+                  deriving (Show)
 
-
--- data Label    = Label     Range Text          deriving (Show, Functor)
--- data Name     = Name      Range Text
---               | Reserved  Range Text          deriving (Show, Functor)
---
--- data Program  = Program   Range [ProcDecl]    deriving (Show, Functor)
--- data ProcDecl = ProcDecl  Range Name Process  deriving (Show, Functor)
---
--- data Process  = Send      Range Name Expr Process
---               | Recv      Range Name      [Clause]
---               | Nu        Range Name      Process
---               | Par       Range           Process Process
---               | Call      Range Name
---               | End       Range
---               deriving (Show, Functor)
---
--- data Pattern  = PtrnName  Name
---               | PtrnLabel Label
---               deriving (Show, Functor)
--- data Clause   = Clause    Range Pattern Process        deriving (Show, Functor)
---
--- -- Expressions and all that
--- data Expr     = Mul       Range Expr Expr
---               | Div       Range Expr Expr
---               | Add       Range Expr Expr
---               | Sub       Range Expr Expr
---               | ExprDigit Range Int
---               | ExprName        Name
---               | ExprLabel       Label
---               deriving (Show, Functor)
+-- Session Types
+data Sort ann = SortInt                                                 ann
+              | SortBool                                                ann
+              -- | SortTuple     [Sort ann]                                ann
+              deriving (Show)
+data Type ann = TypeEnd                                                 ann
+              | TypeSend      (Either (Sort ann) (Type ann)) (Type ann) ann
+              | TypeRecv      (Either (Sort ann) (Type ann)) (Type ann) ann
+              | TypeSele      [TypeOfLabel ann]                         ann
+              | TypeChoi      [TypeOfLabel ann]                         ann
+              | TypeCall      (SimpName ann)                            ann
+              deriving (Show)
+data TypeOfLabel ann = TypeOfLabel (Label ann) (Type ann)               ann
+              deriving (Show)

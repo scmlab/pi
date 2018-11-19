@@ -265,31 +265,29 @@ instance FromConcrete (C.ProcDecl ann) PiDecl where
 instance FromConcrete (C.Label ann) Label where
   fromConcrete (C.Label    label _)     = label
 
-instance FromConcrete (C.ProcName ann) Label where
-  fromConcrete (C.ProcName label    _) = label
+instance FromConcrete (C.SimpName ann) RName where
+  fromConcrete (C.SimpName name    _) = name
 
 instance FromConcrete (C.Name ann) Name where
   fromConcrete (C.Positive name     _) = ND (Pos name)
   fromConcrete (C.Negative name     _) = ND (Neg name)
   fromConcrete (C.Reserved "stdin"  _) = NR StdIn
   fromConcrete (C.Reserved "stdout" _) = NR StdOut
-  fromConcrete (C.Reserved "_"      _) = NR StdOut
+  fromConcrete (C.Reserved _        _) = NR StdOut
 
 instance FromConcrete (C.Pattern ann) Ptrn where
-  fromConcrete = undefined -- help!
-{-
-  fromConcrete (C.PtrnName name _) = PN (fromConcrete name)
+  fromConcrete (C.PtrnName name _)   = PN (fromConcrete name)
   fromConcrete (C.PtrnLabel label _) = PL (fromConcrete label)
--}
 
 instance FromConcrete (C.Clause ann) Clause where
   fromConcrete (C.Clause pattern process _) =
     Clause (fromConcrete pattern) (fromConcrete process)
 
 instance FromConcrete (C.Process ann) Pi where
-  fromConcrete (C.Nu name process _) =
-    undefined -- help!
-    -- Nu (fromConcrete name) (fromConcrete process)
+  fromConcrete (C.Nu name Nothing process _) =
+    Nu (fromConcrete name) Nothing (fromConcrete process)
+  fromConcrete (C.Nu name (Just t) process _) =
+    Nu (fromConcrete name) (Just (fromConcrete t)) (fromConcrete process)
   fromConcrete (C.Send name expr process _) =
     Send (fromConcrete name) (fromConcrete expr) (fromConcrete process)
   fromConcrete (C.Recv name clauses _) =
@@ -297,8 +295,7 @@ instance FromConcrete (C.Process ann) Pi where
   fromConcrete (C.Par procA procB _) =
     Par (fromConcrete procA) (fromConcrete procB)
   fromConcrete (C.Call name _) =
-    undefined -- help!
-    -- Call (fromConcrete name)
+    Call (fromConcrete name)
   fromConcrete (C.End _) =
     End
 
@@ -311,3 +308,19 @@ instance FromConcrete (C.Expr ann) Expr where
   fromConcrete (C.ExprDigit x _) = EV (VI x)
   fromConcrete (C.ExprName  x _) = EV (N (fromConcrete x))
   fromConcrete (C.ExprLabel x _) = EV (VL (fromConcrete x))
+
+instance FromConcrete (C.Sort ann) BType where
+  fromConcrete (C.SortInt _)  = TInt
+  fromConcrete (C.SortBool _) = TBool
+
+instance FromConcrete (C.Type ann) SType where
+  fromConcrete (C.TypeEnd _             ) = TEnd
+  fromConcrete (C.TypeSend (Left  s) t _) = TSend (Left (fromConcrete s)) (fromConcrete t)
+  fromConcrete (C.TypeSend (Right s) t _) = TSend (Right (fromConcrete s)) (fromConcrete t)
+  fromConcrete (C.TypeRecv (Left  s) t _) = TRecv (Left (fromConcrete s)) (fromConcrete t)
+  fromConcrete (C.TypeRecv (Right s) t _) = TRecv (Right (fromConcrete s)) (fromConcrete t)
+  fromConcrete (C.TypeSele selections  _) =
+    TSele (map (\(C.TypeOfLabel l t _) -> (fromConcrete l, fromConcrete t)) selections)
+  fromConcrete (C.TypeChoi choices     _) =
+    TChoi (map (\(C.TypeOfLabel l t _) -> (fromConcrete l, fromConcrete t)) choices)
+  fromConcrete (C.TypeCall call        _) = TCall (fromConcrete call)

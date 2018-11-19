@@ -49,6 +49,8 @@ executable:
   - Syntax.Parser.AlexHappy.Lexer
   - Syntax.Parser.AlexHappy.Parser
   - Syntax.Parser.Type
+  - Type
+  - Type.TypeCheck
   - Utilities
   ghc-options:
   - -Wall

@@ -31,8 +31,9 @@ import Data.Text.Encoding (decodeUtf8)
 %wrapper "monadUserState-bytestring"
 
 $digit = 0-9                    -- digits
-$alpha = [a-zA-Z]               -- alphabetic characters
-$capital = [A-Z]               -- capital alphabetic characters
+$alphaSmall = [a-z]                  --
+$alphaMixed = [a-zA-Z]               -- alphabetic characters
+$alphaCap   = [A-Z]                -- capital alphabetic characters
 
 tokens :-
 
@@ -47,6 +48,8 @@ tokens :-
   if                                    { tok          TokenIf }
   then                                  { tok          TokenThen }
   else                                  { tok          TokenElse }
+  Int                                   { tok          TokenSortInt }
+  Bool                                  { tok          TokenSortBool }
   [\=]                                  { tok          TokenDefn }
   [\!]                                  { tok          TokenSend }
   [\?]                                  { tok          TokenRecv }
@@ -63,10 +66,11 @@ tokens :-
   [\}]                                  { tok          TokenBraceEnd }
   [\;]                                  { tok          TokenSemi }
   \-\>                                  { tok          TokenArrow }
+  [\:]                                  { tok          TokenTypeOf }
   $digit+                               { tok_read     TokenInt }
-  $alpha [$alpha $digit \_ \']*         { tok_text     TokenNamePos }
-  \` $alpha [$alpha $digit \_ \']*      { tok_text     TokenNameNeg }
-  $capital [$capital $digit \_ \']*     { tok_text     TokenLabel }
+  $alphaSmall [$alphaMixed $digit \_ \']*         { tok_text     TokenNamePos }
+  \` $alphaSmall [$alphaMixed $digit \_ \']*      { tok_text     TokenNameNeg }
+  $alphaCap [$alphaCap $digit \_ \']*     { tok_text     TokenLabel }
 {
 -- Some action helpers:
 tok' f (p, _, input, _) len = return $ Token p (f (B.take (fromIntegral len) input))
@@ -96,12 +100,15 @@ data TokenClass
   | TokenInt Int
   | TokenSeq
   | TokenPar
+  | TokenSortInt
+  | TokenSortBool
   | TokenParenStart | TokenParenEnd
   | TokenPlus | TokenMinus
   | TokenTrue | TokenFalse
   | TokenIf | TokenThen | TokenElse
   | TokenAngleStart | TokenAngleEnd | TokenComma
   | TokenBraceStart | TokenBraceEnd | TokenSemi | TokenArrow
+  | TokenTypeOf
   | TokenEOF
   deriving (Eq, Show)
 

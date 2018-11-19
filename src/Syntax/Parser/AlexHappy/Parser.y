@@ -37,6 +37,9 @@ import Data.Text (Text)
         '}'             { Token _ TokenBraceEnd }
         ';'             { Token _ TokenSemi }
         '->'            { Token _ TokenArrow }
+        ':'             { Token _ TokenTypeOf }
+        'Int'           { Token _ TokenSortInt }
+        'Bool'          { Token _ TokenSortBool }
 
 %right '|'
 %right '.'
@@ -53,7 +56,7 @@ ProcDecls :: {[ProcDecl Token]}
     | ProcDecls ProcDecl                    { $2:$1 }
 
 ProcDecl :: {ProcDecl Token}
-    : ProcName '=' ProcessPar               {%^ return . ProcDecl $1 $3 }
+    : SimpName '=' ProcessPar               {%^ return . ProcDecl $1 $3 }
 
 -- left recursive
 ProcessPar :: {Process Token}
@@ -61,16 +64,17 @@ ProcessPar :: {Process Token}
     | Process                               { $1 }
 
 Process :: {Process Token}
-    : Name '!' Expr '.' Process             {%^ return . Send $1 $3 $5  }
-    | Name '?' '{' Clauses '}'              {%^ return . Recv $1 (reverse $4)  }
-    | Name '?' ClauseDot                    {%^ return . Recv $1 [$3]  }
-    | 'end'                                 {%^ return . End }
-    | '(' 'nu' Name ')' Process             {%^ return . Nu $3 $5 }
-    | Name                                  {%^ return . Call $1 }
-    | '(' ProcessPar ')'                    { $2 }
+    : Name '!' Expr '.' Process               {%^ return . Send $1 $3 $5  }
+    | Name '?' '{' Clauses '}'                {%^ return . Recv $1 (reverse $4)  }
+    | Name '?' ClauseDot                      {%^ return . Recv $1 [$3]  }
+    | 'end'                                   {%^ return . End }
+    | '(' 'nu' SimpName ')' Process           {%^ return . Nu $3 Nothing $5 }
+    | '(' 'nu' SimpName ':' Type ')' Process  {%^ return . Nu $3 (Just $5) $7 }
+    | SimpName                                {%^ return . Call $1 }
+    | '(' ProcessPar ')'                      { $2 }
 
 Pattern :: {Pattern Token}
-         : Name                             {%^ return . PtrnName $1 }
+         : SimpName                         {%^ return . PtrnName $1 }
          | Label                            {%^ return . PtrnLabel $1 }
 
 ClauseDot :: {Clause Token}
@@ -81,8 +85,8 @@ Clauses :: {[Clause Token]}
         : Clauses ';' ClauseArr             { $3 : $1 }
         | ClauseArr                         { [ $1 ] }
 
-ProcName :: {ProcName Token}
-      : namePos                             {%^ return . ProcName $1 }
+SimpName :: {SimpName Token}
+      : namePos                             {%^ return . SimpName $1 }
 
 Name :: {Name Token}
       : namePos                             {%^ return . Positive $1 }
@@ -103,5 +107,25 @@ Expr :: {Expr Token}
 
 Label :: {Label Token}
     : label                                 {%^ return . Label $1 }
+
+Sort :: {Sort Token}
+    : 'Int'                                 {%^ return . SortInt }
+    | 'Bool'                                {%^ return . SortBool }
+Type :: {Type Token}
+    : '!' Sort '.' Type                     {%^ return . TypeSend (Left  $2) $4 }
+    | '!' Type '.' Type                     {%^ return . TypeSend (Right $2) $4 }
+    | '?' Sort '.' Type                     {%^ return . TypeRecv (Left  $2) $4 }
+    | '?' Type '.' Type                     {%^ return . TypeRecv (Right $2) $4 }
+    | '!' '{' TypeOfLabels '}'              {%^ return . TypeSele (reverse $3)  }
+    | '?' '{' TypeOfLabels '}'              {%^ return . TypeChoi (reverse $3)  }
+    | SimpName                              {%^ return . TypeCall $1            }
+    | 'end'                                 {%^ return . TypeEnd                }
+
+TypeOfLabel :: {TypeOfLabel Token}
+    : Label ':' Type                        {%^ return . TypeOfLabel $1 $3  }
+
+TypeOfLabels :: {[TypeOfLabel Token]}
+    : TypeOfLabels ';' TypeOfLabel          { $3 : $1 }
+    | TypeOfLabel                           { [ $1 ]  }
 
 {}

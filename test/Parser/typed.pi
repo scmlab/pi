@@ -1,0 +1,4 @@
+
+p0 = (nu w : !int . ?Int . end) x!3 . x?v . end
+
+main = p0
