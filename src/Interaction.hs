@@ -5,9 +5,10 @@ module Interaction where
 import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import Data.Text.Prettyprint.Doc
+import qualified Data.ByteString.Lazy as BS
 
 import Syntax.Abstract
-import Syntax.Parser (ParseError(..))
+import Syntax.Parser (ParseError(..), parseByteString)
 import Interpreter
 
 
@@ -78,31 +79,21 @@ withCursor f = do
     Nothing -> throwError "no outcomes to choose from"
     Just n -> f n
 
--- appoint the nth possible outcome (unsafe)
-appointUnsafe :: Monad m => Int -> InteractionM m ()
-appointUnsafe n = modify (\state -> state { stCursor = Just n })
-
-appoint :: Monad m => Int -> InteractionM m ()
-appoint n = do
+choose :: Monad m => Int -> InteractionM m ()
+choose n = do
   len <- length <$> gets stOutcomes
   if (n >= len || n < 0) then
     throwError "out of bound"
   else do
-    appointUnsafe n
+    modify (\state -> state { stCursor = Just n })
 
 -- retrieve the current appointed outcome
-retrieveOutcome :: Monad m => InteractionM m Outcome
-retrieveOutcome = do
+currentOutcome :: Monad m => InteractionM m Outcome
+currentOutcome = do
   withCursor $ \n -> (!! n) <$> gets stOutcomes
 
 currentState :: Monad m => InteractionM m St
 currentState = gets stState
-
--- retrieve the nth outcome (and updates the cursor)
-retrieveNthOutcome :: Monad m => Int -> InteractionM m Outcome
-retrieveNthOutcome n = do
-  appoint n
-  retrieveOutcome
 
 --------------------------------------------------------------------------------
 -- | helper functions
@@ -113,30 +104,38 @@ toState (Failure err) = throwError err
 --------------------------------------------------------------------------------
 -- | Commands
 
--- ReqLoad
-load :: Monad m => FilePath -> Env -> InteractionM m ()
-load filePath env = do
-  let results = runPiMonad env 0 $ lineup [Call (NS "main")] (St [] [] [] [])
-  case length results of
-    0 -> throwError "failed to load the program"
-    n -> case (head results) of
-      Left err -> throwError err
-      Right (state, bk) -> put $ State
-        { stFilePath = Just filePath
-        , stEnv      = env
-        , stState    = state
-        , stOutcomes = [Success state Silent bk]
-        , stCursor   = Just 0
-        }
+load :: (MonadIO m, Monad m) => FilePath -> InteractionM m ()
+load filePath = do
+  rawFile <- liftIO $ BS.readFile filePath
+  case parseByteString rawFile of
+    Left err          -> (throwError . show) err
+    Right (Prog prog) -> do
+      let env = map (\(PiDecl name p) -> (name, p)) prog
+      let results = runPiMonad env 0 $ lineup [Call (NS "main")] (St [] [] [] [])
+      case length results of
+        0 -> throwError "failed to load the program"
+        _ -> case (head results) of
+          Left err -> throwError err
+          Right (state, bk) -> put $ State
+            { stFilePath = Just filePath
+            , stEnv      = env
+            , stState    = state
+            , stOutcomes = [Success state Silent bk]
+            , stCursor   = Just 0
+            }
 
--- ReqChoose: choose the nth outcome
-choose :: Monad m => Int -> InteractionM m ()
-choose = appoint
+-- read and parse and store program from the stored filepath
+reload :: (MonadIO m, Monad m) => InteractionM m ()
+reload = do
+  result <- gets stFilePath
+  case result of
+    Nothing -> throwError "please load the program first"
+    Just filePath -> load filePath
 
--- ReqRun: run the appointed outcome
+-- run the appointed outcome
 run :: Monad m => InteractionM m ()
 run = do
-  outcome <- retrieveOutcome
+  outcome <- currentOutcome
   case outcome of
     Failure err -> do
       update $ [Failure err]
@@ -153,10 +152,10 @@ run = do
       -- error . show . pretty $ interpret defs i (step state)
       update $ interpret defs i (step state)
 
--- ReqFeed: feed the appointed outcome with something
+-- feed the appointed outcome with something
 feed :: Monad m => Val -> InteractionM m ()
 feed val = do
-  outcome <- retrieveOutcome
+  outcome <- currentOutcome
   case outcome of
     Success state (Input pps) i -> do
       defs <- gets stEnv

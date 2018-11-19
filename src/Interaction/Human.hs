@@ -5,7 +5,6 @@ module Interaction.Human where
 import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import Data.List (isPrefixOf)
-import qualified Data.ByteString.Lazy as BS
 -- import qualified Data.Text as Text
 import Data.Text.Prettyprint.Doc (pretty)
 import System.Console.Haskeline
@@ -14,9 +13,6 @@ import Data.Char (isSpace)
 import Data.List (dropWhileEnd)
 
 import Interaction
--- import Interpreter (Reaction(..))
-import Syntax.Abstract
-import Syntax.Parser (parseByteString)
 import Prelude hiding (readFile)
 
 --------------------------------------------------------------------------------
@@ -27,7 +23,7 @@ humanREPL [] = void $ runInteraction $ do
   displayHelp
   loop
 humanREPL (filePath:_) = void $ runInteraction $ do
-  handleRequest (Load filePath)
+  handleRequest (Load (trim filePath))
   loop
 
 displayHelp :: InteractionM IO ()
@@ -54,47 +50,45 @@ printStatusBar = do
 
 try :: InteractionM IO () -> InteractionM IO ()
 try program = do
-  program `catchError` \_ -> return ()
-  -- program `catchError` (liftIO . putStrLn . show . pretty)
+  program `catchError` (liftIO . putStrLn . (++) "\r" . show . pretty)
 
 handleRequest :: Request -> InteractionM IO ()
 handleRequest (CursorMoveTo n)  = do
-    try $ choose n
+  try $ choose n
 
-    outcome <- retrieveOutcome
-    liftIO $ putStrLn $ show $ pretty outcome
-    printStatusBar
+  outcome <- currentOutcome
+  liftIO $ putStrLn $ show $ pretty outcome
+  printStatusBar
 handleRequest CursorUp          = withCursor $ \n -> do
-    try $ choose (n - 1)
+  try $ choose (n - 1)
 
-    outcome <- retrieveOutcome
-    liftIO $ putStrLn $ show $ pretty outcome
-    printStatusBar
+  outcome <- currentOutcome
+  liftIO $ putStrLn $ show $ pretty outcome
+  printStatusBar
 handleRequest CursorDown        = withCursor $ \n -> do
-    try $ choose (n + 1)
+  try $ choose (n + 1)
 
-    outcome <- retrieveOutcome
-    liftIO $ putStrLn $ show $ pretty outcome
-    printStatusBar
+  outcome <- currentOutcome
+  liftIO $ putStrLn $ show $ pretty outcome
+  printStatusBar
 
 handleRequest CursorNext        = do
   try run
-  -- currentState >>= liftIO . putStrLn . show . pretty
-  retrieveOutcome >>= liftIO . putStrLn . show . pretty
+  currentOutcome >>= liftIO . putStrLn . show . pretty
+  printStatusBar
+handleRequest (Load filePath)   = do
+  load filePath
+
+  currentState >>= liftIO . putStrLn . show . pretty
+  currentOutcome >>= liftIO . putStrLn . show . pretty
+  printStatusBar
+handleRequest Reload            = do
+  reload
+  currentState >>= liftIO . putStrLn . show . pretty
+  currentOutcome >>= liftIO . putStrLn . show . pretty
   printStatusBar
 handleRequest Help              = displayHelp
-handleRequest (Load filePath)   = do
-  rawFile <- liftIO $ BS.readFile filePath
-  case parseByteString rawFile of
-    Left err   -> (liftIO . putStrLn . show) err
-    Right (Prog prog) -> do
-      load filePath $ map (\(PiDecl name p) -> (name, p)) prog
-      -- choose the first outcome and print its state
-      state <- retrieveNthOutcome 0 >>= toState
-      -- liftIO $ putStrLn $ show (length outcomes) ++ " possible outcomes"
-      liftIO $ putStrLn $ show $ pretty state
-      printStatusBar
-handleRequest _                 = displayHelp
+handleRequest CursorPrev        = displayHelp
 
 --------------------------------------------------------------------------------
 -- | Parsing human input
@@ -103,7 +97,7 @@ parseRequest :: String -> Request
 parseRequest key
   | "l "    `isPrefixOf` key = (Load . drop 2 . trim) key
   | "load " `isPrefixOf` key = (Load . drop 5 . trim) key
-  | otherwise = case key of
+  | otherwise = case trim key of
       "\ESC[A"  -> CursorUp
       "\ESC[B"  -> CursorDown
       "\ESC[C"  -> CursorNext
@@ -112,10 +106,10 @@ parseRequest key
       "help"    -> Help
       "r"       -> Reload
       "reload"  -> Reload
-      _         -> error key
-  where
-    trim :: String -> String
-    trim = dropWhileEnd isSpace . dropWhile isSpace
+      _         -> Help
+
+trim :: String -> String
+trim = dropWhileEnd isSpace . dropWhile isSpace
 
 getKey :: IO String
 getKey = do
