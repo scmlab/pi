@@ -59,6 +59,8 @@ humanREPL = runInputT defaultSettings $ do
             ReqOtherErr err -> do
               liftH $ outputStrLn (show err)
               loop
+            ReqNoOp -> do
+              loop
         where
           parseRequest :: String -> InteractionM (InputT IO) Request
           parseRequest s
@@ -82,21 +84,26 @@ humanREPL = runInputT defaultSettings $ do
               liftH $ outputStrLn err
 
 
-data Key = Up | Down | Next | Other String
+data Key = Up | Down | Next | Help | Other String
 
 newREPL :: FilePath -> IO ()
-newREPL filePath = do
+newREPL filePath = void $ runInteraction $ do
+  displayHelp
+  -- read file
+  parseFile filePath >>= handleRequest
 
-  -- start looping
-  void $ runInteraction $ do
-    -- read file
-    parseFile filePath >>= handleRequest
-
-    loop
+  loop
   where
+    displayHelp :: InteractionM IO ()
+    displayHelp = liftIO $ do
+      putStrLn "========================================"
+      putStrLn "  \":help\" or \":h\" for this help message"
+      putStrLn "  press arrow keys or enter to navigate"
+      putStrLn "========================================"
+
     loop :: InteractionM IO ()
     loop = do
-      getKey >>= keyToRequst . parseKey >>= handleRequest
+      liftIO getKey >>= keyToRequst . parseKey >>= handleRequest
       loop
 
     parseKey :: String -> Key
@@ -106,10 +113,12 @@ newREPL filePath = do
       "\ESC[C" -> Next
       -- "\ESC[D" -> return $ ResParseError $ RequestParseError "←"
       "\n"     -> Next
-      -- "\DEL"   -> return $ ResParseError $ RequestParseError "⎋"
+      ":h"     -> Help
+      ":help"  -> Help
       _        -> Other key
 
     keyToRequst :: Key -> InteractionM IO Request
+    keyToRequst Help = displayHelp >> return ReqNoOp
     keyToRequst Up   = withCursor (return . ReqChoose . (flip (-) 1))
     keyToRequst Down = withCursor (return . ReqChoose . (flip (+) 1))
     keyToRequst Next = do
@@ -123,6 +132,7 @@ newREPL filePath = do
     keyToRequst (Other key) = return $ ReqParseErr $ RequestParseError (Text.pack key)
 
     handleRequest :: Request -> InteractionM IO ()
+    handleRequest ReqNoOp = return ()
     handleRequest (ReqChoose n) = try $ do
       choose n
       outcome <- retrieveOutcome
@@ -159,24 +169,61 @@ newREPL filePath = do
         Left err   -> return $ ReqParseErr err
         Right prog -> return $ ReqLoad prog
 
-    getKey :: InteractionM IO String
+    getKey :: IO String
     getKey = do
-      liftIO $ hSetBuffering stdin NoBuffering
-      liftIO $ hSetEcho stdin False
+      controlStdin
 
-      key <- reverse <$> getKey' ""
+      firstChar <- getChar
+      key <- case firstChar of
+        ':' -> do
+          result <- emulateStdin ":"
+          case result of
+            Just input -> return (reverse input)
+            Nothing    -> getKey
+        _ -> reverse <$> interceptStdin ""
 
-      liftIO $ hSetBuffering stdin LineBuffering
-      liftIO $ hSetEcho stdin True
-
+      restoreStdin
       return key
 
-      where getKey' chars = do
-              char <- liftIO $ getChar
-              more <- liftIO $ hReady stdin
-              if more
-                then getKey' (char:chars)
-                else return  (char:chars)
+      where
+        controlStdin :: IO ()
+        controlStdin = do
+          hSetBuffering stdin NoBuffering
+          hSetEcho      stdin False
+
+        restoreStdin :: IO ()
+        restoreStdin = do
+          hSetBuffering stdin LineBuffering
+          hSetEcho      stdin True
+
+        interceptStdin :: String -> IO String
+        interceptStdin buffer = do
+          char <- getChar
+          more <- hReady stdin
+          if more
+            then interceptStdin (char:buffer)
+            else return         (char:buffer)
+
+        emulateStdin :: String -> IO (Maybe String)
+        emulateStdin buffer = do
+          -- clear the line and display the current buffer
+          putStr ('\r' : reverse buffer)
+          hFlush stdout
+          char <- getChar
+          case char of
+            '\n'   -> do
+              putStr "\n"
+              return $ Just buffer
+            '\DEL' -> if buffer == ":"
+              then do
+                putStr "\r \r"
+                hFlush stdout
+                return Nothing
+              else do
+                putStr ('\r' : reverse (' ' : init buffer))
+                emulateStdin (tail buffer)
+            _      ->
+              emulateStdin (char:buffer)
 
     try :: InteractionM IO () -> InteractionM IO ()
     try program = do

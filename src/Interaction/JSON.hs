@@ -37,6 +37,8 @@ jsonREPL = do
       case (eitherDecodeStrict raw :: Either String Request) of
         Left err -> response $ ResParseError (RequestParseError (Text.pack err))
         Right req -> case req of
+          ReqNoOp -> do
+            response $ ResNoOp
           ReqParseErr err -> do
             response $ ResParseError err
           ReqOtherErr err -> do

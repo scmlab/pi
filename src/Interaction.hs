@@ -35,6 +35,7 @@ data Request
   | ReqFeed Val             -- feed the appointed outcome with something
   | ReqParseErr ParseError  -- error raised when parsing this request
   | ReqOtherErr String      -- misc error
+  | ReqNoOp
   deriving (Show)
 
 data Response
@@ -42,6 +43,7 @@ data Response
   | ResTest         String
   | ResParseError   ParseError
   | ResOtherError String
+  | ResNoOp
   -- deriving (Show)
 
 --------------------------------------------------------------------------------
