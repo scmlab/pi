@@ -38,7 +38,6 @@ executable:
   source-dirs:         src
   other-modules:
   - Interaction.Human
-  - Interaction.JSON
   - Interaction
   - Interpreter
   - Interpreter.Monad

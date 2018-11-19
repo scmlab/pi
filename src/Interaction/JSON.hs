@@ -1,187 +1,191 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Interaction.JSON where
-
-import Control.Monad.State hiding (State, state)
-import Control.Monad.Except
-import Data.Aeson hiding (Success)
-import Data.Text (Text)
-import qualified Data.Text as Text
-import Data.ByteString.Char8 (getLine, putStrLn, pack)
-import Data.ByteString.Lazy.Char8 (toStrict)
-import Prelude hiding (getLine, putStrLn)
-
-import Data.Text.Prettyprint.Doc (pretty)
-
-import Interaction
-import Interpreter
-import Syntax.Abstract
-import Syntax.Parser (parseSyntaxTree)
-import Syntax.Parser.Type
-
---------------------------------------------------------------------------------
--- | Interfacing with Machines
-
-jsonREPL :: IO ()
-jsonREPL = do
-  (_, _) <- runInteraction loop
-  return ()
-
-  where
-    response :: ToJSON a => a -> InteractionM IO ()
-    response = liftIO . putStrLn . toStrict . encode
-
-    loop :: InteractionM IO ()
-    loop = do
-      raw <- liftIO getLine
-      case (eitherDecodeStrict raw :: Either String Request) of
-        Left err -> response $ ResParseError (RequestParseError (Text.pack err))
-        Right req -> case req of
-          ReqNoOp -> do
-            response $ ResNoOp
-          ReqParseErr err -> do
-            response $ ResParseError err
-          ReqOtherErr err -> do
-            response $ ResOtherError err
-          ReqLoad (Prog prog) -> do
-            load $ map (\(PiDecl name p) -> (name, p)) prog
-            gets stateOutcomes >>= response . ResOutcomes
-          ReqChoose i -> do
-            try (choose i)
-            gets stateOutcomes >>= response . ResOutcomes
-          ReqRun -> do
-            try run
-            gets stateOutcomes >>= response . ResOutcomes
-          ReqFeed _ -> do
-            try run
-            gets stateOutcomes >>= response . ResOutcomes
-      loop
-
-    try :: InteractionM IO () -> InteractionM IO ()
-    try program = do
-      program `catchError` (liftIO . putStrLn . pack . show)
-
---------------------------------------------------------------------------------
--- | Encoding & Decoding JSON
-
-instance FromJSON Request where
-  parseJSON = withObject "Request" $ \obj -> do
-    kind <- obj .: "request"
-    case (kind :: Text) of
-      "load"  -> do
-        pst <- obj .: "syntax-tree"
-        case parseSyntaxTree pst of
-          Left err      -> return $ ReqParseErr err
-          Right program -> return $ ReqLoad program
-      "choose"   -> do
-        i <- obj .: "index"
-        return $ ReqChoose i
-      "run"   -> do
-        return $ ReqRun
-      "feed"  -> do
-        v <- obj .: "value"
-        return $ ReqFeed (VI v)
-      _       -> fail "unknown kind"
-
-instance ToJSON Response where
-  toJSON (ResOutcomes outcomes) = object
-    [ "response" .= ("outcomes" :: Text)
-    , "payload"  .= outcomes
-    ]
-  toJSON (ResTest payload) = object
-    [ "response" .= ("test" :: Text)
-    , "payload"  .= payload
-    ]
-  toJSON (ResParseError err) = object
-    [ "response" .= ("parse-error" :: Text)
-    , "payload"  .= err
-    ]
-  toJSON (ResOtherError err) = object
-    [ "response" .= ("other-error" :: Text)
-    , "payload"  .= err
-    ]
-
-instance ToJSON ParseError where
-  toJSON (HaskellParseError _ _ _) = object
-    [
-    ]
-  toJSON (TreeSitterParseError range expected got) = object
-    [ "range"     .= show range
-    , "expected"  .= expected
-    , "got"       .= got
-    ]
-  toJSON (RequestParseError _) = object
-    [
-    ]
-
-instance ToJSON Outcome where
-  toJSON (Failure msg) = object
-    [ "outcome"   .= ("failure" :: Text)
-    , "message"   .= msg
-    ]
-  toJSON (Success state reaction _) = object
-    [ "outcome"   .= ("success" :: Text)
-    , "state"     .= state
-    , "reaction"  .= reaction
-    ]
-
-instance ToJSON Reaction where
-  toJSON Silent = object
-    [ "kind"  .= ("silent" :: Text)
-    -- , "state" .= state
-    ]
-  toJSON (React channel sender receiver products) = object
-    [ "kind"      .= ("react" :: Text)
-    -- , "state"     .= state
-    , "channel"   .= channel
-    , "sender"    .= sender
-    , "receiver"  .= receiver
-    , "products"  .= products
-    ]
-  toJSON (Output sender) = object
-    [ "kind"      .= ("output" :: Text)
-    -- , "state"     .= state
-    , "sender"    .= sender
-    ]
-  toJSON (Input receiver) = object
-    [ "kind"      .= ("input" :: Text)
-    -- , "state"     .= state
-    , "receiver"  .= receiver
-    ]
-
-instance ToJSON St where
-  toJSON (St senders receivers blocked _) = object
-    [ "senders"     .= senders
-    , "receivers"   .= receivers
-    , "blocked"     .= blocked
-    ]
-
-instance ToJSON Name where
-  toJSON = toJSON . show . pretty
-
-instance ToJSON Val where
-  toJSON = toJSON . show . pretty
-
-instance ToJSON Pi where
-  toJSON = toJSON . show . pretty
-
-instance ToJSON Ptrn where
-  toJSON = toJSON . show . pretty
-
-instance ToJSON Sender where
-  toJSON (Sender value process) = object
-    [ "value"     .= value
-    , "process"   .= process
-    ]
-
-instance ToJSON Receiver where
-  toJSON (Receiver clauses) = toJSON clauses
-
-instance ToJSON Clause where
-  toJSON (Clause pattern process) = object
-    [ "pattern"   .= pattern
-    , "process"   .= process
-    ]
-
+--
+-- import Control.Monad.State hiding (State, state)
+-- import Control.Monad.Except
+-- import Data.Aeson hiding (Success)
+-- import Data.Text (Text)
+-- import qualified Data.Text as Text
+-- import Data.ByteString.Char8 (getLine, putStrLn, pack)
+-- import Data.ByteString.Lazy.Char8 (toStrict)
+-- import Prelude hiding (getLine, putStrLn)
+--
+-- import Data.Text.Prettyprint.Doc (pretty)
+--
+-- import Interaction
+-- import Interpreter
+-- import Syntax.Abstract
+-- import Syntax.Parser (parseSyntaxTree)
+-- import Syntax.Parser.Type
+--
+-- --------------------------------------------------------------------------------
+-- -- | Interfacing with Machines
+--
+-- jsonREPL :: IO ()
+-- jsonREPL = do
+--   (_, _) <- runInteraction loop
+--   return ()
+--
+--   where
+--     response :: ToJSON a => a -> InteractionM IO ()
+--     response = liftIO . putStrLn . toStrict . encode
+--
+--     loop :: InteractionM IO ()
+--     loop = do
+--       raw <- liftIO getLine
+--       case (eitherDecodeStrict raw :: Either String Request) of
+--         Left err -> response $ ResParseError (RequestParseError (Text.pack err))
+--         Right req -> case req of
+--           ReqNoOp -> do
+--             response $ ResNoOp
+--           ReqParseErr err -> do
+--             response $ ResParseError err
+--           ReqOtherErr err -> do
+--             response $ ResOtherError err
+--           ReqLoad filePath (Prog prog) -> do
+--             load filePath $ map (\(PiDecl name p) -> (name, p)) prog
+--             gets stOutcomes >>= response . ResOutcomes
+--           ReqChoose i -> do
+--             try (choose i)
+--             gets stOutcomes >>= response . ResOutcomes
+--           ReqRun -> do
+--             try run
+--             gets stOutcomes >>= response . ResOutcomes
+--           ReqFeed _ -> do
+--             try run
+--             gets stOutcomes >>= response . ResOutcomes
+--       loop
+--
+--     try :: InteractionM IO () -> InteractionM IO ()
+--     try program = do
+--       program `catchError` (liftIO . putStrLn . pack . show)
+--
+-- --------------------------------------------------------------------------------
+-- -- | Encoding & Decoding JSON
+--
+-- instance FromJSON Request where
+--   parseJSON = withObject "Request" $ \obj -> do
+--     kind <- obj .: "request"
+--     case (kind :: Text) of
+--       "load"  -> do
+--         pst <- obj .: "syntax-tree"
+--         filePath <- obj .: "filepath"
+--         case parseSyntaxTree pst of
+--           Left err      -> return $ ReqParseErr err
+--           Right program -> return $ ReqLoad filePath program
+--       "choose"   -> do
+--         i <- obj .: "index"
+--         return $ ReqChoose i
+--       "run"   -> do
+--         return $ ReqRun
+--       "feed"  -> do
+--         v <- obj .: "value"
+--         return $ ReqFeed (VI v)
+--       _       -> fail "unknown kind"
+--
+-- instance ToJSON Response where
+--   toJSON (ResOutcomes outcomes) = object
+--     [ "response" .= ("outcomes" :: Text)
+--     , "payload"  .= outcomes
+--     ]
+--   toJSON (ResTest payload) = object
+--     [ "response" .= ("test" :: Text)
+--     , "payload"  .= payload
+--     ]
+--   toJSON (ResParseError err) = object
+--     [ "response" .= ("parse-error" :: Text)
+--     , "payload"  .= err
+--     ]
+--   toJSON (ResOtherError err) = object
+--     [ "response" .= ("other-error" :: Text)
+--     , "payload"  .= err
+--     ]
+--   toJSON ResNoOp = object
+--     [ "response" .= ("no-op" :: Text)
+--     ]
+--
+-- instance ToJSON ParseError where
+--   toJSON (HaskellParseError _ _ _) = object
+--     [
+--     ]
+--   toJSON (TreeSitterParseError range expected got) = object
+--     [ "range"     .= show range
+--     , "expected"  .= expected
+--     , "got"       .= got
+--     ]
+--   toJSON (RequestParseError _) = object
+--     [
+--     ]
+--
+-- instance ToJSON Outcome where
+--   toJSON (Failure msg) = object
+--     [ "outcome"   .= ("failure" :: Text)
+--     , "message"   .= msg
+--     ]
+--   toJSON (Success state reaction _) = object
+--     [ "outcome"   .= ("success" :: Text)
+--     , "state"     .= state
+--     , "reaction"  .= reaction
+--     ]
+--
+-- instance ToJSON Reaction where
+--   toJSON Silent = object
+--     [ "kind"  .= ("silent" :: Text)
+--     -- , "state" .= state
+--     ]
+--   toJSON (React channel sender receiver products) = object
+--     [ "kind"      .= ("react" :: Text)
+--     -- , "state"     .= state
+--     , "channel"   .= channel
+--     , "sender"    .= sender
+--     , "receiver"  .= receiver
+--     , "products"  .= products
+--     ]
+--   toJSON (Output sender) = object
+--     [ "kind"      .= ("output" :: Text)
+--     -- , "state"     .= state
+--     , "sender"    .= sender
+--     ]
+--   toJSON (Input receiver) = object
+--     [ "kind"      .= ("input" :: Text)
+--     -- , "state"     .= state
+--     , "receiver"  .= receiver
+--     ]
+--
+-- instance ToJSON St where
+--   toJSON (St senders receivers blocked _) = object
+--     [ "senders"     .= senders
+--     , "receivers"   .= receivers
+--     , "blocked"     .= blocked
+--     ]
+--
+-- instance ToJSON Name where
+--   toJSON = toJSON . show . pretty
+--
 -- instance ToJSON Val where
---   toJSON
+--   toJSON = toJSON . show . pretty
+--
+-- instance ToJSON Pi where
+--   toJSON = toJSON . show . pretty
+--
+-- instance ToJSON Ptrn where
+--   toJSON = toJSON . show . pretty
+--
+-- instance ToJSON Sender where
+--   toJSON (Sender value process) = object
+--     [ "value"     .= value
+--     , "process"   .= process
+--     ]
+--
+-- instance ToJSON Receiver where
+--   toJSON (Receiver clauses) = toJSON clauses
+--
+-- instance ToJSON Clause where
+--   toJSON (Clause pattern process) = object
+--     [ "pattern"   .= pattern
+--     , "process"   .= process
+--     ]
+--
+-- -- instance ToJSON Val where
+-- --   toJSON

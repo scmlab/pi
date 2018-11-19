@@ -2,7 +2,7 @@
 
 module Interaction where
 
-import Control.Monad.State
+import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import Data.Text.Prettyprint.Doc
 
@@ -20,22 +20,23 @@ instance Pretty Outcome where
   pretty (Success _ reaction _) = pretty reaction
 
 data InteractionState = State
-  { stateEnv      :: Env        -- source code
-  , stateState    :: St         -- current state
-  , stateOutcomes :: [Outcome]  -- next possible outcomes
-  , stateCursor   :: Maybe Int        -- pointing at which outcome
+  { stFilePath :: Maybe String  -- loaded filepath
+  , stEnv      :: Env           -- source code
+  , stState    :: St            -- current state
+  , stOutcomes :: [Outcome]     -- next possible outcomes
+  , stCursor   :: Maybe Int     -- pointing at which outcome
   } deriving (Show)
+
 type Error = String
 type InteractionM m = ExceptT Error (StateT InteractionState m)
 
 data Request
-  = ReqLoad Prog            -- load the program into the env
-  | ReqChoose Int           -- choose the nth outcome
-  | ReqRun                  -- run the appointed outcome
-  | ReqFeed Val             -- feed the appointed outcome with something
-  | ReqParseErr ParseError  -- error raised when parsing this request
-  | ReqOtherErr String      -- misc error
-  | ReqNoOp
+  = CursorMoveTo Int
+  | CursorUp | CursorDown
+  | CursorNext | CursorPrev
+  | Help
+  | Load String
+  | Reload
   deriving (Show)
 
 data Response
@@ -51,7 +52,7 @@ data Response
 
 runInteraction :: Monad m => InteractionM m a -> m (Either Error a, InteractionState)
 runInteraction handler =
-  runStateT (runExceptT handler) (State [] (St [] [] [] []) initialOutcomes Nothing)
+  runStateT (runExceptT handler) (State Nothing [] (St [] [] [] []) initialOutcomes Nothing)
   where initialOutcomes = [Failure "please load first"]
 
 interpret :: Env -> BkSt -> PiMonad (St, Reaction) -> [Outcome]
@@ -63,8 +64,8 @@ interpret env i program = map toOutcome (runPiMonad env i program)
 
 update :: Monad m => [Outcome] -> InteractionM m ()
 update outcomes = modify $ \state -> state
-  { stateOutcomes = outcomes
-  , stateCursor = if null outcomes then Nothing else Just 0
+  { stOutcomes = outcomes
+  , stCursor = if null outcomes then Nothing else Just 0
   }
 
 --------------------------------------------------------------------------------
@@ -72,46 +73,30 @@ update outcomes = modify $ \state -> state
 
 withCursor :: Monad m => (Int -> InteractionM m a) -> InteractionM m a
 withCursor f = do
-  cursor <- gets stateCursor
+  cursor <- gets stCursor
   case cursor of
     Nothing -> throwError "no outcomes to choose from"
     Just n -> f n
 
 -- appoint the nth possible outcome (unsafe)
 appointUnsafe :: Monad m => Int -> InteractionM m ()
-appointUnsafe n = modify (\state -> state { stateCursor = Just n })
+appointUnsafe n = modify (\state -> state { stCursor = Just n })
 
 appoint :: Monad m => Int -> InteractionM m ()
 appoint n = do
-  len <- length <$> gets stateOutcomes
+  len <- length <$> gets stOutcomes
   if (n >= len || n < 0) then
     throwError "out of bound"
   else do
     appointUnsafe n
 
--- -- move the cursor up and down (safe)
--- next :: Monad m => InteractionM m Int
--- next = do
---   len <- length <$> gets stateOutcomes
---   withCursor $ \n ->
---     if (n + 1 < len)
---       then appointUnsafe (n + 1) >> return (n + 1)
---       else                          return n
---
--- prev :: Monad m => InteractionM m Int
--- prev = do
---   withCursor $ \n ->
---     if (n > 0)
---       then appointUnsafe (n - 1) >> return (n - 1)
---       else                          return n
-
 -- retrieve the current appointed outcome
 retrieveOutcome :: Monad m => InteractionM m Outcome
 retrieveOutcome = do
-  withCursor $ \n -> (!! n) <$> gets stateOutcomes
+  withCursor $ \n -> (!! n) <$> gets stOutcomes
 
 currentState :: Monad m => InteractionM m St
-currentState = gets stateState
+currentState = gets stState
 
 -- retrieve the nth outcome (and updates the cursor)
 retrieveNthOutcome :: Monad m => Int -> InteractionM m Outcome
@@ -129,18 +114,19 @@ toState (Failure err) = throwError err
 -- | Commands
 
 -- ReqLoad
-load :: Monad m => Env -> InteractionM m ()
-load env = do
+load :: Monad m => FilePath -> Env -> InteractionM m ()
+load filePath env = do
   let results = runPiMonad env 0 $ lineup [Call (NS "main")] (St [] [] [] [])
   case length results of
     0 -> throwError "failed to load the program"
     n -> case (head results) of
       Left err -> throwError err
       Right (state, bk) -> put $ State
-        { stateEnv      = env
-        , stateState    = state
-        , stateOutcomes = [Success state Silent bk]
-        , stateCursor   = Just 0
+        { stFilePath = Just filePath
+        , stEnv      = env
+        , stState    = state
+        , stOutcomes = [Success state Silent bk]
+        , stCursor   = Just 0
         }
 
 -- ReqChoose: choose the nth outcome
@@ -155,15 +141,15 @@ run = do
     Failure err -> do
       update $ [Failure err]
     Success state (Output (Sender _ p)) i -> do
-      defs <- gets stateEnv
+      defs <- gets stEnv
       update $ interpret defs i $ lineup [p] state >>= step
     Success state (React _ _ _ _) i -> do
-      defs <- gets stateEnv
+      defs <- gets stEnv
       update $ interpret defs i (step state)
     Success state (Input pps) i -> do
       update $ [Success state (Input pps) i]
     Success state Silent i -> do
-      defs <- gets stateEnv
+      defs <- gets stEnv
       -- error . show . pretty $ interpret defs i (step state)
       update $ interpret defs i (step state)
 
@@ -173,7 +159,7 @@ feed val = do
   outcome <- retrieveOutcome
   case outcome of
     Success state (Input pps) i -> do
-      defs <- gets stateEnv
+      defs <- gets stEnv
       update $ interpret defs i $ do
         state' <- input val pps state
         return (state', Silent)
