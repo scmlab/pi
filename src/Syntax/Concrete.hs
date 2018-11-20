@@ -31,13 +31,15 @@ data Process  ann = Send      (Name ann)     (Expr ann)         (Process ann) an
                   deriving (Show)
 
 data Pattern  ann = PtrnName  (SimpName ann)                            ann
+                  | PtrnTuple [Pattern ann]                             ann
                   | PtrnLabel (Label ann)                               ann
                   deriving (Show)
 data Clause   ann = Clause    (Pattern ann) (Process ann)               ann
                   deriving (Show)
 
 -- Expressions and all that
-data Expr     ann = Mul       (Expr ann) (Expr ann)                     ann
+data Expr     ann = ExprTuple [Expr ann]                                ann
+                  | Mul       (Expr ann) (Expr ann)                     ann
                   | Div       (Expr ann) (Expr ann)                     ann
                   | Add       (Expr ann) (Expr ann)                     ann
                   | Sub       (Expr ann) (Expr ann)                     ann

@@ -1,4 +1,8 @@
+p0 = (nu w : !Int . ?Int . end) x!3 . x?v . end
 
-p0 = (nu w : !int . ?Int . end) x!3 . x?v . end
+p1 = (nu w : !{
+        A : haha
+    ;   B : end
+    }) end
 
 main = p0

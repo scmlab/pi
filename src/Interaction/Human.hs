@@ -23,7 +23,7 @@ humanREPL [] = void $ runInteraction $ do
   displayHelp
   loop
 humanREPL (filePath:_) = void $ runInteraction $ do
-  handleRequest (Load (trim filePath))
+  try $ handleRequest (Load (trim filePath))
   loop
 
 displayHelp :: InteractionM IO ()
@@ -36,8 +36,8 @@ displayHelp = liftIO $ do
   putStrLn "========================================"
 
 loop :: InteractionM IO ()
-loop = do
-  liftIO getKey >>= handleRequest . parseRequest
+loop = try $ do
+  liftIO getKey >>= try . handleRequest . parseRequest
   loop
 
 printStatusBar :: InteractionM IO ()
@@ -54,31 +54,27 @@ try program = do
 
 handleRequest :: Request -> InteractionM IO ()
 handleRequest (CursorMoveTo n)  = do
-  try $ choose n
-
+  choose n
   outcome <- currentOutcome
   liftIO $ putStrLn $ show $ pretty outcome
   printStatusBar
 handleRequest CursorUp          = withCursor $ \n -> do
-  try $ choose (n - 1)
-
+  choose (n - 1)
   outcome <- currentOutcome
   liftIO $ putStrLn $ show $ pretty outcome
   printStatusBar
 handleRequest CursorDown        = withCursor $ \n -> do
-  try $ choose (n + 1)
-
+  choose (n + 1)
   outcome <- currentOutcome
   liftIO $ putStrLn $ show $ pretty outcome
   printStatusBar
 
 handleRequest CursorNext        = do
-  try run
+  run
   currentOutcome >>= liftIO . putStrLn . show . pretty
   printStatusBar
 handleRequest (Load filePath)   = do
   load filePath
-
   currentState >>= liftIO . putStrLn . show . pretty
   currentOutcome >>= liftIO . putStrLn . show . pretty
   printStatusBar

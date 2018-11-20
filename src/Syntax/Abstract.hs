@@ -6,7 +6,6 @@ module Syntax.Abstract where
 
 import Control.Monad.Except
 import Data.Text (Text, pack)
-import Data.List (nub)
 
 import qualified Syntax.Concrete as C
 import Type
@@ -40,7 +39,9 @@ depolarCh (NR _) = error "bug: shouldn't call depolar without checking"
 depolarCH :: Name -> RName
 depolarCH = depolar . unND
 
+unND :: Name -> PN RName
 unND (ND n) = n
+unND _ = undefined
 
 data ResName = StdOut | StdIn
   deriving (Eq, Show)
@@ -277,6 +278,7 @@ instance FromConcrete (C.Name ann) Name where
 
 instance FromConcrete (C.Pattern ann) Ptrn where
   fromConcrete (C.PtrnName name _)   = PN (fromConcrete name)
+  fromConcrete (C.PtrnTuple patterns _) = PT (map fromConcrete patterns)
   fromConcrete (C.PtrnLabel label _) = PL (fromConcrete label)
 
 instance FromConcrete (C.Clause ann) Clause where
@@ -305,6 +307,7 @@ instance FromConcrete (C.Expr ann) Expr where
   fromConcrete (C.Div x _ _) = fromConcrete x
   fromConcrete (C.Add x y _) = EPlus (fromConcrete x) (fromConcrete y)
   fromConcrete (C.Sub x y _) = EMinus (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.ExprTuple xs _) = ETup (map fromConcrete xs)
   fromConcrete (C.ExprDigit x _) = EV (VI x)
   fromConcrete (C.ExprName  x _) = EV (N (fromConcrete x))
   fromConcrete (C.ExprLabel x _) = EV (VL (fromConcrete x))

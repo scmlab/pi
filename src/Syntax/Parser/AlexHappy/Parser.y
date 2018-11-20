@@ -35,6 +35,9 @@ import Data.Text (Text)
         '-'             { Token _ TokenMinus }
         '{'             { Token _ TokenBraceStart }
         '}'             { Token _ TokenBraceEnd }
+        '<'             { Token _ TokenAngleStart }
+        '>'             { Token _ TokenAngleEnd }
+        ','             { Token _ TokenComma }
         ';'             { Token _ TokenSemi }
         '->'            { Token _ TokenArrow }
         ':'             { Token _ TokenTypeOf }
@@ -75,7 +78,11 @@ Process :: {Process Token}
 
 Pattern :: {Pattern Token}
          : SimpName                         {%^ return . PtrnName $1 }
+         | '<' Patterns '>'                 {%^ return . PtrnTuple (reverse $2) }
          | Label                            {%^ return . PtrnLabel $1 }
+Patterns :: {[Pattern Token]}
+    : Patterns ',' Pattern                  { $3 : $1 }
+    | Pattern                               { [ $1 ]  }
 
 ClauseDot :: {Clause Token}
         : Pattern '.' Process               {%^ return .  Clause $1 $3 }
@@ -83,7 +90,7 @@ ClauseArr :: {Clause Token}
         : Pattern '->' Process              {%^ return .  Clause $1 $3 }
 Clauses :: {[Clause Token]}
         : Clauses ';' ClauseArr             { $3 : $1 }
-        | ClauseArr                         { [ $1 ] }
+        | ClauseArr                         { [ $1 ]  }
 
 SimpName :: {SimpName Token}
       : namePos                             {%^ return . SimpName $1 }
@@ -101,9 +108,13 @@ Expr :: {Expr Token}
       : Expr '+' Expr                       {%^ return . Add $1 $3 }
       | Expr '-' Expr                       {%^ return . Sub $1 $3 }
       | '(' Expr ')'                        { $2 }
+      | '<' Exprs '>'                       {%^ return . ExprTuple (reverse $2) }
       | Name                                {%^ return . ExprName $1 }
       | int                                 {%^ return . ExprDigit $1 }
       | Label                               {%^ return . ExprLabel $1 }
+Exprs :: {[Expr Token]}
+    : Exprs ',' Expr                        { $3 : $1 }
+    | Expr                                  { [ $1 ]  }
 
 Label :: {Label Token}
     : label                                 {%^ return . Label $1 }
