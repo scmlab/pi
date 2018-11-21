@@ -47,9 +47,9 @@ executable:
   - Syntax.Abstract
   - Syntax.Concrete
   - Syntax.Parser
-  - Syntax.Parser.AlexHappy.Lexer
-  - Syntax.Parser.AlexHappy.Parser
-  - Syntax.Parser.AlexHappy.Type
+  - Syntax.Parser.Lexer
+  - Syntax.Parser.Parser
+  - Syntax.Parser.Type
   - Type
   - Type.TypeCheck
   - Utilities

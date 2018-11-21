@@ -83,16 +83,17 @@ handleRequest Reload            = do
   currentState >>= liftIO . putStrLn . show . pretty
   currentOutcome >>= liftIO . putStrLn . show . pretty
   printStatusBar
+handleRequest Test = do
+  test
 handleRequest Help              = displayHelp
 handleRequest CursorPrev        = displayHelp
-
 --------------------------------------------------------------------------------
 -- | Parsing human input
 
 parseRequest :: String -> Request
 parseRequest key
-  | "l "    `isPrefixOf` key = (Load . drop 2 . trim) key
-  | "load " `isPrefixOf` key = (Load . drop 5 . trim) key
+  | "l"    `isPrefixOf` key = (Load . trim . drop 1) key
+  | "load" `isPrefixOf` key = (Load . trim . drop 4) key
   | otherwise = case trim key of
       "\ESC[A"  -> CursorUp
       "\ESC[B"  -> CursorDown
@@ -102,6 +103,8 @@ parseRequest key
       "help"    -> Help
       "r"       -> Reload
       "reload"  -> Reload
+      "t"       -> Test
+      "test"    -> Test
       _         -> Help
 
 trim :: String -> String

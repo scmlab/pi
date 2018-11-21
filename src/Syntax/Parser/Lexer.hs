@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Syntax.Parser.AlexHappy.Lexer (lexer, scan) where
+module Syntax.Parser.Lexer (lexer, scan) where
 
-import Syntax.Parser.AlexHappy.Type
+import Syntax.Parser.Type
 
 import Control.Monad.State
 import Control.Monad.Except

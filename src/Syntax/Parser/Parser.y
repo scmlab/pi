@@ -1,10 +1,10 @@
 {
 {-# LANGUAGE OverloadedStrings                  #-}
 
-module Syntax.Parser.AlexHappy.Parser where
+module Syntax.Parser.Parser where
 
-import Syntax.Parser.AlexHappy.Lexer
-import Syntax.Parser.AlexHappy.Type
+import Syntax.Parser.Lexer
+import Syntax.Parser.Type
 import Syntax.Concrete
 import Data.Loc
 

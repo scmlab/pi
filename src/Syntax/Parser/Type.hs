@@ -1,4 +1,4 @@
-module Syntax.Parser.AlexHappy.Type where
+module Syntax.Parser.Type where
 
 
 import Control.Monad.State

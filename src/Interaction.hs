@@ -8,7 +8,8 @@ import Data.Text.Prettyprint.Doc
 import qualified Data.ByteString.Lazy as BS
 
 import Syntax.Abstract
-import Syntax.Parser (ParseError(..), parseByteString)
+-- import Syntax.Concrete (restore)
+import Syntax.Parser
 import Interpreter
 
 
@@ -36,6 +37,7 @@ data Request
   | CursorUp | CursorDown
   | CursorNext | CursorPrev
   | Help
+  | Test
   | Load String
   | Reload
   deriving (Show)
@@ -123,6 +125,18 @@ load filePath = do
             , stOutcomes = [Success state Silent bk]
             , stCursor   = Just 0
             }
+
+test :: (MonadIO m, Monad m) => InteractionM m ()
+test = do
+  result <- gets stFilePath
+  case result of
+    Nothing -> throwError "please load the program first"
+    Just filePath -> do
+      rawFile <- liftIO $ BS.readFile filePath
+      case parseByteString2 filePath rawFile of
+        Left err      -> error $ show err
+        Right result  -> liftIO $ print result
+        -- Right result  -> liftIO $ print $ restore result
 
 -- read and parse and store program from the stored filepath
 reload :: (MonadIO m, Monad m) => InteractionM m ()
