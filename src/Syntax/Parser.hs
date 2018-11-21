@@ -15,6 +15,14 @@ import Syntax.Abstract (Prog, fromConcrete)
 -- import Syntax.Parser.TreeSitter.SyntaxTree (parse)
 import Syntax.Parser.Type
 
+import Syntax.Parser.AlexHappy.Parser2 (piParser)
+import Syntax.Parser.AlexHappy.Lexer2
+import Language.Lexer.Applicative
+import Control.Monad.Except
+import Control.Monad.State
+
+import Data.Loc
+
 -- | Haskell parser
 parseByteString :: ByteString -> Either ParseError Prog
 parseByteString s =
@@ -35,6 +43,11 @@ parseByteString s =
   where
     showErrPrefix       = "show-error: " :: String
     lexicalErrorPrefix  = "lexical error at line " :: String
+
+parseByteString2 :: FilePath -> String -> Either ParseError2 Prog
+parseByteString2 filePath src = fromConcrete <$> runExcept (evalStateT piParser initState)
+  where initState = ParserState startingLoc startingLoc (runLexer lexer filePath src)
+        startingLoc = Loc (startPos filePath) (startPos filePath)
 
 -- -- | Tree-sitter parser
 -- parseSyntaxTree :: SyntaxTree -> Either ParseError Prog

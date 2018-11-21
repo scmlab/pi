@@ -26,8 +26,11 @@ dependencies:
 - bytestring
 - haskeline
 - mtl
+- lexer-applicative
+- regex-applicative
 - prettyprinter
 - text
+- srcloc
 
 build-tools:
 - happy
@@ -47,7 +50,9 @@ executable:
   - Syntax.Parser
   - Syntax.Parser.AlexHappy.Base
   - Syntax.Parser.AlexHappy.Lexer
+  - Syntax.Parser.AlexHappy.Lexer2
   - Syntax.Parser.AlexHappy.Parser
+  - Syntax.Parser.AlexHappy.Parser2
   - Syntax.Parser.Type
   - Type
   - Type.TypeCheck
