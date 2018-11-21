@@ -136,7 +136,7 @@ lexer = mconcat
 
 --------------------------------------------------------------------------------
 
-data ParseError2 = Lexical2 LexicalError | Syntatical2 Token
+data ParseError = Lexical LexicalError | Syntatical Token
   deriving (Show)
 
 data ParserState = ParserState
@@ -145,10 +145,10 @@ data ParserState = ParserState
   , tokenStream :: TokenStream (L Token)
   } deriving (Show)
 
-type Parser = StateT ParserState (Except ParseError2)
+type Parser = StateT ParserState (Except ParseError)
 
 parseError :: Token -> Parser a
-parseError = throwError . Syntatical2
+parseError = throwError . Syntatical
 
 scan :: (Token -> Parser a) -> Parser a
 scan f = scanNext >>= f
@@ -164,7 +164,7 @@ scanNext = do
     TsEof -> do
       modify $ \st -> st { currentLoc = oldLoc , lookaheadLoc = NoLoc}
       return TokenEOF
-    TsError err -> throwError $ Lexical2 err
+    TsError err -> throwError $ Lexical err
 
 locate :: (Loc -> a) -> Parser a
 locate f = f <$> gets currentLoc

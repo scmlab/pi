@@ -107,7 +107,7 @@ toState (Failure err) = throwError err
 load :: (MonadIO m, Monad m) => FilePath -> InteractionM m ()
 load filePath = do
   rawFile <- liftIO $ BS.readFile filePath
-  case parseByteString rawFile of
+  case parseByteString filePath rawFile of
     Left err          -> (throwError . show) err
     Right (Prog prog) -> do
       let env = map (\(PiDecl name p) -> (ND (Pos name), p)) prog
