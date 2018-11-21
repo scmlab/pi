@@ -3,46 +3,50 @@
 
 module Syntax.Parser.AlexHappy.Parser where
 
-import Syntax.Parser.AlexHappy.Base
+import Syntax.Parser.AlexHappy.Lexer
+import Syntax.Parser.AlexHappy.Type
 import Syntax.Concrete
+import Data.Loc
 
 import Data.Text (Text)
+
 }
 
-%name happyParser
+%name piParser
 %tokentype { Token }
+%error { parseError }
 
-%monad { Parser } { thenP } { returnP }
-%lexer { lexer } { Token _ TokenEOF }
+%monad { Parser }
+%lexer { scan } { TokenEOF }
 
 %token
-        label           { Token _ (TokenLabel $$) }
-        namePos         { Token _ (TokenNamePos $$) }
-        nameNeg         { Token _ (TokenNameNeg $$) }
-        int             { Token _ (TokenInt $$) }
-        'stdout'        { Token _ TokenStdOut }
-        'stdin'         { Token _ TokenStdIn }
-        'end'           { Token _ TokenEnd }
-        'nu'            { Token _ TokenNu }
-        '='             { Token _ TokenDefn      }
-        '!'             { Token _ TokenSend      }
-        '?'             { Token _ TokenRecv      }
-        '.'             { Token _ TokenSeq       }
-        '|'             { Token _ TokenPar       }
-        '('             { Token _ TokenParenStart }
-        ')'             { Token _ TokenParenEnd }
-        '+'             { Token _ TokenPlus }
-        '-'             { Token _ TokenMinus }
-        '{'             { Token _ TokenBraceStart }
-        '}'             { Token _ TokenBraceEnd }
-        '<'             { Token _ TokenAngleStart }
-        '>'             { Token _ TokenAngleEnd }
-        ','             { Token _ TokenComma }
-        ';'             { Token _ TokenSemi }
-        '->'            { Token _ TokenArrow }
-        ':'             { Token _ TokenTypeOf }
-        'Int'           { Token _ TokenSortInt }
-        'Bool'          { Token _ TokenSortBool }
+        label           { TokenLabel $$ }
+        namePos         { TokenNamePos $$ }
+        nameNeg         { TokenNameNeg $$ }
+        int             { TokenInt $$ }
+        'stdout'        { TokenStdOut }
+        'stdin'         { TokenStdIn }
+        'end'           { TokenEnd }
+        'nu'            { TokenNu }
+        '='             { TokenDefn      }
+        '!'             { TokenSend      }
+        '?'             { TokenRecv      }
+        '.'             { TokenSeq       }
+        '|'             { TokenPar       }
+        '('             { TokenParenStart }
+        ')'             { TokenParenEnd }
+        '+'             { TokenPlus }
+        '-'             { TokenMinus }
+        '{'             { TokenBraceStart }
+        '}'             { TokenBraceEnd }
+        '<'             { TokenAngleStart }
+        '>'             { TokenAngleEnd }
+        ','             { TokenComma }
+        ';'             { TokenSemi }
+        '->'            { TokenArrow }
+        ':'             { TokenTypeOf }
+        'Int'           { TokenSortInt }
+        'Bool'          { TokenSortBool }
 
 %right '|'
 %right '.'
@@ -50,92 +54,92 @@ import Data.Text (Text)
 
 %%
 
-Program :: {Program Token}
-    : ProcDecls                             {%^ return . Program (reverse $1) }
+Program :: {Program Loc}
+    : ProcDecls                             {% locate $ Program (reverse $1) }
 
 -- left recursive
-ProcDecls :: {[ProcDecl Token]}
+ProcDecls :: {[ProcDecl Loc]}
     : ProcDecl                              { [$1] }
     | ProcDecls ProcDecl                    { $2:$1 }
 
-ProcDecl :: {ProcDecl Token}
-    : SimpName '=' ProcessPar               {%^ return . ProcDecl $1 $3 }
+ProcDecl :: {ProcDecl Loc}
+    : SimpName '=' ProcessPar               {% locate $ ProcDecl $1 $3 }
 
 -- left recursive
-ProcessPar :: {Process Token}
-    : ProcessPar '|' Process                {%^ return . Par $1 $3 }
+ProcessPar :: {Process Loc}
+    : ProcessPar '|' Process                {% locate $ Par $1 $3 }
     | Process                               { $1 }
 
-Process :: {Process Token}
-    : Name '!' Expr '.' Process               {%^ return . Send $1 $3 $5  }
-    | Name '?' '{' Clauses '}'                {%^ return . Recv $1 (reverse $4)  }
-    | Name '?' ClauseDot                      {%^ return . Recv $1 [$3]  }
-    | 'end'                                   {%^ return . End }
-    | '(' 'nu' SimpName ')' Process           {%^ return . Nu $3 Nothing $5 }
-    | '(' 'nu' SimpName ':' Type ')' Process  {%^ return . Nu $3 (Just $5) $7 }
-    | SimpName                                {%^ return . Call $1 }
+Process :: {Process Loc}
+    : Name '!' Expr '.' Process               {% locate $ Send $1 $3 $5  }
+    | Name '?' '{' Clauses '}'                {% locate $ Recv $1 (reverse $4)  }
+    | Name '?' ClauseDot                      {% locate $ Recv $1 [$3]  }
+    | 'end'                                   {% locate $ End }
+    | '(' 'nu' SimpName ')' Process           {% locate $ Nu $3 Nothing $5 }
+    | '(' 'nu' SimpName ':' Type ')' Process  {% locate $ Nu $3 (Just $5) $7 }
+    | SimpName                                {% locate $ Call $1 }
     | '(' ProcessPar ')'                      { $2 }
 
-Pattern :: {Pattern Token}
-         : SimpName                         {%^ return . PtrnName $1 }
-         | '<' Patterns '>'                 {%^ return . PtrnTuple (reverse $2) }
-         | Label                            {%^ return . PtrnLabel $1 }
-Patterns :: {[Pattern Token]}
+Pattern :: {Pattern Loc}
+         : SimpName                         {% locate $ PtrnName $1 }
+         | '<' Patterns '>'                 {% locate $ PtrnTuple (reverse $2) }
+         | Label                            {% locate $ PtrnLabel $1 }
+Patterns :: {[Pattern Loc]}
     : Patterns ',' Pattern                  { $3 : $1 }
     | Pattern                               { [ $1 ]  }
 
-ClauseDot :: {Clause Token}
-        : Pattern '.' Process               {%^ return .  Clause $1 $3 }
-ClauseArr :: {Clause Token}
-        : Pattern '->' Process              {%^ return .  Clause $1 $3 }
-Clauses :: {[Clause Token]}
+ClauseDot :: {Clause Loc}
+        : Pattern '.' Process               {% locate $  Clause $1 $3 }
+ClauseArr :: {Clause Loc}
+        : Pattern '->' Process              {% locate $  Clause $1 $3 }
+Clauses :: {[Clause Loc]}
         : Clauses ';' ClauseArr             { $3 : $1 }
         | ClauseArr                         { [ $1 ]  }
 
-SimpName :: {SimpName Token}
-      : namePos                             {%^ return . SimpName $1 }
+SimpName :: {SimpName Loc}
+      : namePos                             {% locate $ SimpName $1 }
 
-Name :: {Name Token}
-      : namePos                             {%^ return . Positive $1 }
-      | nameNeg                             {%^ return . Negative $1 }
-      | ReservedName                        {%^ return . Reserved $1 }
+Name :: {Name Loc}
+      : namePos                             {% locate $ Positive $1 }
+      | nameNeg                             {% locate $ Negative $1 }
+      | ReservedName                        {% locate $ Reserved $1 }
 
 ReservedName :: {Text}
      : 'stdout'                             { "StdOut" }
      | 'stdin'                              { "StdIn" }
 
-Expr :: {Expr Token}
-      : Expr '+' Expr                       {%^ return . Add $1 $3 }
-      | Expr '-' Expr                       {%^ return . Sub $1 $3 }
+Expr :: {Expr Loc}
+      : Expr '+' Expr                       {% locate $ Add $1 $3 }
+      | Expr '-' Expr                       {% locate $ Sub $1 $3 }
       | '(' Expr ')'                        { $2 }
-      | '<' Exprs '>'                       {%^ return . ExprTuple (reverse $2) }
-      | Name                                {%^ return . ExprName $1 }
-      | int                                 {%^ return . ExprDigit $1 }
-      | Label                               {%^ return . ExprLabel $1 }
-Exprs :: {[Expr Token]}
+      | '<' Exprs '>'                       {% locate $ ExprTuple (reverse $2) }
+      | Name                                {% locate $ ExprName $1 }
+      | int                                 {% locate $ ExprDigit $1 }
+      | Label                               {% locate $ ExprLabel $1 }
+Exprs :: {[Expr Loc]}
     : Exprs ',' Expr                        { $3 : $1 }
     | Expr                                  { [ $1 ]  }
 
-Label :: {Label Token}
-    : label                                 {%^ return . Label $1 }
+Label :: {Label Loc}
+    : label                                 {% locate $ Label $1 }
 
-Sort :: {Sort Token}
-    : 'Int'                                 {%^ return . SortInt }
-    | 'Bool'                                {%^ return . SortBool }
-Type :: {Type Token}
-    : '!' Sort '.' Type                     {%^ return . TypeSend (Left  $2) $4 }
-    | '!' Type '.' Type                     {%^ return . TypeSend (Right $2) $4 }
-    | '?' Sort '.' Type                     {%^ return . TypeRecv (Left  $2) $4 }
-    | '?' Type '.' Type                     {%^ return . TypeRecv (Right $2) $4 }
-    | '!' '{' TypeOfLabels '}'              {%^ return . TypeSele (reverse $3)  }
-    | '?' '{' TypeOfLabels '}'              {%^ return . TypeChoi (reverse $3)  }
-    | SimpName                              {%^ return . TypeCall $1            }
-    | 'end'                                 {%^ return . TypeEnd                }
+Sort :: {Sort Loc}
+    : 'Int'                                 {% locate $ SortInt }
+    | 'Bool'                                {% locate $ SortBool }
+Type :: {Type Loc}
+    : '!' Sort '.' Type                     {% locate $ TypeSend (Left  $2) $4 }
+    | '!' Type '.' Type                     {% locate $ TypeSend (Right $2) $4 }
+    | '?' Sort '.' Type                     {% locate $ TypeRecv (Left  $2) $4 }
+    | '?' Type '.' Type                     {% locate $ TypeRecv (Right $2) $4 }
+    | '!' '{' TypeOfLabels '}'              {% locate $ TypeSele (reverse $3)  }
+    | '?' '{' TypeOfLabels '}'              {% locate $ TypeChoi (reverse $3)  }
+    | SimpName                              {% locate $ TypeCall $1            }
+    | 'end'                                 {% locate $ TypeEnd                }
 
-TypeOfLabel :: {TypeOfLabel Token}
-    : Label ':' Type                        {%^ return . TypeOfLabel $1 $3  }
+TypeOfLabel :: {TypeOfLabel Loc}
+    : Label ':' Type                        {% locate $ TypeOfLabel $1 $3  }
 
-TypeOfLabels :: {[TypeOfLabel Token]}
+TypeOfLabels :: {[TypeOfLabel Loc]}
     : TypeOfLabels ';' TypeOfLabel          { $3 : $1 }
     | TypeOfLabel                           { [ $1 ]  }
 

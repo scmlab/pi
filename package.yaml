@@ -34,7 +34,6 @@ dependencies:
 
 build-tools:
 - happy
-- alex
 
 executable:
   main:                Main.hs
@@ -48,12 +47,9 @@ executable:
   - Syntax.Abstract
   - Syntax.Concrete
   - Syntax.Parser
-  - Syntax.Parser.AlexHappy.Base
   - Syntax.Parser.AlexHappy.Lexer
-  - Syntax.Parser.AlexHappy.Lexer2
   - Syntax.Parser.AlexHappy.Parser
-  - Syntax.Parser.AlexHappy.Parser2
-  - Syntax.Parser.Type
+  - Syntax.Parser.AlexHappy.Type
   - Type
   - Type.TypeCheck
   - Utilities
