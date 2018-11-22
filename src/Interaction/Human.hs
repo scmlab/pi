@@ -12,6 +12,7 @@ import System.IO
 import Data.Char (isSpace)
 import Data.List (dropWhileEnd)
 
+import Syntax.Parser (printParseError)
 import Interaction
 import Prelude hiding (readFile)
 
@@ -23,7 +24,7 @@ humanREPL [] = void $ runInteraction $ do
   displayHelp
   loop
 humanREPL (filePath:_) = void $ runInteraction $ do
-  try $ handleRequest (Load (trim filePath))
+  handleError $ handleRequest (Load (trim filePath))
   loop
 
 displayHelp :: InteractionM IO ()
@@ -36,8 +37,8 @@ displayHelp = liftIO $ do
   putStrLn "========================================"
 
 loop :: InteractionM IO ()
-loop = try $ do
-  liftIO getKey >>= try . handleRequest . parseRequest
+loop = do
+  liftIO getKey >>= handleError . handleRequest . parseRequest
   loop
 
 printStatusBar :: InteractionM IO ()
@@ -48,9 +49,14 @@ printStatusBar = do
     Nothing -> liftIO $ putStrLn $ "0/0 outcomes"
     Just n  -> liftIO $ putStrLn $ show (n + 1) ++ "/" ++ show (length outcomes) ++ " outcomes"
 
-try :: InteractionM IO () -> InteractionM IO ()
-try program = do
-  program `catchError` (liftIO . putStrLn . (++) "\r" . show . pretty)
+handleError :: InteractionM IO () -> InteractionM IO ()
+handleError program = program `catchError` \ err -> case err of
+  ParseError parseError -> gets stSource >>= liftIO . printParseError parseError
+     -- liftIO (putStrLn (show parseError))
+    -- liftIO $ printParseError parseError
+  TypeError msg -> liftIO (putStrLn (show msg))
+  RuntimeError msg -> liftIO (putStrLn (show msg))
+  InteractionError msg -> liftIO (putStrLn (show msg))
 
 handleRequest :: Request -> InteractionM IO ()
 handleRequest (CursorMoveTo n)  = do

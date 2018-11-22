@@ -14,7 +14,7 @@ import Data.Text (Text)
 
 %name piParser
 %tokentype { Token }
-%error { parseError }
+%error { syntaticalError }
 
 %monad { Parser }
 %lexer { scan } { TokenEOF }

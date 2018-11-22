@@ -44,7 +44,7 @@ data Token
 --------------------------------------------------------------------------------
 -- | ParseError and stuff
 
-data ParseError = Lexical LexicalError | Syntatical Token
+data ParseError = Lexical Pos | Syntatical Loc Token
   deriving (Show)
 
 data ParserState = ParserState
@@ -55,8 +55,10 @@ data ParserState = ParserState
 
 type Parser = StateT ParserState (Except ParseError)
 
-parseError :: Token -> Parser a
-parseError = throwError . Syntatical
+syntaticalError :: Token -> Parser a
+syntaticalError tok = do
+  loc <- gets lookaheadLoc
+  throwError $ Syntatical loc tok
 
 locate :: (Loc -> a) -> Parser a
 locate f = f <$> gets currentLoc
