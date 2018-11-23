@@ -4,17 +4,15 @@ module Interaction.Human where
 
 import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
-import Data.List (isPrefixOf)
--- import qualified Data.Text as Text
+import Data.Char (isSpace)
+import Data.List (dropWhileEnd, isPrefixOf)
 import Data.Text.Prettyprint.Doc (pretty)
+import Prelude hiding (readFile)
 import System.Console.Haskeline
 import System.IO
-import Data.Char (isSpace)
-import Data.List (dropWhileEnd)
 
-import Syntax.Parser (printParseError)
 import Interaction
-import Prelude hiding (readFile)
+import Syntax.Parser (printParseError)
 
 --------------------------------------------------------------------------------
 -- | Interfacing with Humans
@@ -52,8 +50,6 @@ printStatusBar = do
 handleError :: InteractionM IO () -> InteractionM IO ()
 handleError program = program `catchError` \ err -> case err of
   ParseError parseError -> gets stSource >>= liftIO . printParseError parseError
-     -- liftIO (putStrLn (show parseError))
-    -- liftIO $ printParseError parseError
   TypeError msg -> liftIO (putStrLn (show msg))
   RuntimeError msg -> liftIO (putStrLn (show msg))
   InteractionError msg -> liftIO (putStrLn (show msg))

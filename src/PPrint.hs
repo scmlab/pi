@@ -4,6 +4,11 @@ import Data.Text.Prettyprint.Doc
 
 import Syntax.Abstract
 import Type
+import Data.Loc hiding (Pos)
+import qualified Data.Text as Text
+import qualified Data.Text.IO as Text
+import System.Console.ANSI
+import System.IO
 
 {-
 Operator Precedences
@@ -156,3 +161,108 @@ instance Pretty BType where
                     (pretty ">")
                     (pretty ", ")
                     (map pretty elems)
+
+
+--------------------------------------------------------------------------------
+-- | Source Code Annotation
+
+data SourceCodeAnnotation
+  = Other
+  | HighlightedLineNo
+  | HighlightedArea
+
+data SourceCode = SourceCode
+                    String    -- source code
+                    Loc       -- highlighted location
+                    Int       -- number of the neighboring lines to be rendered
+
+printSourceCode :: SourceCode -> IO ()
+printSourceCode = printAnnotation . layoutPretty defaultLayoutOptions . prettySourceCode
+
+
+printAnnotation :: SimpleDocStream SourceCodeAnnotation -> IO ()
+printAnnotation x = case x of
+  SFail -> error "panic: failed to render annotated source code"
+  SEmpty -> do
+    hFlush stdout
+    return ()
+  SChar c xs -> do
+    putChar c
+    printAnnotation xs
+  SText _ t xs -> do
+    Text.putStr t
+    printAnnotation xs
+  SLine i xs -> do
+    putStr ('\n' : replicate i ' ')
+    printAnnotation xs
+  SAnnPush code xs -> do
+    setSGR (translateSourceCodeAnnotation code)
+    printAnnotation xs
+  SAnnPop xs -> do
+    setSGR []
+    printAnnotation xs
+
+translateSourceCodeAnnotation :: SourceCodeAnnotation -> [SGR]
+translateSourceCodeAnnotation Other             = [Reset]
+translateSourceCodeAnnotation HighlightedLineNo = [SetColor Foreground Dull Blue]
+translateSourceCodeAnnotation HighlightedArea   = [SetColor Foreground Vivid Red]
+
+-- instance Pretty SourceCode where
+prettySourceCode :: SourceCode -> Doc SourceCodeAnnotation
+prettySourceCode (SourceCode source NoLoc _) = pretty source
+prettySourceCode (SourceCode source (Loc locStart locEnd) spread) =
+  vsep $  [softline']
+      ++  zipWith (<+>) lineNos lines'
+      ++  [softline', softline']
+
+  where   sourceLines = lines source
+
+          start = posLine locStart - spread `max` 0
+          end   = posLine locEnd   + spread `min` length sourceLines
+
+          -- max width of the greatest line number
+          lineNoColumnWidth = 4 * ceiling (fromIntegral (lineNoWidth end) / 4.0)
+
+          -- measures the width of a number (decimal)
+          lineNoWidth :: Int -> Int
+          lineNoWidth = succ . floor . logBase 10 . fromIntegral
+
+          prettyLineNo :: Int -> Doc SourceCodeAnnotation
+          prettyLineNo n =
+                pretty (replicate (lineNoColumnWidth - lineNoWidth n) ' ')
+            <>  pretty n
+            <+> pretty '|'
+
+          lineNos :: [Doc SourceCodeAnnotation]
+          lineNos =
+                [                              prettyLineNo n | n <- [ start              .. posLine locStart - 1 ]  ]
+            ++  [ annotate HighlightedLineNo $ prettyLineNo n | n <- [ posLine locStart   .. posLine locEnd       ]  ]
+            ++  [                              prettyLineNo n | n <- [ posLine locEnd + 1 .. end                  ]  ]
+
+
+          lines' :: [Doc SourceCodeAnnotation]
+          lines' = map prettyLine $ zip [ start .. end ]
+            $ drop (start - 1)
+            $ take end
+            $ sourceLines
+
+          substring :: Int -> Maybe Int -> String -> String
+          substring start Nothing    = drop (start - 1)
+          substring start (Just end) = drop (start - 1) . take end
+
+          prettyLine :: (Int, String) -> Doc SourceCodeAnnotation
+          prettyLine (n, line)
+            | n == posLine locStart && n == posLine locEnd =
+                    annotate Other            (pretty $ substring 0                  (Just (posCol locStart - 1)) line)
+                <>  annotate HighlightedArea  (pretty $ substring (posCol locStart)  (Just (posCol locEnd))       line)
+                <>  annotate Other            (pretty $ substring (posCol locEnd + 1) Nothing                     line)
+            | n == posLine locStart =
+                    annotate Other            (pretty $ substring 0                     (Just (posCol locStart - 1)) line)
+                <>  annotate HighlightedArea  (pretty $ substring (posCol locStart)     Nothing                      line)
+            | n == posLine locEnd =
+                    annotate HighlightedArea  (pretty $ substring 0                     (Just (posCol locEnd))       line)
+                <>  annotate Other            (pretty $ substring (posCol locEnd)       Nothing                      line)
+            | n > posLine locStart && n < posLine locEnd =
+                    annotate HighlightedArea  (pretty line)
+            | otherwise =
+                    annotate Other            (pretty line)

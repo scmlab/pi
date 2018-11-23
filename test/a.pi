@@ -1,7 +1,12 @@
+
+
+
+
 p0 = x?v . stdout!v+1 . end
 p1 = x?v . stdout!v+2 . end
-p2 = stdin?v . x!v . end
-p3 = x!100 . end .
+-- asdfd
+p3 = x!100 . end
+p2 = stdin?v . | . x!v . end
 p4 = x?v . x!v . end
 
 
