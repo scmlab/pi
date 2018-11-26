@@ -68,11 +68,17 @@ data Expr = EV Val
           | ESub Expr Expr
           | EMul Expr Expr
           | EDiv Expr Expr
-
+          -- boolean stuff
+          | EEQ   Expr Expr
+          | ENEQ  Expr Expr
+          | EGT   Expr Expr
+          | EGTE  Expr Expr
+          | ELT   Expr Expr
+          | ELTE  Expr Expr
           | EIf Expr Expr Expr
-
-          | ETup [Expr]     -- n-tuples
-          | EPrj Int Expr   -- projection of tuples
+          -- tuples & projection of tuples
+          | ETup [Expr]
+          | EPrj Int Expr
    deriving (Eq, Show)
 
 data Val = N Name
@@ -155,6 +161,12 @@ substExpr th (EMul e1 e2) =
   EMul (substExpr th e1) (substExpr th e2)
 substExpr th (EDiv e1 e2) =
   EDiv (substExpr th e1) (substExpr th e2)
+substExpr th (EEQ  e1 e2) = EEQ  (substExpr th e1) (substExpr th e2)
+substExpr th (ENEQ e1 e2) = ENEQ (substExpr th e1) (substExpr th e2)
+substExpr th (EGT  e1 e2) = EGT  (substExpr th e1) (substExpr th e2)
+substExpr th (EGTE e1 e2) = EGTE (substExpr th e1) (substExpr th e2)
+substExpr th (ELT  e1 e2) = ELT  (substExpr th e1) (substExpr th e2)
+substExpr th (ELTE e1 e2) = ELTE (substExpr th e1) (substExpr th e2)
 substExpr th (EIf e0 e1 e2) =
   EIf (substExpr th e0) (substExpr th e1) (substExpr th e2)
 substExpr th (ETup es) = ETup (map (substExpr th) es)
@@ -189,6 +201,24 @@ evalExpr (EMul e1 e2) =
 evalExpr (EDiv e1 e2) =
   VI <$> (liftM2 (div) (evalExpr e1 >>= unVI)
                        (evalExpr e2 >>= unVI))
+evalExpr (EEQ e1 e2) =
+  VB <$> (liftM2 (==) (evalExpr e1 >>= unVB)
+                      (evalExpr e2 >>= unVB))
+evalExpr (ENEQ e1 e2) =
+ VB <$> (liftM2 (/=) (evalExpr e1 >>= unVB)
+                     (evalExpr e2 >>= unVB))
+evalExpr (EGT e1 e2) =
+  VB <$> (liftM2 (>) (evalExpr e1 >>= unVB)
+                     (evalExpr e2 >>= unVB))
+evalExpr (EGTE e1 e2) =
+  VB <$> (liftM2 (>=) (evalExpr e1 >>= unVB)
+                      (evalExpr e2 >>= unVB))
+evalExpr (ELT e1 e2) =
+  VB <$> (liftM2 (<) (evalExpr e1 >>= unVB)
+                     (evalExpr e2 >>= unVB))
+evalExpr (ELTE e1 e2) =
+  VB <$> (liftM2 (<=) (evalExpr e1 >>= unVB)
+                      (evalExpr e2 >>= unVB))
 evalExpr (EIf e0 e1 e2) =
   (evalExpr e0 >>= unVB) >>= \v0 ->
   if v0 then evalExpr e1 else evalExpr e2
@@ -243,6 +273,12 @@ freeExpr (EAdd e1 e2) = freeExpr e1 `nubapp` freeExpr e2
 freeExpr (ESub e1 e2) = freeExpr e1 `nubapp` freeExpr e2
 freeExpr (EMul e1 e2) = freeExpr e1 `nubapp` freeExpr e2
 freeExpr (EDiv e1 e2) = freeExpr e1 `nubapp` freeExpr e2
+freeExpr (EEQ e1 e2) = freeExpr e1 `nubapp` freeExpr e2
+freeExpr (ENEQ e1 e2) = freeExpr e1 `nubapp` freeExpr e2
+freeExpr (EGT e1 e2) = freeExpr e1 `nubapp` freeExpr e2
+freeExpr (EGTE e1 e2) = freeExpr e1 `nubapp` freeExpr e2
+freeExpr (ELT e1 e2) = freeExpr e1 `nubapp` freeExpr e2
+freeExpr (ELTE e1 e2) = freeExpr e1 `nubapp` freeExpr e2
 freeExpr (EIf e0 e1 e2) = freeExpr e0 `nubapp` freeExpr e1 `nubapp` freeExpr e2
 freeExpr (ETup es) = nubconcat (map freeExpr es)
 freeExpr (EPrj _ e) = freeExpr e
@@ -321,6 +357,12 @@ instance FromConcrete (C.Expr ann) Expr where
   fromConcrete (C.Div x _ _) = fromConcrete x
   fromConcrete (C.Add x y _) = EAdd (fromConcrete x) (fromConcrete y)
   fromConcrete (C.Sub x y _) = ESub (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.EQ  x y _) = EEQ  (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.NEQ x y _) = ENEQ (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.GT  x y _) = EGT  (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.GTE x y _) = EGTE (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.LT  x y _) = ELT  (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.LTE x y _) = ELTE (fromConcrete x) (fromConcrete y)
   fromConcrete (C.ExprTuple xs _) = ETup (map fromConcrete xs)
   fromConcrete (C.ExprDigit x _) = EV (VI x)
   fromConcrete (C.ExprName  x _) = EV (N (fromConcrete x))

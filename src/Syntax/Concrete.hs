@@ -44,6 +44,12 @@ data Expr     ann = ExprTuple [Expr ann]                                ann
                   | Div       (Expr ann) (Expr ann)                     ann
                   | Add       (Expr ann) (Expr ann)                     ann
                   | Sub       (Expr ann) (Expr ann)                     ann
+                  | EQ        (Expr ann) (Expr ann)                     ann
+                  | NEQ       (Expr ann) (Expr ann)                     ann
+                  | GT        (Expr ann) (Expr ann)                     ann
+                  | GTE       (Expr ann) (Expr ann)                     ann
+                  | LT        (Expr ann) (Expr ann)                     ann
+                  | LTE       (Expr ann) (Expr ann)                     ann
                   | ExprDigit Int                                       ann
                   | ExprName  (Name ann)                                ann
                   | ExprLabel (Label ann)                               ann

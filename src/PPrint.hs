@@ -84,6 +84,18 @@ ppExpr (EMul e1 e2) p =
   ppInfixL 7 (pretty "*") (ppExpr e1) (ppExpr e2) p
 ppExpr (EDiv e1 e2) p =
   ppInfixL 7 (pretty "/") (ppExpr e1) (ppExpr e2) p
+ppExpr (EEQ e1 e2) p =
+  ppInfixL 8 (pretty "==") (ppExpr e1) (ppExpr e2) p
+ppExpr (ENEQ e1 e2) p =
+  ppInfixL 8 (pretty "!=") (ppExpr e1) (ppExpr e2) p
+ppExpr (EGT e1 e2) p =
+  ppInfixL 8 (pretty ">") (ppExpr e1) (ppExpr e2) p
+ppExpr (EGTE e1 e2) p =
+  ppInfixL 8 (pretty ">=") (ppExpr e1) (ppExpr e2) p
+ppExpr (ELT e1 e2) p =
+  ppInfixL 8 (pretty "<") (ppExpr e1) (ppExpr e2) p
+ppExpr (ELTE e1 e2) p =
+  ppInfixL 8 (pretty "<=") (ppExpr e1) (ppExpr e2) p
 ppExpr (EIf e0 e1 e2) p =
   shParen (p > 5)
     (sep [pretty "if" <+> nest 2 (ppExpr e0 5),

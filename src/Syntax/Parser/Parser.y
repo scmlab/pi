@@ -125,6 +125,7 @@ Term :: {Expr Loc}
     | Name                                {% locate $ ExprName $1 }
     | int                                 {% locate $ ExprDigit $1 }
     | Label                               {% locate $ ExprLabel $1 }
+    | Expr '==' Expr                      {% locate $ ExprLabel $1 }
 
 Label :: {Label Loc}
     : label                                 {% locate $ Label $1 }
