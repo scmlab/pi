@@ -17,7 +17,6 @@ import Control.Monad.State
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Loc
-import Data.Text.Prettyprint.Doc
 import PPrint
 import Language.Lexer.Applicative
 import System.Console.ANSI
@@ -43,7 +42,7 @@ printParseError (Lexical pos)        (Just source) = do
   setSGR []
   printSourceCode $ SourceCode (BS.unpack source) (Loc pos pos) 2
 
-printParseError (Syntatical loc tok) (Just source) = do
+printParseError (Syntatical loc _) (Just source) = do
   setSGR [SetColor Foreground Vivid Red]
   putStr "\n  Syntatical parse error\n  "
   setSGR [SetColor Foreground Dull Blue]

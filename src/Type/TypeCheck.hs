@@ -32,11 +32,11 @@ inferV env (VL l) = liftMaybe "label not found" (lookup l env)
 
 inferE :: MonadError ErrMsg m => BEnv -> Expr -> m BType
 inferE env (EV v) = inferV env v
-inferE env (EPlus e1 e2) =
+inferE env (EAdd e1 e2) =
   checkE env e1 TInt >>
   checkE env e2 TInt >>
   return TInt
-inferE env (EMinus e1 e2) =
+inferE env (ESub e1 e2) =
   checkE env e1 TInt >>
   checkE env e2 TInt >>
   return TInt
@@ -213,7 +213,7 @@ pn = PN . pack
 p0 = Send (cN "c") (ePN "d") $
       choices (cN "d")
         [("NEG", recv (cN "d") (pn "x") $
-                   Send (cN "d") (eI 0 `EMinus` ePN "x") End),
+                   Send (cN "d") (eI 0 `ESub` ePN "x") End),
          ("ID", recv (cN "d") (pn "x") $
                     Send (cN "d") (ePN "x") End)]
 

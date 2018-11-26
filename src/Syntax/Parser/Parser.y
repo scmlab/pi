@@ -35,8 +35,10 @@ import Data.Text (Text)
         '|'             { TokenPar       }
         '('             { TokenParenStart }
         ')'             { TokenParenEnd }
-        '+'             { TokenPlus }
-        '-'             { TokenMinus }
+        '+'             { TokenAdd }
+        '-'             { TokenSub }
+        '*'             { TokenMul }
+        '/'             { TokenDiv }
         '{'             { TokenBraceStart }
         '}'             { TokenBraceEnd }
         ','             { TokenComma }
@@ -49,6 +51,7 @@ import Data.Text (Text)
 %right '|'
 %right '.'
 %left '+' '-'
+%left '*' '/'
 
 %%
 
@@ -107,16 +110,21 @@ ReservedName :: {Text}
      | 'stdin'                              { "StdIn" }
 
 Expr :: {Expr Loc}
-      : Expr '+' Expr                       {% locate $ Add $1 $3 }
-      | Expr '-' Expr                       {% locate $ Sub $1 $3 }
-      | '(' Expr ')'                        { $2 }
-      | '(' Exprs ')'                       {% locate $ ExprTuple (reverse $2) }
-      | Name                                {% locate $ ExprName $1 }
-      | int                                 {% locate $ ExprDigit $1 }
-      | Label                               {% locate $ ExprLabel $1 }
+    : Expr '+' Expr                       {% locate $ Add $1 $3 }
+    | Expr '-' Expr                       {% locate $ Sub $1 $3 }
+    | Expr '*' Expr                       {% locate $ Mul $1 $3 }
+    | Expr '/' Expr                       {% locate $ Div $1 $3 }
+    | '(' Exprs ')'                       {% locate $ ExprTuple (reverse $2) }
+    | Term                                { $1 }
 Exprs :: {[Expr Loc]}
     : Exprs ',' Expr                        { $3 : $1 }
     | Expr  ',' Expr                        { [ $3 , $1 ]  }
+
+Term :: {Expr Loc}
+    : '(' Expr ')'                        { $2 }
+    | Name                                {% locate $ ExprName $1 }
+    | int                                 {% locate $ ExprDigit $1 }
+    | Label                               {% locate $ ExprLabel $1 }
 
 Label :: {Label Loc}
     : label                                 {% locate $ Label $1 }

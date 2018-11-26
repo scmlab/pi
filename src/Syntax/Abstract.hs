@@ -64,8 +64,10 @@ data Clause = Clause Ptrn Pi
    deriving (Eq, Show)
 
 data Expr = EV Val
-          | EPlus Expr Expr
-          | EMinus Expr Expr
+          | EAdd Expr Expr
+          | ESub Expr Expr
+          | EMul Expr Expr
+          | EDiv Expr Expr
 
           | EIf Expr Expr Expr
 
@@ -129,7 +131,7 @@ p `par` q = Par p q
 type Subst = FMap PName Val
 
 substName :: Subst -> Name -> Name
-substName th (NR r) = NR r
+substName _ (NR r) = NR r
 substName th c =
   case lookup (depolarCh c) th of
     Just (N y) -> y
@@ -137,7 +139,7 @@ substName th c =
     Nothing -> c
 
 substVal :: Subst -> Val -> Val
-substVal th (N (NR r)) = N (NR r)
+substVal _ (N (NR r)) = N (NR r)
 substVal th (N c) | Just v <- lookup (depolarCh c) th = v
                   | otherwise                       = N c
 substVal th (VT vs) = VT (map (substVal th) vs)
@@ -145,10 +147,14 @@ substVal _ u = u
 
 substExpr :: Subst -> Expr -> Expr
 substExpr th (EV u) = EV (substVal th u)
-substExpr th (EPlus e1 e2) =
-  EPlus (substExpr th e1) (substExpr th e2)
-substExpr th (EMinus e1 e2) =
-  EMinus (substExpr th e1) (substExpr th e2)
+substExpr th (EAdd e1 e2) =
+  EAdd (substExpr th e1) (substExpr th e2)
+substExpr th (ESub e1 e2) =
+  ESub (substExpr th e1) (substExpr th e2)
+substExpr th (EMul e1 e2) =
+  EMul (substExpr th e1) (substExpr th e2)
+substExpr th (EDiv e1 e2) =
+  EDiv (substExpr th e1) (substExpr th e2)
 substExpr th (EIf e0 e1 e2) =
   EIf (substExpr th e0) (substExpr th e1) (substExpr th e2)
 substExpr th (ETup es) = ETup (map (substExpr th) es)
@@ -171,12 +177,18 @@ substPi _ (Call p) = Call p  -- perhaps this shouldn't be substituted?
 
 evalExpr :: MonadError ErrMsg m => Expr -> m Val
 evalExpr (EV v) = return v
-evalExpr (EPlus e1 e2) =
+evalExpr (EAdd e1 e2) =
   VI <$> (liftM2 (+) (evalExpr e1 >>= unVI)
                      (evalExpr e2 >>= unVI))
-evalExpr (EMinus e1 e2) =
+evalExpr (ESub e1 e2) =
   VI <$> (liftM2 (-) (evalExpr e1 >>= unVI)
                      (evalExpr e2 >>= unVI))
+evalExpr (EMul e1 e2) =
+  VI <$> (liftM2 (*) (evalExpr e1 >>= unVI)
+                     (evalExpr e2 >>= unVI))
+evalExpr (EDiv e1 e2) =
+  VI <$> (liftM2 (div) (evalExpr e1 >>= unVI)
+                       (evalExpr e2 >>= unVI))
 evalExpr (EIf e0 e1 e2) =
   (evalExpr e0 >>= unVB) >>= \v0 ->
   if v0 then evalExpr e1 else evalExpr e2
@@ -227,8 +239,10 @@ freeN _ = []
 
 freeExpr :: Expr -> [PN RName]
 freeExpr (EV v) = freeVal v
-freeExpr (EPlus e1 e2) = freeExpr e1 `nubapp` freeExpr e2
-freeExpr (EMinus e1 e2) = freeExpr e1 `nubapp` freeExpr e2
+freeExpr (EAdd e1 e2) = freeExpr e1 `nubapp` freeExpr e2
+freeExpr (ESub e1 e2) = freeExpr e1 `nubapp` freeExpr e2
+freeExpr (EMul e1 e2) = freeExpr e1 `nubapp` freeExpr e2
+freeExpr (EDiv e1 e2) = freeExpr e1 `nubapp` freeExpr e2
 freeExpr (EIf e0 e1 e2) = freeExpr e0 `nubapp` freeExpr e1 `nubapp` freeExpr e2
 freeExpr (ETup es) = nubconcat (map freeExpr es)
 freeExpr (EPrj _ e) = freeExpr e
@@ -241,7 +255,7 @@ freePi (Recv c ps) =
   freeN c `nubapp` nubconcat (map freeClause ps)
 freePi (Par p1 p2) = freePi p1 `nubapp` freePi p2
 freePi (Nu x _ p) = freePi p `setminus` [Pos x, Neg x]
-freePi (Call x) = undefined -- what to do here?
+freePi (Call _) = undefined -- what to do here?
 
 freeClause :: Clause -> [PN RName]
 freeClause (Clause ptn p) = freePi p `setminus` freePtrn ptn
@@ -305,8 +319,8 @@ instance FromConcrete (C.Expr ann) Expr where
   -- WARNING: there's no multiplication or division here in the AST!
   fromConcrete (C.Mul x _ _) = fromConcrete x
   fromConcrete (C.Div x _ _) = fromConcrete x
-  fromConcrete (C.Add x y _) = EPlus (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.Sub x y _) = EMinus (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.Add x y _) = EAdd (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.Sub x y _) = ESub (fromConcrete x) (fromConcrete y)
   fromConcrete (C.ExprTuple xs _) = ETup (map fromConcrete xs)
   fromConcrete (C.ExprDigit x _) = EV (VI x)
   fromConcrete (C.ExprName  x _) = EV (N (fromConcrete x))

@@ -1,6 +1,6 @@
 module Type where
 
-import Data.Text (Text, pack)
+import Data.Text (Text)
 import Control.Arrow ((***))
 
 type TName = Text   -- names of declared types

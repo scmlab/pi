@@ -28,7 +28,7 @@ data Token
   | TokenSortInt
   | TokenSortBool
   | TokenParenStart | TokenParenEnd
-  | TokenPlus | TokenMinus
+  | TokenAdd | TokenSub | TokenMul | TokenDiv
   | TokenComma
   | TokenBraceStart | TokenBraceEnd | TokenSemi | TokenArrow
   | TokenTypeOf

@@ -36,8 +36,10 @@ tokenRE =
   <|> TokenSortBool     <$ "Bool"
   <|> TokenParenStart   <$ "("
   <|> TokenParenEnd     <$ ")"
-  <|> TokenPlus         <$ "+"
-  <|> TokenMinus        <$ "-"
+  <|> TokenAdd          <$ "+"
+  <|> TokenSub          <$ "-"
+  <|> TokenMul          <$ "*"
+  <|> TokenDiv          <$ "/"
   <|> TokenComma        <$ ","
   <|> TokenBraceStart   <$ "{"
   <|> TokenBraceEnd     <$ "}"
@@ -117,3 +119,10 @@ scanNext = do
     -- 'if'            { TokenIf }
     -- 'then'          { TokenThen }
     -- 'else'          { TokenElse }
+
+  -- | Expr '==' Expr                      {% locate $ Mul $1 $3 }
+  -- | Expr '!=' Expr                      {% locate $ Div $1 $3 }
+  -- | Expr '>'  Expr                      {% locate $ Mul $1 $3 }
+  -- | Expr '>=' Expr                      {% locate $ Div $1 $3 }
+  -- | Expr '<'  Expr                      {% locate $ Mul $1 $3 }
+  -- | Expr '<=' Expr                      {% locate $ Div $1 $3 }
