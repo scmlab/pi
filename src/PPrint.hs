@@ -233,8 +233,8 @@ prettySourceCode (SourceCode source (Loc from to) spread) =
 
   where   sourceLines = lines source
 
-          start = posLine from - spread `max` 0
-          end   = posLine to   + spread `min` length sourceLines
+          start = (posLine from - spread) `max` 1
+          end   = (posLine to   + spread) `min` length sourceLines
 
           -- max width of the greatest line number
           lineNoColumnWidth = 4 * ceiling (fromIntegral (lineNoWidth end) / 4.0 :: Double)

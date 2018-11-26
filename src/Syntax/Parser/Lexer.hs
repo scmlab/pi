@@ -28,10 +28,6 @@ tokenRE =
   <|> TokenPar          <$ "|"
   <|> TokenStdIn        <$ "stdin"
   <|> TokenStdOut       <$ "stdout"
-  <|> TokenLabel        <$> labelRE
-  <|> TokenNamePos      <$> namePosRE
-  <|> TokenNameNeg      <$> nameNegRE
-  <|> TokenInt          <$> intRE
   <|> TokenSortInt      <$ "Int"
   <|> TokenSortBool     <$ "Bool"
   <|> TokenParenStart   <$ "("
@@ -58,6 +54,10 @@ tokenRE =
   <|> TokenIf           <$ "if"
   <|> TokenThen         <$ "then"
   <|> TokenElse         <$ "else"
+  <|> TokenLabel        <$> labelRE
+  <|> TokenNamePos      <$> namePosRE
+  <|> TokenNameNeg      <$> nameNegRE
+  <|> TokenInt          <$> intRE
 
 
 namePosRE :: RE Char Text
