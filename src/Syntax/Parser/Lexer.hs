@@ -38,14 +38,25 @@ tokenRE =
   <|> TokenParenEnd     <$ ")"
   <|> TokenPlus         <$ "+"
   <|> TokenMinus        <$ "-"
-  <|> TokenAngleStart   <$ "<"
-  <|> TokenAngleEnd     <$ "<"
   <|> TokenComma        <$ ","
   <|> TokenBraceStart   <$ "{"
   <|> TokenBraceEnd     <$ "}"
   <|> TokenSemi         <$ ";"
   <|> TokenArrow        <$ "->"
   <|> TokenTypeOf       <$ ":"
+  -- Boolean stuff
+  <|> TokenTrue         <$ "True"
+  <|> TokenFalse        <$ "False"
+  <|> TokenEQ           <$ "=="
+  <|> TokenNEQ          <$ "!="
+  <|> TokenGT           <$ ">"
+  <|> TokenGTE          <$ ">="
+  <|> TokenLT           <$ "<"
+  <|> TokenLTE          <$ "<="
+  <|> TokenIf           <$ "if"
+  <|> TokenThen         <$ "then"
+  <|> TokenElse         <$ "else"
+
 
 namePosRE :: RE Char Text
 namePosRE = fmap pack $ (:) <$> psym isLower <*> many (psym (\c -> isAlphaNum c || c == '_' || c == '\''))
@@ -93,3 +104,16 @@ scanNext = do
       return TokenEOF
     TsError (LexicalError pos) -> do
       throwError $ Lexical pos
+
+    -- -- boolean stuff
+    -- 'True'          { TokenTrue }
+    -- 'False'         { TokenFalse }
+    -- '=='            { TokenEQ }
+    -- '!='            { TokenNEQ }
+    -- '>'             { TokenGT }
+    -- '>='            { TokenGTE }
+    -- '<'             { TokenLT }
+    -- '<='            { TokenLTE }
+    -- 'if'            { TokenIf }
+    -- 'then'          { TokenThen }
+    -- 'else'          { TokenElse }

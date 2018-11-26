@@ -39,8 +39,6 @@ import Data.Text (Text)
         '-'             { TokenMinus }
         '{'             { TokenBraceStart }
         '}'             { TokenBraceEnd }
-        '<'             { TokenAngleStart }
-        '>'             { TokenAngleEnd }
         ','             { TokenComma }
         ';'             { TokenSemi }
         '->'            { TokenArrow }
@@ -82,11 +80,11 @@ Process :: {Process Loc}
 
 Pattern :: {Pattern Loc}
          : SimpName                         {% locate $ PtrnName $1 }
-         | '<' Patterns '>'                 {% locate $ PtrnTuple (reverse $2) }
+         | '(' Patterns ')'                 {% locate $ PtrnTuple (reverse $2) }
          | Label                            {% locate $ PtrnLabel $1 }
 Patterns :: {[Pattern Loc]}
     : Patterns ',' Pattern                  { $3 : $1 }
-    | Pattern                               { [ $1 ]  }
+    | Pattern  ',' Pattern                  { [ $3, $1 ]  }
 
 ClauseDot :: {Clause Loc}
         : Pattern '.' Process               {% locate $  Clause $1 $3 }
@@ -112,13 +110,13 @@ Expr :: {Expr Loc}
       : Expr '+' Expr                       {% locate $ Add $1 $3 }
       | Expr '-' Expr                       {% locate $ Sub $1 $3 }
       | '(' Expr ')'                        { $2 }
-      | '<' Exprs '>'                       {% locate $ ExprTuple (reverse $2) }
+      | '(' Exprs ')'                       {% locate $ ExprTuple (reverse $2) }
       | Name                                {% locate $ ExprName $1 }
       | int                                 {% locate $ ExprDigit $1 }
       | Label                               {% locate $ ExprLabel $1 }
 Exprs :: {[Expr Loc]}
     : Exprs ',' Expr                        { $3 : $1 }
-    | Expr                                  { [ $1 ]  }
+    | Expr  ',' Expr                        { [ $3 , $1 ]  }
 
 Label :: {Label Loc}
     : label                                 {% locate $ Label $1 }

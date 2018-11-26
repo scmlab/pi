@@ -157,8 +157,8 @@ instance Pretty BType where
   pretty TInt = pretty "Int"
   pretty TBool = pretty "Bool"
   pretty (TTuple elems) = encloseSep
-                    (pretty "<")
-                    (pretty ">")
+                    (pretty "(")
+                    (pretty ")")
                     (pretty ", ")
                     (map pretty elems)
 

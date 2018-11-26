@@ -29,15 +29,26 @@ data Token
   | TokenSortBool
   | TokenParenStart | TokenParenEnd
   | TokenPlus | TokenMinus
-  -- | TokenTrue | TokenFalse
-  -- | TokenIf | TokenThen | TokenElse
-  | TokenAngleStart | TokenAngleEnd | TokenComma
+  | TokenComma
   | TokenBraceStart | TokenBraceEnd | TokenSemi | TokenArrow
   | TokenTypeOf
+  -- boolean stuff
+  | TokenTrue
+  | TokenFalse
+  | TokenEQ
+  | TokenNEQ
+  | TokenGT
+  | TokenGTE
+  | TokenLT
+  | TokenLTE
+  | TokenIf
+  | TokenThen
+  | TokenElse
   -- whitespace, comments amd EOF
   | TokenComment Text
   | TokenWhitespace
   | TokenEOF
+
   deriving (Eq, Show)
 
 
