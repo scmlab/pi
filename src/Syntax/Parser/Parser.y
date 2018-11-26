@@ -7,6 +7,7 @@ import Syntax.Parser.Lexer
 import Syntax.Parser.Type
 import Syntax.Concrete
 import Data.Loc
+import Prelude hiding (GT, LT, EQ)
 
 import Data.Text (Text)
 
@@ -47,11 +48,28 @@ import Data.Text (Text)
         ':'             { TokenTypeOf }
         'Int'           { TokenSortInt }
         'Bool'          { TokenSortBool }
+        -- boolean stuff
+        'True'          { TokenTrue }
+        'False'         { TokenFalse }
+        '=='            { TokenEQ }
+        '!='            { TokenNEQ }
+        '>'             { TokenGT }
+        '>='            { TokenGTE }
+        '<'             { TokenLT }
+        '<='            { TokenLTE }
+        'if'            { TokenIf }
+        'then'          { TokenThen }
+        'else'          { TokenElse }
+
 
 %right '|'
+%right 'else'
 %right '.'
 %left '+' '-'
 %left '*' '/'
+%left '==' '!='
+%left '>' '>='
+%left '<' '<='
 
 %%
 
@@ -114,6 +132,7 @@ Expr :: {Expr Loc}
     | Expr '-' Expr                       {% locate $ Sub $1 $3 }
     | Expr '*' Expr                       {% locate $ Mul $1 $3 }
     | Expr '/' Expr                       {% locate $ Div $1 $3 }
+    | 'if' Expr 'then' Expr 'else' Expr   {% locate $ IfThenElse $2 $4 $6 }
     | '(' Exprs ')'                       {% locate $ ExprTuple (reverse $2) }
     | Term                                { $1 }
 Exprs :: {[Expr Loc]}
@@ -125,8 +144,17 @@ Term :: {Expr Loc}
     | Name                                {% locate $ ExprName $1 }
     | int                                 {% locate $ ExprDigit $1 }
     | Label                               {% locate $ ExprLabel $1 }
-    | Expr '==' Expr                      {% locate $ ExprLabel $1 }
+    | Expr '==' Expr                      {% locate $ EQ  $1 $3 }
+    | Expr '!=' Expr                      {% locate $ NEQ $1 $3 }
+    | Expr '>'  Expr                      {% locate $ GT  $1 $3 }
+    | Expr '>=' Expr                      {% locate $ GTE $1 $3 }
+    | Expr '<'  Expr                      {% locate $ LT  $1 $3 }
+    | Expr '<=' Expr                      {% locate $ LTE $1 $3 }
+    | Boolean                             { $1 }
 
+Boolean :: {Expr Loc}
+    : 'True'                              {% locate $ ExprBool True }
+    | 'False'                             {% locate $ ExprBool False }
 Label :: {Label Loc}
     : label                                 {% locate $ Label $1 }
 

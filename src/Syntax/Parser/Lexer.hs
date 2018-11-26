@@ -106,23 +106,3 @@ scanNext = do
       return TokenEOF
     TsError (LexicalError pos) -> do
       throwError $ Lexical pos
-
-    -- -- boolean stuff
-    -- 'True'          { TokenTrue }
-    -- 'False'         { TokenFalse }
-    -- '=='            { TokenEQ }
-    -- '!='            { TokenNEQ }
-    -- '>'             { TokenGT }
-    -- '>='            { TokenGTE }
-    -- '<'             { TokenLT }
-    -- '<='            { TokenLTE }
-    -- 'if'            { TokenIf }
-    -- 'then'          { TokenThen }
-    -- 'else'          { TokenElse }
-
-  -- | Expr '==' Expr                      {% locate $ Mul $1 $3 }
-  -- | Expr '!=' Expr                      {% locate $ Div $1 $3 }
-  -- | Expr '>'  Expr                      {% locate $ Mul $1 $3 }
-  -- | Expr '>=' Expr                      {% locate $ Div $1 $3 }
-  -- | Expr '<'  Expr                      {% locate $ Mul $1 $3 }
-  -- | Expr '<=' Expr                      {% locate $ Div $1 $3 }

@@ -352,17 +352,18 @@ instance FromConcrete (C.Process ann) Pi where
     End
 
 instance FromConcrete (C.Expr ann) Expr where
-  -- WARNING: there's no multiplication or division here in the AST!
-  fromConcrete (C.Mul x _ _) = fromConcrete x
-  fromConcrete (C.Div x _ _) = fromConcrete x
   fromConcrete (C.Add x y _) = EAdd (fromConcrete x) (fromConcrete y)
   fromConcrete (C.Sub x y _) = ESub (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.Mul x y _) = EMul (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.Div x y _) = EDiv (fromConcrete x) (fromConcrete y)
   fromConcrete (C.EQ  x y _) = EEQ  (fromConcrete x) (fromConcrete y)
   fromConcrete (C.NEQ x y _) = ENEQ (fromConcrete x) (fromConcrete y)
   fromConcrete (C.GT  x y _) = EGT  (fromConcrete x) (fromConcrete y)
   fromConcrete (C.GTE x y _) = EGTE (fromConcrete x) (fromConcrete y)
   fromConcrete (C.LT  x y _) = ELT  (fromConcrete x) (fromConcrete y)
   fromConcrete (C.LTE x y _) = ELTE (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.IfThenElse p x y _) = EIf  (fromConcrete p) (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.ExprBool b _) = EV (VB b)
   fromConcrete (C.ExprTuple xs _) = ETup (map fromConcrete xs)
   fromConcrete (C.ExprDigit x _) = EV (VI x)
   fromConcrete (C.ExprName  x _) = EV (N (fromConcrete x))

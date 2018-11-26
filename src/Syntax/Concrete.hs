@@ -50,6 +50,8 @@ data Expr     ann = ExprTuple [Expr ann]                                ann
                   | GTE       (Expr ann) (Expr ann)                     ann
                   | LT        (Expr ann) (Expr ann)                     ann
                   | LTE       (Expr ann) (Expr ann)                     ann
+                  | IfThenElse (Expr ann) (Expr ann) (Expr ann)         ann
+                  | ExprBool  Bool                                    ann
                   | ExprDigit Int                                       ann
                   | ExprName  (Name ann)                                ann
                   | ExprLabel (Label ann)                               ann
