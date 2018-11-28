@@ -58,44 +58,87 @@ printCurrentOutcome = do
         setSGR []
         print $ pretty v
       printStatusBar
-    Success _ (React sender receiver _ _) _ -> do
+    Success _ (React _ sender receiver products) _ -> do
       liftIO $ do
         setSGR [SetColor Foreground Vivid Yellow]
         putStrLn $ "React"
         setSGR []
-      currentState >>= printState
+      currentState >>= printReact sender receiver products
       printStatusBar
     Success _ (Input _) _ -> do
       currentState >>= printState
       printStatusBar
 
--- printReact :: St -> Sender -> Receiver -> InteractionM IO ()
--- printReact (St senders receivers waitings freshVars) = do
+blue :: IO () -> IO ()
+blue p = do
+  setSGR [SetColor Foreground Dull Blue]
+  p
+  setSGR []
+
+red :: IO () -> IO ()
+red p = do
+  setSGR [SetColor Foreground Vivid Red]
+  p
+  setSGR []
+
+abbreviate :: String -> String
+abbreviate s = if length s >= 38
+  then  take 34 s ++ " ~~~"
+  else  s ++ replicate (38 - length s) ' '
+
+
+printReact :: Sender -> Receiver -> (Pi, Pi) -> St -> InteractionM IO ()
+printReact sender receiver (sender', receiver') (St senders receivers waitings freshVars) = do
+  let ss = [ (sender   == selected,   sender2pi c selected) | (c, selected)      <- senders   ]
+  let rs = [ (receiver == selected, receiver2pi c selected) | (c, selected)      <- receivers ]
+  let is = [ Recv (NR StdIn) clauses                        | (Receiver clauses) <- waitings  ]
+
+  liftIO $ do
+    blue $ putStrLn $ "  senders:"
+    when (not $ null ss) $ do
+      forM_ ss $ \(selected, p) -> do
+        if selected
+          then do
+            red $ putStr $ "☞   "
+            putStr $ abbreviate (show (pretty p))
+            red $ putStr $ " => "
+            putStrLn $ abbreviate $ show (pretty sender')
+          else putStrLn $ show $ indent 4 (pretty p)
+
+    when (not $ null rs) $ do
+      blue $ putStrLn $ "  receivers:"
+      forM_ rs $ \(selected, p) -> do
+        if selected
+          then do
+            red $ putStr $ "☞   "
+            putStr $ abbreviate (show (pretty p))
+            red $ putStr $ " => "
+            putStrLn $ abbreviate $ show (pretty receiver')
+          else putStrLn $ show $ indent 4 (pretty p)
+
+    when (not $ null is) $ do
+      blue $ putStrLn $ "  blocked:"
+      putStrLn $ show $ indent 4 (vsep (map pretty is))
+
 
 printState :: St -> InteractionM IO ()
 printState (St senders receivers waitings freshVars) = do
 
-  let ss = [ Send c (EV v) p         | (c, (Sender v p))      <- senders ]
-  let rs = [ Recv c          clauses | (c, Receiver clauses)  <- receivers ]
-  let is = [ Recv (NR StdIn) clauses | (Receiver clauses)     <- waitings ]
+  let ss = [ sender2pi   c selected  | (c, selected)      <- senders   ]
+  let rs = [ receiver2pi c selected  | (c, selected)      <- receivers ]
+  let is = [ Recv (NR StdIn) clauses | (Receiver clauses) <- waitings  ]
 
   liftIO $ do
     when (not $ null ss) $ do
-      setSGR [SetColor Foreground Dull Blue]
-      putStrLn $ "  senders:"
-      setSGR []
+      blue $ putStrLn $ "  senders:"
       putStrLn $ show $ indent 4 (vsep (map pretty ss))
 
     when (not $ null rs) $ do
-      setSGR [SetColor Foreground Dull Blue]
-      putStrLn $ "  receivers:"
-      setSGR []
+      blue $ putStrLn $ "  receivers:"
       putStrLn $ show $ indent 4 (vsep (map pretty rs))
 
     when (not $ null is) $ do
-      setSGR [SetColor Foreground Dull Blue]
-      putStrLn $ "  blocked:"
-      setSGR []
+      blue $ putStrLn $ "  blocked:"
       putStrLn $ show $ indent 4 (vsep (map pretty is))
 
 printStatusBar :: InteractionM IO ()
