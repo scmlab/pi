@@ -6,12 +6,16 @@ import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import Data.Char (isSpace)
 import Data.List (dropWhileEnd, isPrefixOf)
-import Data.Text.Prettyprint.Doc (pretty)
+import Data.Text.Prettyprint.Doc
 import Prelude hiding (readFile)
 import System.Console.Haskeline
 import System.IO
+import System.Console.ANSI
 
 import Interaction
+-- import Interpreter (St(..))
+import Interpreter
+import Syntax.Abstract
 import Syntax.Parser (printParseError)
 
 --------------------------------------------------------------------------------
@@ -39,6 +43,61 @@ loop = do
   liftIO getKey >>= handleError . handleRequest . parseRequest
   loop
 
+printCurrentOutcome :: InteractionM IO ()
+printCurrentOutcome = do
+  outcome <- currentOutcome
+  case outcome of
+    Failure err -> throwError (InteractionError err)
+    Success _ Silent _ -> do
+      currentState >>= printState
+      printStatusBar
+    Success _ (Output (Sender v p)) _ -> do
+      liftIO $ do
+        setSGR [SetColor Foreground Vivid Yellow]
+        putStrLn $ "Output"
+        setSGR []
+        print $ pretty v
+      printStatusBar
+    Success _ (React sender receiver _ _) _ -> do
+      liftIO $ do
+        setSGR [SetColor Foreground Vivid Yellow]
+        putStrLn $ "React"
+        setSGR []
+      currentState >>= printState
+      printStatusBar
+    Success _ (Input _) _ -> do
+      currentState >>= printState
+      printStatusBar
+
+-- printReact :: St -> Sender -> Receiver -> InteractionM IO ()
+-- printReact (St senders receivers waitings freshVars) = do
+
+printState :: St -> InteractionM IO ()
+printState (St senders receivers waitings freshVars) = do
+
+  let ss = [ Send c (EV v) p         | (c, (Sender v p))      <- senders ]
+  let rs = [ Recv c          clauses | (c, Receiver clauses)  <- receivers ]
+  let is = [ Recv (NR StdIn) clauses | (Receiver clauses)     <- waitings ]
+
+  liftIO $ do
+    when (not $ null ss) $ do
+      setSGR [SetColor Foreground Dull Blue]
+      putStrLn $ "  senders:"
+      setSGR []
+      putStrLn $ show $ indent 4 (vsep (map pretty ss))
+
+    when (not $ null rs) $ do
+      setSGR [SetColor Foreground Dull Blue]
+      putStrLn $ "  receivers:"
+      setSGR []
+      putStrLn $ show $ indent 4 (vsep (map pretty rs))
+
+    when (not $ null is) $ do
+      setSGR [SetColor Foreground Dull Blue]
+      putStrLn $ "  blocked:"
+      setSGR []
+      putStrLn $ show $ indent 4 (vsep (map pretty is))
+
 printStatusBar :: InteractionM IO ()
 printStatusBar = do
   outcomes <- gets stOutcomes
@@ -52,39 +111,30 @@ handleError program = program `catchError` \ err -> case err of
   ParseError parseError -> gets stSource >>= liftIO . printParseError parseError
   TypeError msg -> liftIO (putStrLn (show msg))
   RuntimeError msg -> liftIO (putStrLn (show msg))
-  InteractionError msg -> liftIO (putStrLn (show msg))
+  InteractionError msg -> do
+    -- liftIO (putStr ("\r"))
+    liftIO (putStrLn (show msg))
+    -- liftIO (hFlush stdout)
 
 handleRequest :: Request -> InteractionM IO ()
 handleRequest (CursorMoveTo n)  = do
   choose n
-  outcome <- currentOutcome
-  liftIO $ putStrLn $ show $ pretty outcome
-  printStatusBar
+  printCurrentOutcome
 handleRequest CursorUp          = withCursor $ \n -> do
   choose (n - 1)
-  outcome <- currentOutcome
-  liftIO $ putStrLn $ show $ pretty outcome
-  printStatusBar
+  printCurrentOutcome
 handleRequest CursorDown        = withCursor $ \n -> do
   choose (n + 1)
-  outcome <- currentOutcome
-  liftIO $ putStrLn $ show $ pretty outcome
-  printStatusBar
-
+  printCurrentOutcome
 handleRequest CursorNext        = do
   run
-  currentOutcome >>= liftIO . putStrLn . show . pretty
-  printStatusBar
+  printCurrentOutcome
 handleRequest (Load filePath)   = do
   load filePath
-  currentState >>= liftIO . putStrLn . show . pretty
-  currentOutcome >>= liftIO . putStrLn . show . pretty
-  printStatusBar
+  printCurrentOutcome
 handleRequest Reload            = do
   reload
-  currentState >>= liftIO . putStrLn . show . pretty
-  currentOutcome >>= liftIO . putStrLn . show . pretty
-  printStatusBar
+  printCurrentOutcome
 handleRequest Test = do
   test
 handleRequest Help              = displayHelp
@@ -94,8 +144,8 @@ handleRequest CursorPrev        = displayHelp
 
 parseRequest :: String -> Request
 parseRequest key
-  | "l"    `isPrefixOf` key = (Load . trim . drop 1) key
   | "load" `isPrefixOf` key = (Load . trim . drop 4) key
+  | "l"    `isPrefixOf` key = (Load . trim . drop 1) key
   | otherwise = case trim key of
       "\ESC[A"  -> CursorUp
       "\ESC[B"  -> CursorDown

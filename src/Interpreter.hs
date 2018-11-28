@@ -31,7 +31,7 @@ data St = St
   } deriving (Show)
 
 data Reaction = Silent                       -- nothing ever happened
-              | React  Name Sender Receiver [Pi]  -- some chemical reaction
+              | React  Name Sender Receiver (Pi, Pi)  -- some chemical reaction
               | Output Sender                -- stdout
               | Input  Receiver              -- stdin
               deriving (Show)
@@ -85,10 +85,10 @@ step (St sends recvs inps news) = do
       -- selected a reagent from the lists of receivers
       (receiver, otherReceivers) <- selectByKey channel recvs
       -- react!
-      products <- react sender receiver
+      (sender', receiver') <- react sender receiver
       -- adjust the state accordingly
-      st <- lineup products (St otherSenders otherReceivers inps news)
-      return (st, React channel sender receiver products)
+      st <- lineup [sender', receiver'] (St otherSenders otherReceivers inps news)
+      return (st, React channel sender receiver (sender', receiver'))
 
     doInput :: (Receiver, [Receiver]) -> PiMonad (St, Reaction)
     doInput (blocked, otherBlocked) =
@@ -106,10 +106,10 @@ select [] = mzero
 select (x:xs) = return (x,xs) `mplus`
                 ((id *** (x:)) <$> select xs)
 
-react :: Sender -> Receiver -> PiMonad [Pi]
+react :: Sender -> Receiver -> PiMonad (Pi, Pi)
 react (Sender v q) (Receiver clauses) =
   case matchClauses clauses v of
-   Just (th, p) -> return [q, substPi th p]
+   Just (th, p) -> return (q, substPi th p)
    Nothing -> undefined
 
 --------------------------------------------------------------------------------

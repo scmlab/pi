@@ -127,6 +127,7 @@ load filePath = do
           Right (state, bk) -> do
             putState state
             putOutcome [Success state Silent bk]
+            run
 
 test :: (MonadIO m, Monad m) => InteractionM m ()
 test = do
@@ -155,16 +156,19 @@ run = do
     Failure err -> do
       putOutcome $ [Failure err]
     Success state (Output (Sender _ p)) i -> do
+      putState state
       defs <- gets stEnv
       putOutcome $ interpret defs i $ lineup [p] state >>= step
     Success state (React _ _ _ _) i -> do
+      putState state
       defs <- gets stEnv
       putOutcome $ interpret defs i (step state)
     Success state (Input pps) i -> do
+      putState state
       putOutcome $ [Success state (Input pps) i]
     Success state Silent i -> do
+      putState state
       defs <- gets stEnv
-      -- error . show . pretty $ interpret defs i (step state)
       putOutcome $ interpret defs i (step state)
 
 -- feed the appointed outcome with something

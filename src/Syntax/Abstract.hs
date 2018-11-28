@@ -362,7 +362,7 @@ instance FromConcrete (C.Expr ann) Expr where
   fromConcrete (C.GTE x y _) = EGTE (fromConcrete x) (fromConcrete y)
   fromConcrete (C.LT  x y _) = ELT  (fromConcrete x) (fromConcrete y)
   fromConcrete (C.LTE x y _) = ELTE (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.IfThenElse p x y _) = EIf  (fromConcrete p) (fromConcrete x) (fromConcrete y)
+  fromConcrete (C.IfThenElse p x y _) = EIf (fromConcrete p) (fromConcrete x) (fromConcrete y)
   fromConcrete (C.ExprBool b _) = EV (VB b)
   fromConcrete (C.ExprTuple xs _) = ETup (map fromConcrete xs)
   fromConcrete (C.ExprDigit x _) = EV (VI x)
