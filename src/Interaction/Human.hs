@@ -29,82 +29,10 @@ humanREPL (filePath:_) = void $ runInteraction $ do
   handleError $ handleRequest (Load (trim filePath))
   loop
 
-displayHelp :: InteractionM IO ()
-displayHelp = liftIO $ do
-  putStrLn "========================================"
-  putStrLn "  arrow keys          for navigation"
-  putStrLn "  :help               for this help message   (:h)"
-  putStrLn "  :load FILEPATH      for loading files       (:l)"
-  putStrLn "  :reload             for reloading           (:r)"
-  putStrLn "========================================"
-
 loop :: InteractionM IO ()
 loop = do
   liftIO getKey >>= handleError . handleRequest . parseRequest
   loop
-
-printCurrentOutcome :: InteractionM IO ()
-printCurrentOutcome = do
-  outcome <- currentOutcome
-  case outcome of
-    Failure err -> throwError (InteractionError err)
-    Success _ Silent _ -> do
-      currentState >>= printState
-      printStatusBar
-    Success _ (Output (Sender v p)) _ -> do
-      liftIO $ do
-        setSGR [SetColor Foreground Vivid Yellow]
-        putStrLn $ "Output"
-        setSGR []
-        print $ pretty v
-      printStatusBar
-    Success _ (React sender receiver _ _) _ -> do
-      liftIO $ do
-        setSGR [SetColor Foreground Vivid Yellow]
-        putStrLn $ "React"
-        setSGR []
-      currentState >>= printState
-      printStatusBar
-    Success _ (Input _) _ -> do
-      currentState >>= printState
-      printStatusBar
-
--- printReact :: St -> Sender -> Receiver -> InteractionM IO ()
--- printReact (St senders receivers waitings freshVars) = do
-
-printState :: St -> InteractionM IO ()
-printState (St senders receivers waitings freshVars) = do
-
-  let ss = [ Send c (EV v) p         | (c, (Sender v p))      <- senders ]
-  let rs = [ Recv c          clauses | (c, Receiver clauses)  <- receivers ]
-  let is = [ Recv (NR StdIn) clauses | (Receiver clauses)     <- waitings ]
-
-  liftIO $ do
-    when (not $ null ss) $ do
-      setSGR [SetColor Foreground Dull Blue]
-      putStrLn $ "  senders:"
-      setSGR []
-      putStrLn $ show $ indent 4 (vsep (map pretty ss))
-
-    when (not $ null rs) $ do
-      setSGR [SetColor Foreground Dull Blue]
-      putStrLn $ "  receivers:"
-      setSGR []
-      putStrLn $ show $ indent 4 (vsep (map pretty rs))
-
-    when (not $ null is) $ do
-      setSGR [SetColor Foreground Dull Blue]
-      putStrLn $ "  blocked:"
-      setSGR []
-      putStrLn $ show $ indent 4 (vsep (map pretty is))
-
-printStatusBar :: InteractionM IO ()
-printStatusBar = do
-  outcomes <- gets stOutcomes
-  cursor <- gets stCursor
-  case cursor of
-    Nothing -> liftIO $ putStrLn $ "0/0 outcomes"
-    Just n  -> liftIO $ putStrLn $ show (n + 1) ++ "/" ++ show (length outcomes) ++ " outcomes"
 
 handleError :: InteractionM IO () -> InteractionM IO ()
 handleError program = program `catchError` \ err -> case err of
@@ -116,16 +44,19 @@ handleError program = program `catchError` \ err -> case err of
     liftIO (putStrLn (show msg))
     -- liftIO (hFlush stdout)
 
+try :: InteractionM IO () -> InteractionM IO ()
+try program = program `catchError` \_ -> return ()
+
 handleRequest :: Request -> InteractionM IO ()
 handleRequest (CursorMoveTo n)  = do
   choose n
   printCurrentOutcome
-handleRequest CursorUp          = withCursor $ \n -> do
-  choose (n - 1)
-  printCurrentOutcome
-handleRequest CursorDown        = withCursor $ \n -> do
-  choose (n + 1)
-  printCurrentOutcome
+handleRequest CursorUp          = withCursor $ \n -> try $ do
+    choose (n - 1)
+    printCurrentOutcome
+handleRequest CursorDown        = withCursor $ \n -> try $ do
+    choose (n + 1)
+    printCurrentOutcome
 handleRequest CursorNext        = do
   run
   printCurrentOutcome
@@ -198,3 +129,129 @@ getKey = do
       if more
         then interceptStdin (char:buffer)
         else return         (char:buffer)
+
+
+--------------------------------------------------------------------------------
+-- | Printing stuff
+
+displayHelp :: InteractionM IO ()
+displayHelp = liftIO $ do
+  putStrLn "========================================"
+  putStrLn "  arrow keys          for navigation"
+  putStrLn "  :help               for this help message   (:h)"
+  putStrLn "  :load FILEPATH      for loading files       (:l)"
+  putStrLn "  :reload             for reloading           (:r)"
+  putStrLn "========================================"
+
+
+printCurrentOutcome :: InteractionM IO ()
+printCurrentOutcome = do
+  outcome <- currentOutcome
+  case outcome of
+    Failure err -> throwError (InteractionError err)
+    Success _ Silent _ -> do
+      liftIO $ do
+        setSGR [SetColor Foreground Vivid Yellow]
+        putStr $ "\nNo-op"
+        setSGR []
+      currentState >>= printState
+      printStatusBar
+    Success _ (Output (Sender v p)) _ -> do
+      liftIO $ do
+        setSGR [SetColor Foreground Vivid Yellow]
+        putStr $ "\nOutput "
+        setSGR [SetColor Foreground Vivid Green]
+        print $ pretty v
+        setSGR []
+      currentState >>= printState
+      printStatusBar
+    Success _ (React _ sender receiver products) _ -> do
+      liftIO $ do
+        setSGR [SetColor Foreground Vivid Yellow]
+        putStrLn $ "\nReact"
+        setSGR []
+      currentState >>= printReact sender receiver products
+      printStatusBar
+    Success _ (Input _) _ -> do
+      currentState >>= printState
+      printStatusBar
+
+blue :: IO () -> IO ()
+blue p = do
+  setSGR [SetColor Foreground Dull Blue]
+  p
+  setSGR []
+
+red :: IO () -> IO ()
+red p = do
+  setSGR [SetColor Foreground Vivid Red]
+  p
+  setSGR []
+
+abbreviate :: String -> String
+abbreviate s = if length s >= 38
+  then  take 34 s ++ " ~~~"
+  else  s ++ replicate (38 - length s) ' '
+
+
+printReact :: Sender -> Receiver -> (Pi, Pi) -> St -> InteractionM IO ()
+printReact sender receiver (sender', receiver') (St senders receivers waitings freshVars) = do
+  let ss = [ (sender   == selected,   sender2pi c selected) | (c, selected)      <- senders   ]
+  let rs = [ (receiver == selected, receiver2pi c selected) | (c, selected)      <- receivers ]
+  let is = [ Recv (NR StdIn) clauses                        | (Receiver clauses) <- waitings  ]
+
+  liftIO $ do
+    blue $ putStrLn $ "  senders:"
+    when (not $ null ss) $ do
+      forM_ ss $ \(selected, p) -> do
+        if selected
+          then do
+            red $ putStr $ "☞   "
+            putStr $ abbreviate (show (pretty p))
+            red $ putStr $ " => "
+            putStrLn $ abbreviate $ show (pretty sender')
+          else putStrLn $ show $ indent 4 (pretty p)
+
+    when (not $ null rs) $ do
+      blue $ putStrLn $ "  receivers:"
+      forM_ rs $ \(selected, p) -> do
+        if selected
+          then do
+            red $ putStr $ "☞   "
+            putStr $ abbreviate (show (pretty p))
+            red $ putStr $ " => "
+            putStrLn $ abbreviate $ show (pretty receiver')
+          else putStrLn $ show $ indent 4 (pretty p)
+
+    when (not $ null is) $ do
+      blue $ putStrLn $ "  blocked:"
+      putStrLn $ show $ indent 4 (vsep (map pretty is))
+
+
+printState :: St -> InteractionM IO ()
+printState (St senders receivers waitings freshVars) = do
+
+  let ss = [ sender2pi   c selected  | (c, selected)      <- senders   ]
+  let rs = [ receiver2pi c selected  | (c, selected)      <- receivers ]
+  let is = [ Recv (NR StdIn) clauses | (Receiver clauses) <- waitings  ]
+
+  liftIO $ do
+    when (not $ null ss) $ do
+      blue $ putStrLn $ "  senders:"
+      putStrLn $ show $ indent 4 (vsep (map pretty ss))
+
+    when (not $ null rs) $ do
+      blue $ putStrLn $ "  receivers:"
+      putStrLn $ show $ indent 4 (vsep (map pretty rs))
+
+    when (not $ null is) $ do
+      blue $ putStrLn $ "  blocked:"
+      putStrLn $ show $ indent 4 (vsep (map pretty is))
+
+printStatusBar :: InteractionM IO ()
+printStatusBar = do
+  outcomes <- gets stOutcomes
+  cursor <- gets stCursor
+  case cursor of
+    Nothing -> liftIO $ putStrLn $ "0/0 outcomes"
+    Just n  -> liftIO $ putStrLn $ show (n + 1) ++ "/" ++ show (length outcomes) ++ " outcomes"

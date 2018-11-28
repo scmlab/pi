@@ -6,6 +6,7 @@ module Interpreter
   ( step, lineup, input
   , Reaction(..), St(..), Sender(..), Receiver(..)
   , module Interpreter.Monad
+  , sender2pi, receiver2pi
   ) where
 
 import Control.Monad.State
@@ -61,6 +62,12 @@ addPi (Nu x _ p) (St sends recvs inps news) = do
 lineup :: [Pi] -> St -> PiMonad St
 lineup = flip (foldM (flip addPi))
 
+sender2pi :: Name -> Sender -> Pi
+sender2pi c (Sender v p) = Send c (EV v) p
+
+receiver2pi :: Name -> Receiver -> Pi
+receiver2pi c (Receiver clauses) = Recv c clauses
+
 -- stToPi :: St -> Pi
 -- stToPi (St sends recvs inps news) =
 --   foldr Nu (foldr par End ss `par`
@@ -101,9 +108,9 @@ input val (Receiver pps) st =
     Nothing -> throwError "input fails to match"
 
 
-select :: [a] -> PiMonad (a,[a])
-select [] = mzero
-select (x:xs) = return (x,xs) `mplus`
+select :: [a] -> PiMonad (a, [a])
+select []     = mzero
+select (x:xs) = return (x, xs) `mplus`
                 ((id *** (x:)) <$> select xs)
 
 react :: Sender -> Receiver -> PiMonad (Pi, Pi)
