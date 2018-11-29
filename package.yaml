@@ -25,6 +25,7 @@ dependencies:
 - array
 - ansi-terminal
 - bytestring
+- containers
 - haskeline
 - lexer-applicative
 - mtl

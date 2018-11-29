@@ -105,7 +105,7 @@ getKey = do
         minput <- getInputLine "π > "
         case minput of
             Nothing    -> lift getKey
-            Just input -> return input
+            Just input' -> return input'
     _ -> reverse <$> interceptStdin [firstChar]
 
   restoreStdin
@@ -156,7 +156,7 @@ printCurrentOutcome = do
         setSGR []
       currentState >>= printState
       printStatusBar
-    Success _ (Output (Sender v p)) _ -> do
+    Success _ (Output (Sender v _)) _ -> do
       liftIO $ do
         setSGR [SetColor Foreground Vivid Yellow]
         putStr $ "\nOutput "
@@ -195,7 +195,7 @@ abbreviate s = if length s >= 38
 
 
 printReact :: Sender -> Receiver -> (Pi, Pi) -> St -> InteractionM IO ()
-printReact sender receiver (sender', receiver') (St senders receivers waitings freshVars) = do
+printReact sender receiver (sender', receiver') (St senders receivers waitings _) = do
   let ss = [ (sender   == selected,   sender2pi c selected) | (c, selected)      <- senders   ]
   let rs = [ (receiver == selected, receiver2pi c selected) | (c, selected)      <- receivers ]
   let is = [ Recv (NR StdIn) clauses                        | (Receiver clauses) <- waitings  ]
@@ -229,7 +229,7 @@ printReact sender receiver (sender', receiver') (St senders receivers waitings f
 
 
 printState :: St -> InteractionM IO ()
-printState (St senders receivers waitings freshVars) = do
+printState (St senders receivers waitings _) = do
 
   let ss = [ sender2pi   c selected  | (c, selected)      <- senders   ]
   let rs = [ receiver2pi c selected  | (c, selected)      <- receivers ]

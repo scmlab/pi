@@ -4,6 +4,8 @@ module Interpreter.Monad where
 
 import Control.Applicative
 import Control.Monad.Except
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 import Syntax.Abstract
 import Control.Monad.State
@@ -19,12 +21,16 @@ instance MonadFresh PiMonad where
           return (NG (Pos i))
 
 type BkSt = Int
-type Env = FMap Name Pi
+type Env = Map Name Pi
 
 type PiMonad = ReaderT Env (StateT BkSt (EitherT String []))
 
 runPiMonad :: Env -> BkSt -> PiMonad a -> [Either String (a, BkSt)]
 runPiMonad env bk m = runEitherT (runStateT (runReaderT m env) bk)
+
+programToEnv :: Prog -> Env
+programToEnv (Prog declrations) =
+  Map.fromList $ map (\(PiDecl name p) -> (ND (Pos name), p)) declrations
 
 --------------------------------------------------------------------------------
 -- | The EitherT monad transformer, from https://hackage.haskell.org/package/either-4.4.1/

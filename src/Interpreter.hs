@@ -14,6 +14,9 @@ import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Arrow ((***))
 
+import Data.Map (Map)
+import qualified Data.Map as Map
+
 import Data.Text.Prettyprint.Doc
 import PPrint ()
 
@@ -44,8 +47,8 @@ addPi :: Pi -> St -> PiMonad St
 addPi End       st = return st
 addPi (Par p q) st = addPi p st >>= addPi q
 addPi (Call x) st = do
-  defs <- ask
-  case lookup (ND (Pos x)) defs of
+  env <- ask
+  case Map.lookup (ND (Pos x)) env of
     Just p  -> addPi p st
     Nothing -> throwError $ "definition not found (looking for " ++ show (pretty x) ++ ")"
 addPi (Send c x p) (St sends recvs inps news) = do

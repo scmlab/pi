@@ -18,14 +18,14 @@ type RName = Text   -- row name
 data Name = ND (PN RName)   -- user defined
           | NG (PN Int)     -- system generated
           | NR ResName      -- reserved name
-    deriving (Eq, Show)
+    deriving (Ord, Eq, Show)
 
 data PName = PH RName        -- "pure" names, without polarization
            | PG Int
    deriving (Eq, Show)
 
 data PN a = Pos a | Neg a
-    deriving (Eq, Show)
+    deriving (Ord, Eq, Show)
 
 depolar :: PN a -> a
 depolar (Pos x) = x
@@ -44,7 +44,7 @@ unND (ND n) = n
 unND _ = undefined
 
 data ResName = StdOut | StdIn
-  deriving (Eq, Show)
+  deriving (Ord, Eq, Show)
 
 data Prog = Prog [PiDecl]
   deriving (Eq, Show)

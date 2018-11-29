@@ -7,6 +7,8 @@ import Control.Monad.Except
 import Data.Text.Prettyprint.Doc
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 import Syntax.Abstract
 -- import Syntax.Concrete (restore)
@@ -69,7 +71,7 @@ putCursor x = modify $ \ st -> st { stCursor = x }
 
 runInteraction :: Monad m => InteractionM m a -> m (Either Error a, InteractionState)
 runInteraction handler =
-  runStateT (runExceptT handler) (State Nothing Nothing [] (St [] [] [] []) initialOutcomes Nothing)
+  runStateT (runExceptT handler) (State Nothing Nothing Map.empty (St [] [] [] []) initialOutcomes Nothing)
   where initialOutcomes = [Failure "please load first"]
 
 interpret :: Env -> BkSt -> PiMonad (St, Reaction) -> [Outcome]
@@ -116,8 +118,8 @@ load filePath = do
   putSource (Just source)
   case Parser.parseByteString filePath source of
     Left err          -> throwError $ ParseError err
-    Right (Prog prog) -> do
-      let env = map (\(PiDecl name p) -> (ND (Pos name), p)) prog
+    Right ast -> do
+      let env = programToEnv ast
       putEnv env
       let results = runPiMonad env 0 $ lineup [Call "main"] (St [] [] [] [])
       case length results of
