@@ -7,8 +7,6 @@ import Control.Monad.Except
 import Data.Text.Prettyprint.Doc
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
-import Data.Map (Map)
-import qualified Data.Map as Map
 
 import Syntax.Abstract
 -- import Syntax.Concrete (restore)
@@ -150,11 +148,13 @@ test :: (MonadIO m, Monad m) => InteractionM m ()
 test = do
   filePath <- getFilePath
   rawFile <- liftIO $ BS.readFile filePath
-  case Parser.parseByteString filePath rawFile of
+  case Parser.parseByteString2 filePath rawFile of
     Left err   -> error $ show err
     Right ast  -> do
-      let env = programToEnv ast
-      putEnv (Just env)
+      liftIO $ print ast
+      -- liftIO $ print env
+
+
 
 -- read and parse and store program from the stored filepath
 reload :: (MonadIO m, Monad m) => InteractionM m ()

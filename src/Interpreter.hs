@@ -14,7 +14,6 @@ import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Arrow ((***))
 
-import Data.Map (Map)
 import qualified Data.Map as Map
 
 import Data.Text.Prettyprint.Doc

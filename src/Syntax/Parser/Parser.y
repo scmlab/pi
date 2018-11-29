@@ -124,8 +124,8 @@ Name :: {Name Loc}
       | ReservedName                        {% locate $ Reserved $1 }
 
 ReservedName :: {Text}
-     : 'stdout'                             { "StdOut" }
-     | 'stdin'                              { "StdIn" }
+     : 'stdout'                             { "stdout" }
+     | 'stdin'                              { "stdin" }
 
 Expr :: {Expr Loc}
     : Expr '+' Expr                       {% locate $ Add $1 $3 }

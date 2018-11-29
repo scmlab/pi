@@ -4,6 +4,7 @@ module Syntax.Concrete where
 
 import Data.Text (Text)
 import Data.Loc
+import Prelude hiding (LT, EQ, GT)
 
 --------------------------------------------------------------------------------
 -- | Concrete Syntax Tree
@@ -124,6 +125,12 @@ instance Located (Expr Loc) where
   locOf (Div _ _ loc) = loc
   locOf (Add _ _ loc) = loc
   locOf (Sub _ _ loc) = loc
+  locOf (EQ _ _ loc) = loc
+  locOf (NEQ _ _ loc) = loc
+  locOf (GT _ _ loc) = loc
+  locOf (GTE _ _ loc) = loc
+  locOf (LT _ _ loc) = loc
+  locOf (LTE _ _ loc) = loc
   locOf (ExprDigit _ loc) = loc
   locOf (ExprName _ loc) = loc
   locOf (ExprLabel _ loc) = loc
