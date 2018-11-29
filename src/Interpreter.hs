@@ -6,7 +6,7 @@ module Interpreter
   ( step, lineup, input
   , Reaction(..), St(..), Sender(..), Receiver(..)
   , module Interpreter.Monad
-  , senderToPi, receiverToPi
+  , senderToPi, receiverToPi, inputToPi
   ) where
 
 import Control.Monad.State
@@ -76,12 +76,14 @@ addPi (Nu x _ p) (St sends recvs inps news i) = do
 lineup :: [Pi] -> St -> PiMonad St
 lineup = flip (foldM (flip addPi))
 
-senderToPi :: Name -> Sender -> Pi
-senderToPi c (Sender _ v p) = Send c (EV v) p
+senderToPi :: (Name, Sender) -> Pi
+senderToPi (c, (Sender _ v p)) = Send c (EV v) p
 
-receiverToPi :: Name -> Receiver -> Pi
-receiverToPi c (Receiver _ clauses) = Recv c clauses
+receiverToPi :: (Name, Receiver) -> Pi
+receiverToPi (c, (Receiver _ clauses)) = Recv c clauses
 
+inputToPi :: Receiver -> Pi
+inputToPi (Receiver _ clauses) = Recv (NR StdIn) clauses
 -- stToPi :: St -> Pi
 -- stToPi (St sends recvs inps news) =
 --   foldr Nu (foldr par End ss `par`
@@ -143,8 +145,8 @@ instance Pretty Reaction where
   pretty (React channel (sender, receiver) products) =
     vsep  [ pretty "[React]"
           , pretty "Channel  :" <+> pretty channel
-          , pretty "Sender   :" <+> pretty (senderToPi   channel sender)
-          , pretty "Receiver :" <+> pretty (receiverToPi channel receiver)
+          , pretty "Sender   :" <+> pretty (senderToPi   (channel, sender))
+          , pretty "Receiver :" <+> pretty (receiverToPi (channel, receiver))
           , pretty "Products :" <+> pretty products
           ]
   pretty (Output (Sender _ v p)) =

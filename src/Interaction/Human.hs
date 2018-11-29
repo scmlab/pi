@@ -165,7 +165,7 @@ printOutcome previous next = case next of
         setSGR []
       printState nextState
       printStatusBar
-    Success nextState (Output sender) _ -> do
+    Success _ (Output sender) _ -> do
       liftIO $ do
         setSGR [SetColor Foreground Vivid Yellow]
         putStrLn $ "\nOutput "
@@ -214,88 +214,60 @@ abbreviate s = if length s >= 38
   then  take 34 s ++ " ~~~"
   else  s ++ replicate (38 - length s) ' '
 
--- printReceiver :: Receiver -> InteractionM IO ()
--- printReceiver ()
+printSenders :: (Sender -> Bool) -> IO () -> [(Name, Sender)] -> IO ()
+printSenders p printer senders = do
+  when (not $ null senders) $ do
+    blue $ putStrLn $ "  senders:"
+    forM_ senders $ \(c, sender) -> do
+      if p sender
+        then do
+          red $ putStr $ "☞   "
+          putStr $ abbreviate (show (pretty (senderToPi (c, sender))))
+          red $ putStr $ " => "
+          printer
+        else
+          putStrLn $ show $ indent 4 (pretty (senderToPi (c, sender)))
+
+printReceivers :: (Receiver -> Bool) -> IO () -> [(Name, Receiver)] -> IO ()
+printReceivers p printer receivers = do
+  when (not $ null receivers) $ do
+    blue $ putStrLn $ "  receivers:"
+    forM_ receivers $ \(c, receiver) -> do
+      if p receiver
+        then do
+          red $ putStr $ "☞   "
+          putStr $ abbreviate (show (pretty (receiverToPi (c, receiver))))
+          red $ putStr $ " => "
+          printer
+        else
+          putStrLn $ show $ indent 4 (pretty (receiverToPi (c, receiver)))
+
+printBlocked :: [Receiver] -> IO ()
+printBlocked blocked = do
+    when (not $ null blocked) $ do
+      blue $ putStrLn $ "  blocked:"
+      putStrLn $ show $ indent 4 (vsep (map (pretty . inputToPi) blocked))
 
 printOutput :: Sender -> St -> InteractionM IO ()
-printOutput selected@(Sender i v _) (St senders receivers waitings _ _) = do
-  let ss = [ (selected == sender, senderToPi c sender) | (c, sender)          <- senders   ]
-  let rs = [ receiverToPi c receiver        | (c, receiver)        <- receivers ]
-  let is = [ Recv (NR StdIn) clauses       | (Receiver _ clauses) <- waitings  ]
-
+printOutput selected@(Sender _ v _) (St senders receivers blocked _ _) = do
   liftIO $ do
-    blue $ putStrLn $ "  senders:"
-    when (not $ null ss) $ do
-      forM_ ss $ \(selected, p) -> do
-        if selected
-          then do
-            red $ putStr $ "☞   "
-            putStr $ abbreviate (show (pretty p))
-            red $ putStr $ " => "
-            green $ putStrLn $ show $ pretty v
-          else putStrLn $ show $ indent 4 (pretty p)
-
-    when (not $ null rs) $ do
-      blue $ putStrLn $ "  receivers:"
-      putStrLn $ show $ indent 4 (vsep (map pretty rs))
-
-    when (not $ null is) $ do
-      blue $ putStrLn $ "  blocked:"
-      putStrLn $ show $ indent 4 (vsep (map pretty is))
+    printSenders ((==) selected) (green $ putStrLn $ show $ pretty v) senders
+    printReceivers (const False) (return ()) receivers
+    printBlocked blocked
 
 printReact :: (Sender, Receiver) -> (Pi, Pi) -> St -> InteractionM IO ()
-printReact (sender, receiver) (sender', receiver') (St senders receivers waitings _ _) = do
-  let ss = [ (sender   == selected,   senderToPi c selected) | (c, selected)         <- senders   ]
-  let rs = [ (receiver == selected, receiverToPi c selected) | (c, selected) <- receivers ]
-  let is = [ Recv (NR StdIn) clauses                         | (Receiver _ clauses)      <- waitings  ]
-
+printReact (selectedSender, selectedReceiver) (productSender, productReceiver) (St senders receivers blocked _ _) = do
   liftIO $ do
-    blue $ putStrLn $ "  senders:"
-    when (not $ null ss) $ do
-      forM_ ss $ \(selected, p) -> do
-        if selected
-          then do
-            red $ putStr $ "☞   "
-            putStr $ abbreviate (show (pretty p))
-            red $ putStr $ " => "
-            putStrLn $ abbreviate $ show (pretty sender')
-          else putStrLn $ show $ indent 4 (pretty p)
-
-    when (not $ null rs) $ do
-      blue $ putStrLn $ "  receivers:"
-      forM_ rs $ \(selected, p) -> do
-        if selected
-          then do
-            red $ putStr $ "☞   "
-            putStr $ abbreviate (show (pretty p))
-            red $ putStr $ " => "
-            putStrLn $ abbreviate $ show (pretty receiver')
-          else putStrLn $ show $ indent 4 (pretty p)
-
-    when (not $ null is) $ do
-      blue $ putStrLn $ "  blocked:"
-      putStrLn $ show $ indent 4 (vsep (map pretty is))
-
+    printSenders   ((==) selectedSender)   (putStrLn $ abbreviate $ show (pretty productSender)) senders
+    printReceivers ((==) selectedReceiver) (putStrLn $ abbreviate $ show (pretty productReceiver)) receivers
+    printBlocked blocked
 
 printState :: St -> InteractionM IO ()
-printState (St senders receivers waitings _ _) = do
-
-  let ss = [ senderToPi   c selected  | (c, selected)        <- senders   ]
-  let rs = [ receiverToPi c selected  | (c, selected)        <- receivers ]
-  let is = [ Recv (NR StdIn) clauses | (Receiver _ clauses) <- waitings  ]
-
+printState (St senders receivers blocked _ _) = do
   liftIO $ do
-    when (not $ null ss) $ do
-      blue $ putStrLn $ "  senders:"
-      putStrLn $ show $ indent 4 (vsep (map pretty ss))
-
-    when (not $ null rs) $ do
-      blue $ putStrLn $ "  receivers:"
-      putStrLn $ show $ indent 4 (vsep (map pretty rs))
-
-    when (not $ null is) $ do
-      blue $ putStrLn $ "  blocked:"
-      putStrLn $ show $ indent 4 (vsep (map pretty is))
+    printSenders   (const False) (return ()) senders
+    printReceivers (const False) (return ()) receivers
+    printBlocked blocked
 
 printStatusBar :: InteractionM IO ()
 printStatusBar = do
