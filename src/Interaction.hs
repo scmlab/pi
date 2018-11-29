@@ -31,7 +31,7 @@ data InteractionState = State
   { stFilePath :: Maybe String        -- loaded filepath
   , stSource   :: Maybe ByteString    -- source code
   , stEnv      :: Maybe Env           -- syntax tree
-  , stState    :: St                  -- current state
+  , stHistory  :: [Outcome]           -- history outcomes
   , stOutcomes :: [Outcome]           -- next possible outcomes
   , stCursor   :: Maybe Int           -- pointing at which outcome
   } deriving (Show)
@@ -55,8 +55,10 @@ putSource x = modify $ \ st -> st { stSource = x }
 putEnv :: Monad m => Maybe Env -> InteractionM m ()
 putEnv x = modify $ \ st -> st { stEnv = x }
 
-putState :: Monad m => St -> InteractionM m ()
-putState x = modify $ \ st -> st { stState = x }
+pushHistory :: Monad m => Outcome -> InteractionM m ()
+pushHistory x = do
+  xs <- gets stHistory
+  modify $ \st -> st { stHistory = x:xs }
 
 putOutcome :: Monad m => [Outcome] -> InteractionM m ()
 putOutcome outcomes = modify $ \ st -> st
@@ -71,7 +73,7 @@ putCursor x = modify $ \ st -> st { stCursor = x }
 
 runInteraction :: Monad m => InteractionM m a -> m (Either Error a, InteractionState)
 runInteraction handler =
-  runStateT (runExceptT handler) (State Nothing Nothing Nothing (St [] [] [] []) initialOutcomes Nothing)
+  runStateT (runExceptT handler) (State Nothing Nothing Nothing [] initialOutcomes Nothing)
   where initialOutcomes = [Failure "please load first"]
 
 interpret :: Env -> BkSt -> PiMonad (St, Reaction) -> [Outcome]
@@ -100,13 +102,17 @@ choose n = do
   else do
     putCursor (Just n)
 
--- retrieve the current appointed outcome
-currentOutcome :: Monad m => InteractionM m Outcome
-currentOutcome = do
+-- retrieve the next appointed outcome
+nextOutcome :: Monad m => InteractionM m Outcome
+nextOutcome = do
   withCursor $ \n -> (!! n) <$> gets stOutcomes
 
-currentState :: Monad m => InteractionM m St
-currentState = gets stState
+latestHistory :: Monad m => InteractionM m Outcome
+latestHistory = do
+  history <- gets stHistory
+  if null history
+    then throwError $ InteractionError "no history to retrieve from"
+    else return (head history)
 
 --------------------------------------------------------------------------------
 -- | Commands
@@ -124,14 +130,14 @@ load filePath = do
     Right ast -> (putEnv . Just . programToEnv) ast
 
   env <- getEnv
+  -- putOutcome $ interpret env 0 $ lineup [Call "main"] (St [] [] [] []) >>= step
+  -- run
   let results = runPiMonad env 0 $ lineup [Call "main"] (St [] [] [] [])
   case length results of
-
     0 -> throwError $ InteractionError "failed to load the program"
     _ -> case (head results) of
       Left err -> throwError $ RuntimeError err
       Right (state, bk) -> do
-        putState state
         putOutcome [Success state Silent bk]
         run
 
@@ -154,30 +160,27 @@ reload = do
 -- run the appointed outcome
 run :: Monad m => InteractionM m ()
 run = do
-  outcome <- currentOutcome
+  outcome <- nextOutcome
+  pushHistory outcome
   case outcome of
     Failure err -> do
       putOutcome $ [Failure err]
     Success state (Output (Sender _ p)) i -> do
-      putState state
       env <- getEnv
       putOutcome $ interpret env i $ lineup [p] state >>= step
     Success state (React _ _ _ _) i -> do
-      putState state
       env <- getEnv
       putOutcome $ interpret env i (step state)
     Success state (Input pps) i -> do
-      putState state
       putOutcome $ [Success state (Input pps) i]
     Success state Silent i -> do
-      putState state
       env <- getEnv
       putOutcome $ interpret env i (step state)
 
 -- feed the appointed outcome with something
 feed :: Monad m => Val -> InteractionM m ()
 feed val = do
-  outcome <- currentOutcome
+  outcome <- nextOutcome
   case outcome of
     Success state (Input pps) i -> do
       env <- getEnv
