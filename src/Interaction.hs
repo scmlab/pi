@@ -30,7 +30,7 @@ instance Pretty Outcome where
 data InteractionState = State
   { stFilePath :: Maybe String        -- loaded filepath
   , stSource   :: Maybe ByteString    -- source code
-  , stEnv      :: Env                 -- syntax tree
+  , stEnv      :: Maybe Env           -- syntax tree
   , stState    :: St                  -- current state
   , stOutcomes :: [Outcome]           -- next possible outcomes
   , stCursor   :: Maybe Int           -- pointing at which outcome
@@ -52,7 +52,7 @@ putFilePath x = modify $ \ st -> st { stFilePath = x }
 putSource :: Monad m => Maybe ByteString -> InteractionM m ()
 putSource x = modify $ \ st -> st { stSource = x }
 
-putEnv :: Monad m => Env -> InteractionM m ()
+putEnv :: Monad m => Maybe Env -> InteractionM m ()
 putEnv x = modify $ \ st -> st { stEnv = x }
 
 putState :: Monad m => St -> InteractionM m ()
@@ -71,7 +71,7 @@ putCursor x = modify $ \ st -> st { stCursor = x }
 
 runInteraction :: Monad m => InteractionM m a -> m (Either Error a, InteractionState)
 runInteraction handler =
-  runStateT (runExceptT handler) (State Nothing Nothing Map.empty (St [] [] [] []) initialOutcomes Nothing)
+  runStateT (runExceptT handler) (State Nothing Nothing Nothing (St [] [] [] []) initialOutcomes Nothing)
   where initialOutcomes = [Failure "please load first"]
 
 interpret :: Env -> BkSt -> PiMonad (St, Reaction) -> [Outcome]
@@ -113,42 +113,43 @@ currentState = gets stState
 
 load :: (MonadIO m, Monad m) => FilePath -> InteractionM m ()
 load filePath = do
+  -- storing the filepath
   putFilePath (Just filePath)
+  -- storing the source
   source <- liftIO $ BS.readFile filePath
   putSource (Just source)
+  -- parse and store the AST
   case Parser.parseByteString filePath source of
-    Left err          -> throwError $ ParseError err
-    Right ast -> do
-      let env = programToEnv ast
-      putEnv env
-      let results = runPiMonad env 0 $ lineup [Call "main"] (St [] [] [] [])
-      case length results of
-        0 -> throwError $ InteractionError "failed to load the program"
-        _ -> case (head results) of
-          Left err -> throwError $ RuntimeError err
-          Right (state, bk) -> do
-            putState state
-            putOutcome [Success state Silent bk]
-            run
+    Left err  -> throwError $ ParseError err
+    Right ast -> (putEnv . Just . programToEnv) ast
+
+  env <- getEnv
+  let results = runPiMonad env 0 $ lineup [Call "main"] (St [] [] [] [])
+  case length results of
+
+    0 -> throwError $ InteractionError "failed to load the program"
+    _ -> case (head results) of
+      Left err -> throwError $ RuntimeError err
+      Right (state, bk) -> do
+        putState state
+        putOutcome [Success state Silent bk]
+        run
 
 test :: (MonadIO m, Monad m) => InteractionM m ()
 test = do
-  result <- gets stFilePath
-  case result of
-    Nothing -> throwError $ InteractionError "please load the program first"
-    Just filePath -> do
-      rawFile <- liftIO $ BS.readFile filePath
-      case Parser.parseByteString2 filePath rawFile of
-        Left err   -> error $ show err
-        Right ast  -> liftIO $ print ast
+  filePath <- getFilePath
+  rawFile <- liftIO $ BS.readFile filePath
+  case Parser.parseByteString filePath rawFile of
+    Left err   -> error $ show err
+    Right ast  -> do
+      let env = programToEnv ast
+      putEnv (Just env)
 
 -- read and parse and store program from the stored filepath
 reload :: (MonadIO m, Monad m) => InteractionM m ()
 reload = do
-  result <- gets stFilePath
-  case result of
-    Nothing -> throwError $ InteractionError "please load the program first"
-    Just filePath -> load filePath
+  filePath <- getFilePath
+  load filePath
 
 -- run the appointed outcome
 run :: Monad m => InteractionM m ()
@@ -159,19 +160,19 @@ run = do
       putOutcome $ [Failure err]
     Success state (Output (Sender _ p)) i -> do
       putState state
-      defs <- gets stEnv
-      putOutcome $ interpret defs i $ lineup [p] state >>= step
+      env <- getEnv
+      putOutcome $ interpret env i $ lineup [p] state >>= step
     Success state (React _ _ _ _) i -> do
       putState state
-      defs <- gets stEnv
-      putOutcome $ interpret defs i (step state)
+      env <- getEnv
+      putOutcome $ interpret env i (step state)
     Success state (Input pps) i -> do
       putState state
       putOutcome $ [Success state (Input pps) i]
     Success state Silent i -> do
       putState state
-      defs <- gets stEnv
-      putOutcome $ interpret defs i (step state)
+      env <- getEnv
+      putOutcome $ interpret env i (step state)
 
 -- feed the appointed outcome with something
 feed :: Monad m => Val -> InteractionM m ()
@@ -179,13 +180,30 @@ feed val = do
   outcome <- currentOutcome
   case outcome of
     Success state (Input pps) i -> do
-      defs <- gets stEnv
-      putOutcome $ interpret defs i $ do
+      env <- getEnv
+      putOutcome $ interpret env i $ do
         state' <- input val pps state
         return (state', Silent)
     _ ->
       throwError $ InteractionError "not expecting input"
 
+--------------------------------------------------------------------------------
+-- | Helpers
+
+-- get existing filepath from the state
+getFilePath :: Monad m => InteractionM m FilePath
+getFilePath = do
+  result <- gets stFilePath
+  case result of
+    Nothing       -> throwError $ InteractionError "please load the program first"
+    Just filePath -> return filePath
+
+getEnv :: Monad m => InteractionM m Env
+getEnv = do
+  result <- gets stEnv
+  case result of
+    Nothing   -> throwError $ InteractionError "panic: the AST has not been parsed and stored"
+    Just env  -> return env
 
 --------------------------------------------------------------------------------
 -- | Request
