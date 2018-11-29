@@ -51,29 +51,36 @@ handleRequest :: Request -> InteractionM IO ()
 handleRequest (CursorMoveTo n)  = do
   choose n
   previous <- latestHistory
-  nextOutcome >>= printOutcome (Just previous)
-handleRequest CursorUp          = withCursor $ \n -> try $ do
+  selectedFuture >>= printOutcome (Just previous)
+handleRequest CursorPrev          = withCursor $ \n -> try $ do
   choose (n - 1)
   previous <- latestHistory
-  nextOutcome >>= printOutcome (Just previous)
-handleRequest CursorDown        = withCursor $ \n -> try $ do
+  selectedFuture >>= printOutcome (Just previous)
+handleRequest CursorNext        = withCursor $ \n -> try $ do
   choose (n + 1)
   previous <- latestHistory
-  nextOutcome >>= printOutcome (Just previous)
-handleRequest CursorNext        = do
+  selectedFuture >>= printOutcome (Just previous)
+handleRequest CursorForth        = do
   run
   previous <- latestHistory
-  nextOutcome >>= printOutcome (Just previous)
+  selectedFuture >>= printOutcome (Just previous)
+handleRequest CursorBack        = displayHelp
+  -- run
+  -- previous <- latestHistory
+  -- selectedFuture >>= printOutcome (Just previous)
+  --
 handleRequest (Load filePath)   = do
   load filePath
-  latestHistory >>= printOutcome Nothing
+  previous <- latestHistory
+  selectedFuture >>= printOutcome (Just previous)
 handleRequest Reload            = do
   reload
-  latestHistory >>= printOutcome Nothing
+  previous <- latestHistory
+  selectedFuture >>= printOutcome (Just previous)
 handleRequest Test = do
   test
 handleRequest Help              = displayHelp
-handleRequest CursorPrev        = displayHelp
+
 --------------------------------------------------------------------------------
 -- | Parsing human input
 
@@ -82,10 +89,11 @@ parseRequest key
   | "load" `isPrefixOf` key = (Load . trim . drop 4) key
   | "l"    `isPrefixOf` key = (Load . trim . drop 1) key
   | otherwise = case trim key of
-      "\ESC[A"  -> CursorUp
-      "\ESC[B"  -> CursorDown
-      "\ESC[C"  -> CursorNext
-      "\n"      -> CursorNext
+      "\ESC[A"  -> CursorPrev
+      "\ESC[B"  -> CursorNext
+      "\ESC[C"  -> CursorForth
+      "\ESC[D"  -> CursorBack
+      "\n"      -> CursorForth
       "h"       -> Help
       "help"    -> Help
       "r"       -> Reload
@@ -157,23 +165,25 @@ printOutcome previous next = case next of
         setSGR []
       printState nextState
       printStatusBar
-    Success nextState (Output (Sender v _)) _ -> do
+    Success nextState (Output sender) _ -> do
       liftIO $ do
         setSGR [SetColor Foreground Vivid Yellow]
-        putStr $ "\nOutput "
-        setSGR [SetColor Foreground Vivid Green]
-        print $ pretty v
+        putStrLn $ "\nOutput "
         setSGR []
-      printState nextState
+
+      case previous of
+        Just (Success previousState _ _) -> printOutput sender previousState
+        _ -> throwError $ InteractionError "panic: cannot retrieve the state before the output"
+
       printStatusBar
-    Success _ (React _ sender receiver products) _ -> do
+    Success _ (React _ reagents products) _ -> do
       liftIO $ do
         setSGR [SetColor Foreground Vivid Yellow]
         putStrLn $ "\nReact"
         setSGR []
 
       case previous of
-        Just (Success previousState _ _) -> printReact sender receiver products previousState
+        Just (Success previousState _ _) -> printReact reagents products previousState
         _ -> throwError $ InteractionError "panic: cannot retrieve the state before the reaction"
 
       printStatusBar
@@ -193,17 +203,51 @@ red p = do
   p
   setSGR []
 
+green :: IO () -> IO ()
+green p = do
+  setSGR [SetColor Foreground Vivid Green]
+  p
+  setSGR []
+
 abbreviate :: String -> String
 abbreviate s = if length s >= 38
   then  take 34 s ++ " ~~~"
   else  s ++ replicate (38 - length s) ' '
 
+-- printReceiver :: Receiver -> InteractionM IO ()
+-- printReceiver ()
 
-printReact :: Sender -> Receiver -> (Pi, Pi) -> St -> InteractionM IO ()
-printReact sender receiver (sender', receiver') (St senders receivers waitings _) = do
-  let ss = [ (sender   == selected,   sender2pi c selected) | (c, selected)      <- senders   ]
-  let rs = [ (receiver == selected, receiver2pi c selected) | (c, selected)      <- receivers ]
-  let is = [ Recv (NR StdIn) clauses                        | (Receiver clauses) <- waitings  ]
+printOutput :: Sender -> St -> InteractionM IO ()
+printOutput selected@(Sender i v _) (St senders receivers waitings _ _) = do
+  let ss = [ (selected == sender, senderToPi c sender) | (c, sender)          <- senders   ]
+  let rs = [ receiverToPi c receiver        | (c, receiver)        <- receivers ]
+  let is = [ Recv (NR StdIn) clauses       | (Receiver _ clauses) <- waitings  ]
+
+  liftIO $ do
+    blue $ putStrLn $ "  senders:"
+    when (not $ null ss) $ do
+      forM_ ss $ \(selected, p) -> do
+        if selected
+          then do
+            red $ putStr $ "☞   "
+            putStr $ abbreviate (show (pretty p))
+            red $ putStr $ " => "
+            green $ putStrLn $ show $ pretty v
+          else putStrLn $ show $ indent 4 (pretty p)
+
+    when (not $ null rs) $ do
+      blue $ putStrLn $ "  receivers:"
+      putStrLn $ show $ indent 4 (vsep (map pretty rs))
+
+    when (not $ null is) $ do
+      blue $ putStrLn $ "  blocked:"
+      putStrLn $ show $ indent 4 (vsep (map pretty is))
+
+printReact :: (Sender, Receiver) -> (Pi, Pi) -> St -> InteractionM IO ()
+printReact (sender, receiver) (sender', receiver') (St senders receivers waitings _ _) = do
+  let ss = [ (sender   == selected,   senderToPi c selected) | (c, selected)         <- senders   ]
+  let rs = [ (receiver == selected, receiverToPi c selected) | (c, selected) <- receivers ]
+  let is = [ Recv (NR StdIn) clauses                         | (Receiver _ clauses)      <- waitings  ]
 
   liftIO $ do
     blue $ putStrLn $ "  senders:"
@@ -234,11 +278,11 @@ printReact sender receiver (sender', receiver') (St senders receivers waitings _
 
 
 printState :: St -> InteractionM IO ()
-printState (St senders receivers waitings _) = do
+printState (St senders receivers waitings _ _) = do
 
-  let ss = [ sender2pi   c selected  | (c, selected)      <- senders   ]
-  let rs = [ receiver2pi c selected  | (c, selected)      <- receivers ]
-  let is = [ Recv (NR StdIn) clauses | (Receiver clauses) <- waitings  ]
+  let ss = [ senderToPi   c selected  | (c, selected)        <- senders   ]
+  let rs = [ receiverToPi c selected  | (c, selected)        <- receivers ]
+  let is = [ Recv (NR StdIn) clauses | (Receiver _ clauses) <- waitings  ]
 
   liftIO $ do
     when (not $ null ss) $ do
@@ -255,7 +299,7 @@ printState (St senders receivers waitings _) = do
 
 printStatusBar :: InteractionM IO ()
 printStatusBar = do
-  outcomes <- gets stOutcomes
+  outcomes <- gets stFuture
   cursor <- gets stCursor
   case cursor of
     Nothing -> liftIO $ putStrLn $ "0/0 outcomes"

@@ -32,7 +32,7 @@ data InteractionState = State
   , stSource   :: Maybe ByteString    -- source code
   , stEnv      :: Maybe Env           -- syntax tree
   , stHistory  :: [Outcome]           -- history outcomes
-  , stOutcomes :: [Outcome]           -- next possible outcomes
+  , stFuture   :: [Outcome]           -- next possible outcomes
   , stCursor   :: Maybe Int           -- pointing at which outcome
   } deriving (Show)
 
@@ -60,9 +60,9 @@ pushHistory x = do
   xs <- gets stHistory
   modify $ \st -> st { stHistory = x:xs }
 
-putOutcome :: Monad m => [Outcome] -> InteractionM m ()
-putOutcome outcomes = modify $ \ st -> st
-  { stOutcomes = outcomes
+updateFuture :: Monad m => [Outcome] -> InteractionM m ()
+updateFuture outcomes = modify $ \ st -> st
+  { stFuture = outcomes
   , stCursor = if null outcomes then Nothing else Just 0
   }
 
@@ -96,16 +96,16 @@ withCursor f = do
 
 choose :: Monad m => Int -> InteractionM m ()
 choose n = do
-  len <- length <$> gets stOutcomes
+  len <- length <$> gets stFuture
   if (n >= len || n < 0) then
     throwError $ InteractionError "out of bound"
   else do
     putCursor (Just n)
 
 -- retrieve the next appointed outcome
-nextOutcome :: Monad m => InteractionM m Outcome
-nextOutcome = do
-  withCursor $ \n -> (!! n) <$> gets stOutcomes
+selectedFuture :: Monad m => InteractionM m Outcome
+selectedFuture = do
+  withCursor $ \n -> (!! n) <$> gets stFuture
 
 latestHistory :: Monad m => InteractionM m Outcome
 latestHistory = do
@@ -130,15 +130,13 @@ load filePath = do
     Right ast -> (putEnv . Just . programToEnv) ast
 
   env <- getEnv
-  -- putOutcome $ interpret env 0 $ lineup [Call "main"] (St [] [] [] []) >>= step
-  -- run
-  let results = runPiMonad env 0 $ lineup [Call "main"] (St [] [] [] [])
+  let results = runPiMonad env 0 $ lineup [Call "main"] (St [] [] [] [] 0)
   case length results of
     0 -> throwError $ InteractionError "failed to load the program"
     _ -> case (head results) of
       Left err -> throwError $ RuntimeError err
       Right (state, bk) -> do
-        putOutcome [Success state Silent bk]
+        updateFuture [Success state Silent bk]
         run
 
 test :: (MonadIO m, Monad m) => InteractionM m ()
@@ -160,31 +158,31 @@ reload = do
 -- run the appointed outcome
 run :: Monad m => InteractionM m ()
 run = do
-  outcome <- nextOutcome
+  outcome <- selectedFuture
   pushHistory outcome
   case outcome of
     Failure err -> do
-      putOutcome $ [Failure err]
-    Success state (Output (Sender _ p)) i -> do
+      updateFuture $ [Failure err]
+    Success state (Output (Sender _ _ p)) i -> do
       env <- getEnv
-      putOutcome $ interpret env i $ lineup [p] state >>= step
-    Success state (React _ _ _ _) i -> do
+      updateFuture $ interpret env i $ lineup [p] state >>= step
+    Success state (React _ _ _) i -> do
       env <- getEnv
-      putOutcome $ interpret env i (step state)
+      updateFuture $ interpret env i (step state)
     Success state (Input pps) i -> do
-      putOutcome $ [Success state (Input pps) i]
+      updateFuture $ [Success state (Input pps) i]
     Success state Silent i -> do
       env <- getEnv
-      putOutcome $ interpret env i (step state)
+      updateFuture $ interpret env i (step state)
 
 -- feed the appointed outcome with something
 feed :: Monad m => Val -> InteractionM m ()
 feed val = do
-  outcome <- nextOutcome
+  outcome <- selectedFuture
   case outcome of
     Success state (Input pps) i -> do
       env <- getEnv
-      putOutcome $ interpret env i $ do
+      updateFuture $ interpret env i $ do
         state' <- input val pps state
         return (state', Silent)
     _ ->
@@ -213,8 +211,8 @@ getEnv = do
 
 data Request
   = CursorMoveTo Int
-  | CursorUp | CursorDown
   | CursorNext | CursorPrev
+  | CursorBack | CursorForth
   | Help
   | Test
   | Load String

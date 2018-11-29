@@ -6,7 +6,7 @@ module Interpreter
   ( step, lineup, input
   , Reaction(..), St(..), Sender(..), Receiver(..)
   , module Interpreter.Monad
-  , sender2pi, receiver2pi
+  , senderToPi, receiverToPi
   ) where
 
 import Control.Monad.State
@@ -24,18 +24,26 @@ import Interpreter.Monad
 import Syntax.Abstract
 import Utilities
 
-data Sender = Sender Val Pi deriving (Show, Eq)
-data Receiver = Receiver [Clause] deriving (Show, Eq)
+type ID = Int
+data Sender   = Sender   ID Val Pi deriving (Show)
+data Receiver = Receiver ID [Clause] deriving (Show)
+
+instance Eq Sender where
+  Sender i _ _ == Sender j _ _ = i == j
+
+instance Eq Receiver where
+  Receiver i _ == Receiver j _ = i == j
 
 data St = St
   { stSenders   :: FMap Name Sender      -- senders
   , stReceivers :: FMap Name Receiver   -- receivers
   , stWaiting   :: [Receiver]           -- blocked at stdin
   , stFreshVars :: [Name]                   -- new variables
+  , stIDCount   :: Int
   } deriving (Show)
 
 data Reaction = Silent                       -- nothing ever happened
-              | React  Name Sender Receiver (Pi, Pi)  -- some chemical reaction
+              | React  Name (Sender, Receiver) (Pi, Pi)  -- some chemical reaction
               | Output Sender                -- stdout
               | Input  Receiver              -- stdin
               deriving (Show)
@@ -51,25 +59,28 @@ addPi (Call x) st = do
   case Map.lookup (ND (Pos x)) env of
     Just p  -> addPi p st
     Nothing -> throwError $ "definition not found (looking for " ++ show (pretty x) ++ ")"
-addPi (Send c x p) (St sends recvs inps news) = do
+addPi (Send c x p) (St sends recvs inps news i) = do
+  let i' = succ i
   val <- evalExpr x
-  return $ St ((c, (Sender val p)):sends) recvs inps news
-addPi (Recv (NR StdIn) pps) (St sends recvs inps news) =
-  return $ St sends recvs (Receiver pps:inps) news
-addPi (Recv c pps) (St sends recvs inps news) =
-  return $ St sends ((c,Receiver pps):recvs) inps news
-addPi (Nu x _ p) (St sends recvs inps news) = do
-  i <- fresh
-  addPi (substPi [(PH x, N i)] p) (St sends recvs inps (i:news))
+  return $ St ((c, (Sender i' val p)):sends) recvs inps news i'
+addPi (Recv (NR StdIn) pps) (St sends recvs inps news i) = do
+  let i' = succ i
+  return $ St sends recvs (Receiver i' pps:inps) news i'
+addPi (Recv c pps) (St sends recvs inps news i) = do
+  let i' = succ i
+  return $ St sends ((c,Receiver i' pps):recvs) inps news i'
+addPi (Nu x _ p) (St sends recvs inps news i) = do
+  var <- fresh
+  addPi (substPi [(PH x, N var)] p) (St sends recvs inps (var:news) i)
 
 lineup :: [Pi] -> St -> PiMonad St
 lineup = flip (foldM (flip addPi))
 
-sender2pi :: Name -> Sender -> Pi
-sender2pi c (Sender v p) = Send c (EV v) p
+senderToPi :: Name -> Sender -> Pi
+senderToPi c (Sender _ v p) = Send c (EV v) p
 
-receiver2pi :: Name -> Receiver -> Pi
-receiver2pi c (Receiver clauses) = Recv c clauses
+receiverToPi :: Name -> Receiver -> Pi
+receiverToPi c (Receiver _ clauses) = Recv c clauses
 
 -- stToPi :: St -> Pi
 -- stToPi (St sends recvs inps news) =
@@ -85,27 +96,27 @@ receiver2pi c (Receiver clauses) = Recv c clauses
 -- |
 
 step :: St -> PiMonad (St, Reaction)
-step (St sends recvs inps news) = do
+step (St sends recvs inps news i) = do
   (select inps >>= doInput) `mplus` (select sends >>= doSend)
   where
     doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad (St, Reaction)
     doSend ((NR StdOut, sender), otherSenders) =
-      return (St otherSenders recvs inps news, Output sender)
+      return (St otherSenders recvs inps news i, Output sender)
     doSend ((channel, sender), otherSenders) = do
       -- selected a reagent from the lists of receivers
       (receiver, otherReceivers) <- selectByKey channel recvs
       -- react!
       (sender', receiver') <- react sender receiver
       -- adjust the state accordingly
-      st <- lineup [sender', receiver'] (St otherSenders otherReceivers inps news)
-      return (st, React channel sender receiver (sender', receiver'))
+      st <- lineup [sender', receiver'] (St otherSenders otherReceivers inps news i)
+      return (st, React channel (sender, receiver) (sender', receiver'))
 
     doInput :: (Receiver, [Receiver]) -> PiMonad (St, Reaction)
     doInput (blocked, otherBlocked) =
-      return (St sends recvs otherBlocked news, Input blocked)
+      return (St sends recvs otherBlocked news i, Input blocked)
 
 input :: Val -> Receiver -> St -> PiMonad St
-input val (Receiver pps) st =
+input val (Receiver _ pps) st =
   case matchClauses pps val of
     Just (th, p) -> lineup [substPi th p] st
     Nothing -> throwError "input fails to match"
@@ -117,7 +128,7 @@ select (x:xs) = return (x, xs) `mplus`
                 ((id *** (x:)) <$> select xs)
 
 react :: Sender -> Receiver -> PiMonad (Pi, Pi)
-react (Sender v q) (Receiver clauses) =
+react (Sender _ v q) (Receiver _ clauses) =
   case matchClauses clauses v of
    Just (th, p) -> return (q, substPi th p)
    Nothing -> undefined
@@ -129,31 +140,31 @@ instance Pretty Reaction where
   pretty Silent =
     vsep  [ pretty "[Silent]"
           ]
-  pretty (React channel (Sender v p) (Receiver ps) products) =
+  pretty (React channel (sender, receiver) products) =
     vsep  [ pretty "[React]"
           , pretty "Channel  :" <+> pretty channel
-          , pretty "Sender   :" <+> pretty (Send channel (EV v) p)
-          , pretty "Receiver :" <+> pretty (Recv channel ps)
+          , pretty "Sender   :" <+> pretty (senderToPi   channel sender)
+          , pretty "Receiver :" <+> pretty (receiverToPi channel receiver)
           , pretty "Products :" <+> pretty products
           ]
-  pretty (Output (Sender v p)) =
+  pretty (Output (Sender _ v p)) =
     vsep  [ pretty "[Output]   :" <+> pretty (Send (NR StdOut) (EV v) p)
           ]
-  pretty (Input (Receiver clauses)) =
+  pretty (Input (Receiver _ clauses)) =
     vsep  [ pretty "[Input]    :" <+> pretty (Recv (NR StdIn) clauses)
           ]
 
 instance Pretty St where
-  pretty (St sends recvs inps news) =
+  pretty (St sends recvs inps news _) =
     vsep  [ pretty "Senders  :"
           , indent 2 (vsep (map pretty ss))
           , pretty "Receivers:"
           , indent 2 (vsep (map pretty rs))
           , encloseSep (pretty "New: ") (pretty ".") comma (map pretty news)
           ]
-    where ss = [ Send c (EV v) p         | (c, (Sender v p)) <- sends ]
-          rs = [ Recv (NR StdIn) clauses | (Receiver clauses)    <- inps ] ++
-               [ Recv c          clauses | (c, Receiver clauses) <- recvs ]
+    where ss = [ Send c (EV v) p         | (c, (Sender _ v p))     <- sends ]
+          rs = [ Recv (NR StdIn) clauses | (Receiver _ clauses)    <- inps  ]
+            ++ [ Recv c          clauses | (c, Receiver _ clauses) <- recvs ]
 
 {-
 type St = ( [Pi]               -- processes running
