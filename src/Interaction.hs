@@ -91,7 +91,7 @@ withCursor :: Monad m => (Int -> InteractionM m a) -> InteractionM m a
 withCursor f = do
   cursor <- gets stCursor
   case cursor of
-    Nothing -> throwError $ InteractionError "no outcomes to choose from"
+    Nothing -> throwError $ InteractionError "cannot go further"
     Just n -> f n
 
 choose :: Monad m => Int -> InteractionM m ()
@@ -113,6 +113,13 @@ latestHistory = do
   if null history
     then throwError $ InteractionError "no history to retrieve from"
     else return (head history)
+
+latestState :: Monad m => InteractionM m St
+latestState = do
+  outcome <- latestHistory
+  case outcome of
+    (Success state _ _) -> return state
+    _ -> throwError $ InteractionError "cannot retrieve state"
 
 --------------------------------------------------------------------------------
 -- | Commands

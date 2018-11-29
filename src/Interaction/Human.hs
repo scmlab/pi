@@ -50,33 +50,23 @@ try program = program `catchError` \_ -> return ()
 handleRequest :: Request -> InteractionM IO ()
 handleRequest (CursorMoveTo n)  = do
   choose n
-  previous <- latestHistory
-  selectedFuture >>= printOutcome (Just previous)
+  printOutcome
 handleRequest CursorPrev          = withCursor $ \n -> try $ do
   choose (n - 1)
-  previous <- latestHistory
-  selectedFuture >>= printOutcome (Just previous)
+  printOutcome
 handleRequest CursorNext        = withCursor $ \n -> try $ do
   choose (n + 1)
-  previous <- latestHistory
-  selectedFuture >>= printOutcome (Just previous)
+  printOutcome
 handleRequest CursorForth        = do
   run
-  previous <- latestHistory
-  selectedFuture >>= printOutcome (Just previous)
+  printOutcome
 handleRequest CursorBack        = displayHelp
-  -- run
-  -- previous <- latestHistory
-  -- selectedFuture >>= printOutcome (Just previous)
-  --
 handleRequest (Load filePath)   = do
   load filePath
-  previous <- latestHistory
-  selectedFuture >>= printOutcome (Just previous)
+  printOutcome
 handleRequest Reload            = do
   reload
-  previous <- latestHistory
-  selectedFuture >>= printOutcome (Just previous)
+  printOutcome
 handleRequest Test = do
   test
 handleRequest Help              = displayHelp
@@ -155,8 +145,11 @@ displayHelp = liftIO $ do
   putStrLn "  :reload             for reloading           (:r)"
   putStrLn "========================================"
 
-printOutcome :: Maybe Outcome -> Outcome -> InteractionM IO ()
-printOutcome previous next = case next of
+printOutcome :: InteractionM IO ()
+printOutcome = do
+  previousState <- latestState
+  next <- selectedFuture
+  case next of
     Failure err -> throwError (InteractionError err)
     Success nextState Silent _ -> do
       liftIO $ do
@@ -170,22 +163,14 @@ printOutcome previous next = case next of
         setSGR [SetColor Foreground Vivid Yellow]
         putStrLn $ "\nOutput "
         setSGR []
-
-      case previous of
-        Just (Success previousState _ _) -> printOutput sender previousState
-        _ -> throwError $ InteractionError "panic: cannot retrieve the state before the output"
-
+      printOutput sender previousState
       printStatusBar
     Success _ (React _ reagents products) _ -> do
       liftIO $ do
         setSGR [SetColor Foreground Vivid Yellow]
         putStrLn $ "\nReact"
         setSGR []
-
-      case previous of
-        Just (Success previousState _ _) -> printReact reagents products previousState
-        _ -> throwError $ InteractionError "panic: cannot retrieve the state before the reaction"
-
+      printReact reagents products previousState
       printStatusBar
     Success nextState (Input _) _ -> do
       printState nextState
