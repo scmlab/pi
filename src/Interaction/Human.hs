@@ -11,6 +11,7 @@ import Prelude hiding (readFile)
 import System.Console.Haskeline
 import System.IO
 import System.Console.ANSI
+import Text.Read (readMaybe)
 
 import Interaction
 -- import Interpreter (St(..))
@@ -50,23 +51,30 @@ try program = program `catchError` \_ -> return ()
 handleRequest :: Request -> InteractionM IO ()
 handleRequest (CursorMoveTo n)  = do
   choose n
-  printOutcome
+  printFuture
 handleRequest CursorPrev          = withCursor $ \n -> try $ do
   choose (n - 1)
-  printOutcome
+  printFuture
 handleRequest CursorNext        = withCursor $ \n -> try $ do
   choose (n + 1)
-  printOutcome
+  printFuture
 handleRequest CursorForth        = do
   run
-  printOutcome
+  tryFeed $ liftIO $ do
+    yellow $ putStrLn $ "Feed me:"
+    hFlush stdout
+    restoreStdin
+    input <- getLine
+    controlStdin
+    return $ VI <$> readMaybe input
+  printFuture
 handleRequest CursorBack        = displayHelp
 handleRequest (Load filePath)   = do
   load filePath
-  printOutcome
+  printFuture
 handleRequest Reload            = do
   reload
-  printOutcome
+  printFuture
 handleRequest Test = do
   test
 handleRequest Help              = displayHelp
@@ -113,24 +121,25 @@ getKey = do
   restoreStdin
   return key
 
-  where
-    controlStdin :: IO ()
-    controlStdin = do
-      hSetBuffering stdin NoBuffering
-      hSetEcho      stdin False
+-- special mode
+controlStdin :: IO ()
+controlStdin = do
+  hSetBuffering stdin NoBuffering
+  hSetEcho      stdin False
 
-    restoreStdin :: IO ()
-    restoreStdin = do
-      hSetBuffering stdin LineBuffering
-      hSetEcho      stdin True
+-- normal mode
+restoreStdin :: IO ()
+restoreStdin = do
+  hSetBuffering stdin LineBuffering
+  hSetEcho      stdin True
 
-    interceptStdin :: String -> IO String
-    interceptStdin buffer = do
-      char <- getChar
-      more <- hReady stdin
-      if more
-        then interceptStdin (char:buffer)
-        else return         (char:buffer)
+interceptStdin :: String -> IO String
+interceptStdin buffer = do
+  char <- getChar
+  more <- hReady stdin
+  if more
+    then interceptStdin (char:buffer)
+    else return         (char:buffer)
 
 
 --------------------------------------------------------------------------------
@@ -145,36 +154,38 @@ displayHelp = liftIO $ do
   putStrLn "  :reload             for reloading           (:r)"
   putStrLn "========================================"
 
-printOutcome :: InteractionM IO ()
-printOutcome = do
+printFuture :: InteractionM IO ()
+printFuture = do
   previousState <- latestState
   next <- selectedFuture
   case next of
     Failure err -> throwError (InteractionError err)
     Success nextState Silent _ -> do
       liftIO $ do
-        setSGR [SetColor Foreground Vivid Yellow]
-        putStr $ "\nNo-op"
-        setSGR []
+        yellow $ putStrLn $ "\nNo-op"
       printState nextState
       printStatusBar
     Success _ (Output sender) _ -> do
       liftIO $ do
-        setSGR [SetColor Foreground Vivid Yellow]
-        putStrLn $ "\nOutput "
-        setSGR []
+        yellow $ putStrLn $ "\nOutput"
       printOutput sender previousState
       printStatusBar
     Success _ (React _ reagents products) _ -> do
       liftIO $ do
-        setSGR [SetColor Foreground Vivid Yellow]
-        putStrLn $ "\nReact"
-        setSGR []
+        yellow $ putStrLn $ "\nReact"
       printReact reagents products previousState
       printStatusBar
-    Success nextState (Input _) _ -> do
-      printState nextState
+    Success nextState (Input receiver) _ -> do
+      liftIO $ do
+        yellow $ putStrLn $ "\nInput"
+      printInput receiver previousState
       printStatusBar
+
+yellow :: IO () -> IO ()
+yellow p = do
+  setSGR [SetColor Foreground Vivid Yellow]
+  p
+  setSGR []
 
 blue :: IO () -> IO ()
 blue p = do
@@ -227,32 +238,55 @@ printReceivers p printer receivers = do
         else
           putStrLn $ show $ indent 4 (pretty (receiverToPi (c, receiver)))
 
-printBlocked :: [Receiver] -> IO ()
-printBlocked blocked = do
-    when (not $ null blocked) $ do
-      blue $ putStrLn $ "  blocked:"
-      putStrLn $ show $ indent 4 (vsep (map (pretty . inputToPi) blocked))
+printBlocked :: (Receiver -> Bool) -> IO () -> [Receiver] -> IO ()
+printBlocked p printer receivers = do
+  when (not $ null receivers) $ do
+    blue $ putStrLn $ "  blocked:"
+    forM_ receivers $ \receiver -> do
+      if p receiver
+        then do
+          red $ putStr $ "☞   "
+          putStrLn $ abbreviate (show (pretty (inputToPi receiver)))
+          -- red $ putStrLn $ " => "
+          printer
+        else
+          putStrLn $ show $ indent 4 (pretty (inputToPi receiver))
 
 printOutput :: Sender -> St -> InteractionM IO ()
 printOutput selected@(Sender _ v _) (St senders receivers blocked _ _) = do
   liftIO $ do
     printSenders ((==) selected) (green $ putStrLn $ show $ pretty v) senders
     printReceivers (const False) (return ()) receivers
-    printBlocked blocked
+    printBlocked   (const False) (return ()) blocked
 
 printReact :: (Sender, Receiver) -> (Pi, Pi) -> St -> InteractionM IO ()
 printReact (selectedSender, selectedReceiver) (productSender, productReceiver) (St senders receivers blocked _ _) = do
   liftIO $ do
     printSenders   ((==) selectedSender)   (putStrLn $ abbreviate $ show (pretty productSender)) senders
     printReceivers ((==) selectedReceiver) (putStrLn $ abbreviate $ show (pretty productReceiver)) receivers
-    printBlocked blocked
+    printBlocked   (const False) (return ()) blocked
+
+printInput :: Receiver -> St -> InteractionM IO ()
+printInput selected (St senders receivers blocked _ _) = do
+  liftIO $ do
+    printSenders   (const False) (return ()) senders
+    printReceivers (const False) (return ()) receivers
+    printBlocked   ((==) selected) (return ()) blocked
+  -- where
+  --   readInput :: IO (V)
+  --   readInput = do
+  --     hFlush stdout
+  --     restoreStdin
+  --     input <- getLine
+  --     controlStdin
+  --     return input
 
 printState :: St -> InteractionM IO ()
 printState (St senders receivers blocked _ _) = do
   liftIO $ do
     printSenders   (const False) (return ()) senders
     printReceivers (const False) (return ()) receivers
-    printBlocked blocked
+    printBlocked   (const False) (return ()) blocked
 
 printStatusBar :: InteractionM IO ()
 printStatusBar = do

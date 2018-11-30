@@ -89,7 +89,7 @@ withCursor :: Monad m => (Int -> InteractionM m a) -> InteractionM m a
 withCursor f = do
   cursor <- gets stCursor
   case cursor of
-    Nothing -> throwError $ InteractionError "cannot go further"
+    Nothing -> throwError $ InteractionError "cannot go any further"
     Just n -> f n
 
 choose :: Monad m => Int -> InteractionM m ()
@@ -151,9 +151,7 @@ test = do
   case Parser.parseByteString2 filePath rawFile of
     Left err   -> error $ show err
     Right ast  -> do
-      liftIO $ print ast
-      -- liftIO $ print env
-
+      latestState >>= liftIO . print
 
 
 -- read and parse and store program from the stored filepath
@@ -163,7 +161,7 @@ reload = do
   load filePath
 
 -- run the appointed outcome
-run :: Monad m => InteractionM m ()
+run :: (MonadIO m, Monad m) => InteractionM m ()
 run = do
   outcome <- selectedFuture
   pushHistory outcome
@@ -181,6 +179,25 @@ run = do
     Success state Silent i -> do
       env <- getEnv
       updateFuture $ interpret env i (step state)
+
+tryFeed :: Monad m => InteractionM m (Maybe Val) -> InteractionM m ()
+tryFeed f = do
+  outcome <- latestHistory
+  case outcome of
+    Success state (Input pps) i -> do
+      result <- f
+      case result of
+        Just val -> do
+          env <- getEnv
+          updateFuture $ interpret env i $ do
+            state' <- input val pps state
+            return (state', Silent)
+        Nothing ->
+          throwError $ InteractionError "cannot parse the input"
+    _ ->
+      return ()
+
+      -- throwError $ InteractionError "not expecting input"
 
 -- feed the appointed outcome with something
 feed :: Monad m => Val -> InteractionM m ()
