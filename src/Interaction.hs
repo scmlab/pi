@@ -135,14 +135,17 @@ load filePath = do
     Right ast -> (putEnv . Just . programToEnv) ast
 
   env <- getEnv
-  let results = runPiMonad env 0 $ lineup [Call "main"] (St [] [] [] [] 0)
-  case length results of
-    0 -> throwError $ InteractionError "failed to load the program"
-    _ -> case (head results) of
-      Left err -> throwError $ RuntimeError err
-      Right (state, bk) -> do
-        updateFuture [Success state Silent bk]
-        run
+  -- populate future, the next possible outcomes (there should be only 1)
+  updateFuture $ interpret env 0 $ do
+    state <- lineup [Call "main"] (St [] [] [] [] 0)
+    return (state, Silent)
+  -- retrieve state from the recently populated outcome and store it
+  outcome <- selectedFuture
+  case outcome of
+    Success state reaction bk -> do
+      pushHistory (Success state reaction bk)
+      updateFuture $ interpret env bk (step state)
+    Failure err -> throwError $ InteractionError "cannot retrieve outcome"
 
 test :: (MonadIO m, Monad m) => InteractionM m ()
 test = do

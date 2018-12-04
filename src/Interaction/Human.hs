@@ -59,7 +59,7 @@ handleRequest CursorNext        = withCursor $ \n -> try $ do
   choose (n + 1)
   printFuture
 handleRequest CursorForth        = do
-  run 
+  run
   handleOutcome handleInput handleOutput
   printFuture
   where
