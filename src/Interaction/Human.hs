@@ -59,15 +59,20 @@ handleRequest CursorNext        = withCursor $ \n -> try $ do
   choose (n + 1)
   printFuture
 handleRequest CursorForth        = do
-  run
-  tryFeed $ liftIO $ do
-    yellow $ putStrLn $ "Feed me:"
-    hFlush stdout
-    restoreStdin
-    input <- getLine
-    controlStdin
-    return $ VI <$> readMaybe input
+  run 
+  handleOutcome handleInput handleOutput
   printFuture
+  where
+    handleInput = liftIO $ do
+      yellow $ putStrLn $ "\nInput:"
+      hFlush stdout
+      restoreStdin
+      input <- getLine
+      controlStdin
+      return $ VI <$> readMaybe input
+    handleOutput val = liftIO $ do
+      yellow $ putStrLn $ "\nOutput:"
+      green $ putStrLn $ show $ pretty val
 handleRequest CursorBack        = displayHelp
 handleRequest (Load filePath)   = do
   load filePath

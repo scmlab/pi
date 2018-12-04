@@ -168,24 +168,27 @@ run = do
   case outcome of
     Failure err -> do
       updateFuture $ [Failure err]
-    Success state (Output (Sender _ _ p)) i -> do
+    Success oldState (Output (Sender _ _ p)) i -> do
       env <- getEnv
-      updateFuture $ interpret env i $ lineup [p] state >>= step
-    Success state (React _ _ _) i -> do
+      updateFuture $ interpret env i $ do
+        lineup [p] oldState >>= step
+    Success oldState (React _ _ _) i -> do
       env <- getEnv
-      updateFuture $ interpret env i (step state)
-    Success state (Input pps) i -> do
-      updateFuture $ [Success state (Input pps) i]
-    Success state Silent i -> do
+      updateFuture $ interpret env i (step oldState)
+    Success oldState (Input pps) i -> do
+      updateFuture $ [Success oldState (Input pps) i]
+    Success oldState Silent i -> do
       env <- getEnv
-      updateFuture $ interpret env i (step state)
+      updateFuture $ interpret env i (step oldState)
 
-tryFeed :: Monad m => InteractionM m (Maybe Val) -> InteractionM m ()
-tryFeed f = do
+handleOutcome :: Monad m => InteractionM m (Maybe Val) -> (Val -> InteractionM m ()) -> InteractionM m ()
+handleOutcome handleInput handleOutput = do
   outcome <- latestHistory
   case outcome of
+    Success state (Output (Sender _ val _)) i -> do
+      handleOutput val
     Success state (Input pps) i -> do
-      result <- f
+      result <- handleInput
       case result of
         Just val -> do
           env <- getEnv
@@ -196,21 +199,6 @@ tryFeed f = do
           throwError $ InteractionError "cannot parse the input"
     _ ->
       return ()
-
-      -- throwError $ InteractionError "not expecting input"
-
--- feed the appointed outcome with something
-feed :: Monad m => Val -> InteractionM m ()
-feed val = do
-  outcome <- selectedFuture
-  case outcome of
-    Success state (Input pps) i -> do
-      env <- getEnv
-      updateFuture $ interpret env i $ do
-        state' <- input val pps state
-        return (state', Silent)
-    _ ->
-      throwError $ InteractionError "not expecting input"
 
 --------------------------------------------------------------------------------
 -- | Helpers
