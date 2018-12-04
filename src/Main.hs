@@ -15,30 +15,36 @@ main = do
   hSetBuffering stdout LineBuffering
   hSetBuffering stdin  LineBuffering
   (opts, filePaths) <- getArgs >>= parseOpts
-  case optJSON opts of
-    True  -> putStrLn "temporarily unavailable"
-    False -> humanREPL filePaths
-
+  case optMode opts of
+    Trace -> humanREPL True filePaths
+    Execute -> humanREPL False filePaths
+    Help -> putStrLn $ usageInfo usage options
+    
 --------------------------------------------------------------------------------
 -- | Command-line arguments
 
+data Mode = Trace | Execute | Help
+
 data Options = Options
-  { optJSON :: Bool
-  } deriving (Show)
+  { optMode :: Mode
+  }
 
 defaultOptions :: Options
 defaultOptions = Options
-  { optJSON = False
+  { optMode = Execute
   }
 
 options :: [OptDescr (Options -> Options)]
 options =
-  [ Option ['j']  ["json"]  (NoArg (\opts -> opts { optJSON = True }))  "talk in JSON format"
+  [ Option ['h']  ["help"]  (NoArg (\opts -> opts { optMode = Help }))  "print this help message"
+  , Option ['t']  ["trace"]  (NoArg (\opts -> opts { optMode = Trace }))  "trace mode"
   ]
+
+usage :: String
+usage =  "Usage: pi [OPTION...] filepath\n"
 
 parseOpts :: [String] -> IO (Options, [String])
 parseOpts argv =
   case getOpt Permute options argv of
     (o,n,[]  ) -> return (foldl (flip id) defaultOptions o, n)
-    (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
-      where header = "Usage: pi [OPTION...] filepath"
+    (_,_,errs) -> ioError $ userError $ concat errs ++ usageInfo usage options

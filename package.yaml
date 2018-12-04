@@ -43,6 +43,7 @@ executable:
   other-modules:
   - Interaction.Human
   - Interaction.Scheduler
+  - Interaction.Util
   - Interaction
   - Interpreter
   - Interpreter.Monad
