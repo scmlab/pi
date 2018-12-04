@@ -6,6 +6,7 @@ import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import Data.Char (isSpace)
 import Data.List (dropWhileEnd, isPrefixOf)
+import Data.Text (unpack)
 import Data.Text.Prettyprint.Doc
 import Prelude hiding (readFile)
 import System.Console.Haskeline
@@ -243,11 +244,13 @@ printSenders p printer senders = do
       if p sender
         then do
           red $ putStr $ " ●  "
+          green $ putStr $ "[" ++ (unpack $ senderProcName sender) ++ "] "
           putStr $ abbreviate (show (pretty (senderToPi (c, sender))))
           red $ putStr $ " => "
           printer
         else do
           putStr $ " ○  "
+          green $ putStr $ "[" ++ (unpack $ senderProcName sender) ++ "] "
           putStrLn $ abbreviate (show (pretty (senderToPi (c, sender))))
 
 printReceivers :: (Receiver -> Bool) -> IO () -> [(Name, Receiver)] -> IO ()
@@ -258,11 +261,13 @@ printReceivers p printer receivers = do
       if p receiver
         then do
           red $ putStr $ " ●  "
+          green $ putStr $ "[" ++ (unpack $ receiverProcName receiver) ++ "] "
           putStr $ abbreviate (show (pretty (receiverToPi (c, receiver))))
           red $ putStr $ " => "
           printer
         else do
           putStr $ " ○  "
+          green $ putStr $ "[" ++ (unpack $ receiverProcName receiver) ++ "] "
           putStrLn $ abbreviate (show (pretty (receiverToPi (c, receiver))))
 
 
@@ -274,10 +279,12 @@ printBlocked p printer receivers = do
       if p receiver
         then do
           red $ putStr $ " ●  "
+          green $ putStr $ "[" ++ (unpack $ receiverProcName receiver) ++ "] "
           putStrLn $ abbreviate (show (pretty (inputToPi receiver)))
           printer
         else do
           putStr $ " ○  "
+          green $ putStr $ "[" ++ (unpack $ receiverProcName receiver) ++ "] "
           putStrLn $ abbreviate (show (pretty (inputToPi receiver)))
 
 printOutput :: Sender -> St -> InteractionM IO ()

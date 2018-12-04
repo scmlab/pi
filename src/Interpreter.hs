@@ -4,7 +4,7 @@
 
 module Interpreter
   ( step, lineup, input
-  , PID(..)
+  , PID(..), senderProcName, receiverProcName
   , Reaction(..), St(..), Sender(..), Receiver(..)
   , module Interpreter.Monad
   , senderToPi, receiverToPi, inputToPi
