@@ -164,44 +164,35 @@ reload = do
   load filePath
 
 -- run the appointed outcome
-run :: (MonadIO m, Monad m) => InteractionM m ()
-run = do
+run :: (MonadIO m, Monad m)
+  => InteractionM m Val   -- input handler
+  -> (Val -> InteractionM m ())   -- output handler
+  -> InteractionM m ()
+run inputHandler outputHandler = do
   outcome <- selectedFuture
   pushHistory outcome
   case outcome of
     Failure err -> do
       updateFuture $ [Failure err]
-    Success oldState (Output (Sender _ _ p)) i -> do
+    Success oldState (Output (Sender _ val p)) i -> do
       env <- getEnv
       updateFuture $ interpret env i $ do
         lineup [p] oldState >>= step
+      -- handle output
+      outputHandler val
     Success oldState (React _ _ _) i -> do
       env <- getEnv
       updateFuture $ interpret env i (step oldState)
     Success oldState (Input pps) i -> do
-      updateFuture $ [Success oldState (Input pps) i]
+      -- handle input
+      val <- inputHandler
+      env <- getEnv
+      updateFuture $ interpret env i $ do
+        state' <- input val pps oldState
+        return (state', Silent)
     Success oldState Silent i -> do
       env <- getEnv
       updateFuture $ interpret env i (step oldState)
-
-handleOutcome :: Monad m => InteractionM m (Maybe Val) -> (Val -> InteractionM m ()) -> InteractionM m ()
-handleOutcome handleInput handleOutput = do
-  outcome <- latestHistory
-  case outcome of
-    Success state (Output (Sender _ val _)) i -> do
-      handleOutput val
-    Success state (Input pps) i -> do
-      result <- handleInput
-      case result of
-        Just val -> do
-          env <- getEnv
-          updateFuture $ interpret env i $ do
-            state' <- input val pps state
-            return (state', Silent)
-        Nothing ->
-          throwError $ InteractionError "cannot parse the input"
-    _ ->
-      return ()
 
 --------------------------------------------------------------------------------
 -- | Helpers

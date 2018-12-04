@@ -59,17 +59,28 @@ handleRequest CursorNext        = withCursor $ \n -> try $ do
   choose (n + 1)
   printFuture
 handleRequest CursorForth        = do
-  run
-  handleOutcome handleInput handleOutput
+  run handleInput handleOutput
   printFuture
   where
-    handleInput = liftIO $ do
-      yellow $ putStrLn $ "\nInput:"
-      hFlush stdout
-      restoreStdin
-      input <- getLine
-      controlStdin
-      return $ VI <$> readMaybe input
+    handleInput :: InteractionM IO Val
+    handleInput = do
+      raw <- liftIO $ do
+        yellow $ putStrLn $ "\nInput:"
+        hFlush stdout
+        -- requesting for input
+        restoreStdin
+        input <- getLine
+        controlStdin
+        return input
+      -- parsing the input
+      let result = VI <$> readMaybe raw
+      case result of
+        Just val -> return val
+        Nothing -> do
+          liftIO $ red $ putStrLn $ "cannot parse the input"
+          handleInput
+
+    handleOutput :: Val -> InteractionM IO ()
     handleOutput val = liftIO $ do
       yellow $ putStrLn $ "\nOutput:"
       green $ putStrLn $ show $ pretty val
