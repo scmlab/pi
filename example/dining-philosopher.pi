@@ -4,6 +4,6 @@ p0 = fork1!True . end | fork0!True . end | phil0
 p1 = fork1!True . end | fork0!True . end | phil1
 
 phil0 = fork0?x . fork1?y . stdout!0 . p0
-phil1 = fork1?x . fork0?y . stdout!1 . p2
+phil1 = fork1?x . fork0?y . stdout!1 . p1
 
 main = phil0 | phil1 | fork1!True . end | fork0!True . end

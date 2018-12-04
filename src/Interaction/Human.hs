@@ -60,6 +60,7 @@ handleRequest CursorNext        = withCursor $ \n -> try $ do
   printFuture
 handleRequest CursorForth        = do
   run handleInput handleOutput
+  skipSilent
   printFuture
   where
     handleInput :: InteractionM IO Val
@@ -84,6 +85,14 @@ handleRequest CursorForth        = do
     handleOutput val = liftIO $ do
       yellow $ putStrLn $ "\nOutput:"
       green $ putStrLn $ show $ pretty val
+
+    skipSilent :: InteractionM IO ()
+    skipSilent = do
+      next <- selectedFuture
+      case next of
+        Success _ Silent _ -> run handleInput handleOutput
+        _ -> return ()
+
 handleRequest CursorBack        = displayHelp
 handleRequest (Load filePath)   = do
   load filePath
