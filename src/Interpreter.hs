@@ -27,11 +27,7 @@ import Utilities
 --------------------------------------------------------------------------------
 -- | PID: data type for tracking processes
 
-type ID = Int
-data PID = PID
-  { no   :: Int         -- a unique ID
-  , name :: ProcName    -- the name of the process it belonged to
-  } deriving (Show)
+data PID = PID Int ProcName deriving (Show)
 
 instance Eq PID where
   PID i _ == PID j _ = i == j
@@ -73,7 +69,7 @@ data Reaction = Silent                       -- nothing ever happened
 addPi :: ProcName -> Pi -> St -> PiMonad St
 addPi _    End       st = return st
 addPi name (Par p q) st = addPi name p st >>= addPi name q
-addPi name (Call x) st = do
+addPi _    (Call x) st = do
   env <- ask
   case Map.lookup (ND (Pos x)) env of
     Just p  -> addPi x p st

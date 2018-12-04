@@ -131,6 +131,8 @@ instance Located (Expr Loc) where
   locOf (GTE _ _ loc) = loc
   locOf (LT _ _ loc) = loc
   locOf (LTE _ _ loc) = loc
+  locOf (IfThenElse _ _ _ loc) = loc
+  locOf (ExprBool _ loc) = loc
   locOf (ExprDigit _ loc) = loc
   locOf (ExprName _ loc) = loc
   locOf (ExprLabel _ loc) = loc

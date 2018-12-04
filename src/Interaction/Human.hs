@@ -11,10 +11,11 @@ import Data.Text.Prettyprint.Doc
 import Prelude hiding (readFile)
 import System.Console.Haskeline
 import System.IO
-import System.Console.ANSI
 import Text.Read (readMaybe)
 
 import Interaction
+import Interaction.Scheduler
+import Interaction.Util
 -- import Interpreter (St(..))
 import Interpreter
 import Syntax.Abstract
@@ -28,8 +29,9 @@ humanREPL [] = void $ runInteraction $ do
   displayHelp
   loop
 humanREPL (filePath:_) = void $ runInteraction $ do
-  handleError $ handleRequest (Load (trim filePath))
-  loop
+  handleError $ do
+    load filePath
+    execute
 
 loop :: InteractionM IO ()
 loop = do
@@ -101,6 +103,9 @@ handleRequest (Load filePath)   = do
 handleRequest Reload            = do
   reload
   printFuture
+handleRequest Execute           = do
+  reload
+  execute
 handleRequest Test = do
   test
 handleRequest Help              = displayHelp
@@ -122,6 +127,8 @@ parseRequest key
       "help"    -> Help
       "r"       -> Reload
       "reload"  -> Reload
+      "x"       -> Execute
+      "exec"    -> Execute
       "t"       -> Test
       "test"    -> Test
       _         -> Help
@@ -147,37 +154,18 @@ getKey = do
   restoreStdin
   return key
 
--- special mode
-controlStdin :: IO ()
-controlStdin = do
-  hSetBuffering stdin NoBuffering
-  hSetEcho      stdin False
-
--- normal mode
-restoreStdin :: IO ()
-restoreStdin = do
-  hSetBuffering stdin LineBuffering
-  hSetEcho      stdin True
-
-interceptStdin :: String -> IO String
-interceptStdin buffer = do
-  char <- getChar
-  more <- hReady stdin
-  if more
-    then interceptStdin (char:buffer)
-    else return         (char:buffer)
-
-
 --------------------------------------------------------------------------------
 -- | Printing stuff
 
 displayHelp :: InteractionM IO ()
 displayHelp = liftIO $ do
   putStrLn "========================================"
+  putStrLn "  ** Pi Tracer **   "
   putStrLn "  arrow keys          for navigation"
   putStrLn "  :help               for this help message   (:h)"
   putStrLn "  :load FILEPATH      for loading files       (:l)"
   putStrLn "  :reload             for reloading           (:r)"
+  putStrLn "  :exec               for execution           (:x)"
   putStrLn "========================================"
 
 printFuture :: InteractionM IO ()
@@ -201,35 +189,11 @@ printFuture = do
         yellow $ putStrLn $ "\nReact"
       printReact reagents products previousState
       printStatusBar
-    Success nextState (Input receiver) _ -> do
+    Success _ (Input receiver) _ -> do
       liftIO $ do
         yellow $ putStrLn $ "\nInput"
       printInput receiver previousState
       printStatusBar
-
-yellow :: IO () -> IO ()
-yellow p = do
-  setSGR [SetColor Foreground Vivid Yellow]
-  p
-  setSGR []
-
-blue :: IO () -> IO ()
-blue p = do
-  setSGR [SetColor Foreground Dull Blue]
-  p
-  setSGR []
-
-red :: IO () -> IO ()
-red p = do
-  setSGR [SetColor Foreground Vivid Red]
-  p
-  setSGR []
-
-green :: IO () -> IO ()
-green p = do
-  setSGR [SetColor Foreground Vivid Green]
-  p
-  setSGR []
 
 abbreviate :: String -> String
 abbreviate s = if length s >= 36

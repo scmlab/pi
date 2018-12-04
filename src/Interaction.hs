@@ -222,4 +222,5 @@ data Request
   | Test
   | Load String
   | Reload
+  | Execute
   deriving (Show)

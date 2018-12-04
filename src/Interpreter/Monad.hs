@@ -10,7 +10,6 @@ import qualified Data.Map as Map
 import Syntax.Abstract
 import Control.Monad.State
 import Control.Monad.Reader
-import Utilities
 
 class Monad m => MonadFresh m where
   fresh :: m Name
