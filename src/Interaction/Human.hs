@@ -206,9 +206,9 @@ green p = do
   setSGR []
 
 abbreviate :: String -> String
-abbreviate s = if length s >= 38
-  then  take 34 s ++ " ~~~"
-  else  s ++ replicate (38 - length s) ' '
+abbreviate s = if length s >= 36
+  then  take 32 s ++ " ..."
+  else  s ++ replicate (36 - length s) ' '
 
 printSenders :: (Sender -> Bool) -> IO () -> [(Name, Sender)] -> IO ()
 printSenders p printer senders = do
@@ -217,12 +217,13 @@ printSenders p printer senders = do
     forM_ senders $ \(c, sender) -> do
       if p sender
         then do
-          red $ putStr $ "☞   "
+          red $ putStr $ " ●  "
           putStr $ abbreviate (show (pretty (senderToPi (c, sender))))
           red $ putStr $ " => "
           printer
-        else
-          putStrLn $ show $ indent 4 (pretty (senderToPi (c, sender)))
+        else do
+          putStr $ " ○  "
+          putStrLn $ abbreviate (show (pretty (senderToPi (c, sender))))
 
 printReceivers :: (Receiver -> Bool) -> IO () -> [(Name, Receiver)] -> IO ()
 printReceivers p printer receivers = do
@@ -231,12 +232,14 @@ printReceivers p printer receivers = do
     forM_ receivers $ \(c, receiver) -> do
       if p receiver
         then do
-          red $ putStr $ "☞   "
+          red $ putStr $ " ●  "
           putStr $ abbreviate (show (pretty (receiverToPi (c, receiver))))
           red $ putStr $ " => "
           printer
-        else
-          putStrLn $ show $ indent 4 (pretty (receiverToPi (c, receiver)))
+        else do
+          putStr $ " ○  "
+          putStrLn $ abbreviate (show (pretty (receiverToPi (c, receiver))))
+
 
 printBlocked :: (Receiver -> Bool) -> IO () -> [Receiver] -> IO ()
 printBlocked p printer receivers = do
@@ -245,12 +248,12 @@ printBlocked p printer receivers = do
     forM_ receivers $ \receiver -> do
       if p receiver
         then do
-          red $ putStr $ "☞   "
+          red $ putStr $ " ●  "
           putStrLn $ abbreviate (show (pretty (inputToPi receiver)))
-          -- red $ putStrLn $ " => "
           printer
-        else
-          putStrLn $ show $ indent 4 (pretty (inputToPi receiver))
+        else do
+          putStr $ " ○  "
+          putStrLn $ abbreviate (show (pretty (inputToPi receiver)))
 
 printOutput :: Sender -> St -> InteractionM IO ()
 printOutput selected@(Sender _ v _) (St senders receivers blocked _ _) = do

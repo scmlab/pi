@@ -1,0 +1,10 @@
+calc = (nu w) c!w
+    . w?{ ADD -> w?(x, y) . w!(x + y) . calc
+        ; SUB -> w?(x, y) . w!(x - y) . calc
+        ; NEG -> w?x      . w!(0 - x) . calc
+        }
+req0 = c?j . j!NEG . j!6      . j?z . stdout!z . req0
+req1 = c?j . j!ADD . j!(3, 4) . j?z . stdout!z . req1
+req2 = c?j . j!SUB . j!(4, 1) . j?z . stdout!z . end
+
+main = calc | req0 | req1 | req2
