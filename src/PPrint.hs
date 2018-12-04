@@ -29,17 +29,17 @@ infix  8 ? !
 -- Names
 instance Pretty Name where
   pretty (ND x) = pretty x
-  pretty (NG i) = pretty ("X" ++ show i)
+  pretty (NG i) = pretty "x" <> pretty i
   pretty (NR StdOut) = pretty "stdout"
   pretty (NR StdIn) = pretty "stdin"
 
 instance Pretty PName where
   pretty (PH x) = pretty x
-  pretty (PG i) = pretty ("X" ++ show i)
+  pretty (PG i) = pretty "x" <> pretty i
 
 instance Pretty a => Pretty (PN a) where
   pretty (Pos x) = pretty x
-  pretty (Neg x) = pretty "`" <> pretty x
+  pretty (Neg x) = pretty "~" <> pretty x
 
 -- Values
 instance Pretty Val where
