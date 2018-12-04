@@ -145,7 +145,7 @@ load filePath = do
     Success state reaction bk -> do
       pushHistory (Success state reaction bk)
       updateFuture $ interpret env bk (step state)
-    Failure err -> throwError $ InteractionError "cannot retrieve outcome"
+    Failure _ -> throwError $ InteractionError "cannot retrieve outcome"
 
 test :: (MonadIO m, Monad m) => InteractionM m ()
 test = do
@@ -153,7 +153,7 @@ test = do
   rawFile <- liftIO $ BS.readFile filePath
   case Parser.parseByteString2 filePath rawFile of
     Left err   -> error $ show err
-    Right ast  -> do
+    Right _  -> do
       latestState >>= liftIO . print
 
 
@@ -164,7 +164,7 @@ reload = do
   load filePath
 
 -- run the appointed outcome
-run :: (MonadIO m, Monad m)
+run :: Monad m
   => InteractionM m Val   -- input handler
   -> (Val -> InteractionM m ())   -- output handler
   -> InteractionM m ()
@@ -175,16 +175,15 @@ run inputHandler outputHandler = do
     Failure err -> do
       updateFuture $ [Failure err]
     Success oldState (Output (Sender _ val p)) i -> do
+      outputHandler val
       env <- getEnv
       updateFuture $ interpret env i $ do
-        lineup [p] oldState >>= step
-      -- handle output
-      outputHandler val
+        newState <- lineup [p] oldState
+        return (newState, Silent)
     Success oldState (React _ _ _) i -> do
       env <- getEnv
       updateFuture $ interpret env i (step oldState)
     Success oldState (Input pps) i -> do
-      -- handle input
       val <- inputHandler
       env <- getEnv
       updateFuture $ interpret env i $ do

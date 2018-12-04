@@ -69,9 +69,9 @@ handleRequest CursorForth        = do
         hFlush stdout
         -- requesting for input
         restoreStdin
-        input <- getLine
+        raw <- getLine
         controlStdin
-        return input
+        return raw
       -- parsing the input
       let result = VI <$> readMaybe raw
       case result of
