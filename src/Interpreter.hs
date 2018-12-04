@@ -4,6 +4,7 @@
 
 module Interpreter
   ( step, lineup, input
+  , PID(..)
   , Reaction(..), St(..), Sender(..), Receiver(..)
   , module Interpreter.Monad
   , senderToPi, receiverToPi, inputToPi
@@ -23,9 +24,28 @@ import Interpreter.Monad
 import Syntax.Abstract
 import Utilities
 
+--------------------------------------------------------------------------------
+-- | PID: data type for tracking processes
+
 type ID = Int
-data Sender   = Sender   ID Val Pi deriving (Show)
-data Receiver = Receiver ID [Clause] deriving (Show)
+data PID = PID
+  { no   :: Int         -- a unique ID
+  , name :: ProcName    -- the name of the process it belonged to
+  } deriving (Show)
+
+instance Eq PID where
+  PID i _ == PID j _ = i == j
+
+senderProcName :: Sender -> ProcName
+senderProcName (Sender (PID _ n) _ _) = n
+
+receiverProcName :: Receiver -> ProcName
+receiverProcName (Receiver (PID _ n) _) = n
+--------------------------------------------------------------------------------
+-- |
+
+data Sender   = Sender   PID Val Pi deriving (Show)
+data Receiver = Receiver PID [Clause] deriving (Show)
 
 instance Eq Sender where
   Sender i _ _ == Sender j _ _ = i == j
@@ -50,30 +70,30 @@ data Reaction = Silent                       -- nothing ever happened
 --------------------------------------------------------------------------------
 -- | Pi <-> St
 
-addPi :: Pi -> St -> PiMonad St
-addPi End       st = return st
-addPi (Par p q) st = addPi p st >>= addPi q
-addPi (Call x) st = do
+addPi :: ProcName -> Pi -> St -> PiMonad St
+addPi _    End       st = return st
+addPi name (Par p q) st = addPi name p st >>= addPi name q
+addPi name (Call x) st = do
   env <- ask
   case Map.lookup (ND (Pos x)) env of
-    Just p  -> addPi p st
+    Just p  -> addPi x p st
     Nothing -> throwError $ "definition not found (looking for " ++ show (pretty x) ++ ")"
-addPi (Send c x p) (St sends recvs inps news i) = do
+addPi name (Send c x p) (St sends recvs inps news i) = do
   let i' = succ i
   val <- evalExpr x
-  return $ St ((c, (Sender i' val p)):sends) recvs inps news i'
-addPi (Recv (NR StdIn) pps) (St sends recvs inps news i) = do
+  return $ St ((c, (Sender (PID i' name) val p)):sends) recvs inps news i'
+addPi name (Recv (NR StdIn) pps) (St sends recvs inps news i) = do
   let i' = succ i
-  return $ St sends recvs (Receiver i' pps:inps) news i'
-addPi (Recv c pps) (St sends recvs inps news i) = do
+  return $ St sends recvs (Receiver (PID i' name) pps:inps) news i'
+addPi name (Recv c pps) (St sends recvs inps news i) = do
   let i' = succ i
-  return $ St sends ((c,Receiver i' pps):recvs) inps news i'
-addPi (Nu x _ p) (St sends recvs inps news i) = do
+  return $ St sends ((c,Receiver (PID i' name) pps):recvs) inps news i'
+addPi name (Nu x _ p) (St sends recvs inps news i) = do
   var <- fresh
-  addPi (substPi [(PH x, N var)] p) (St sends recvs inps (var:news) i)
+  addPi name (substPi [(PH x, N var)] p) (St sends recvs inps (var:news) i)
 
-lineup :: [Pi] -> St -> PiMonad St
-lineup = flip (foldM (flip addPi))
+lineup :: [(ProcName, Pi)] -> St -> PiMonad St
+lineup = flip (foldM (flip (uncurry addPi)))
 
 senderToPi :: (Name, Sender) -> Pi
 senderToPi (c, (Sender _ v p)) = Send c (EV v) p
@@ -109,7 +129,11 @@ step (St sends recvs inps news i) = do
       -- react!
       (sender', receiver') <- react sender receiver
       -- adjust the state accordingly
-      st <- lineup [sender', receiver'] (St otherSenders otherReceivers inps news i)
+      st <- lineup
+        [ (senderProcName   sender,   sender'  )
+        , (receiverProcName receiver, receiver')
+        ]
+        (St otherSenders otherReceivers inps news i)
       return (st, React channel (sender, receiver) (sender', receiver'))
 
     doInput :: (Receiver, [Receiver]) -> PiMonad (St, Reaction)
@@ -117,9 +141,9 @@ step (St sends recvs inps news i) = do
       return (St sends recvs otherBlocked news i, Input blocked)
 
 input :: Val -> Receiver -> St -> PiMonad St
-input val (Receiver _ pps) st =
+input val (Receiver (PID _ n) pps) st =
   case matchClauses pps val of
-    Just (th, p) -> lineup [substPi th p] st
+    Just (th, p) -> lineup [(n, substPi th p)] st
     Nothing -> throwError "input fails to match"
 
 
@@ -131,8 +155,8 @@ select (x:xs) = return (x, xs) `mplus`
 react :: Sender -> Receiver -> PiMonad (Pi, Pi)
 react (Sender _ v q) (Receiver _ clauses) =
   case matchClauses clauses v of
-   Just (th, p) -> return (q, substPi th p)
-   Nothing -> undefined
+    Just (th, p) -> return (q, substPi th p)
+    Nothing -> throwError "failed to match sender and receiver"
 
 --------------------------------------------------------------------------------
 -- | Pretty printing

@@ -14,6 +14,7 @@ import Utilities
 -- type Label = Text  -- moved to Type
 type ErrMsg = String
 type RName = Text   -- row name
+type ProcName = Text
 
 data Name = ND (PN RName)   -- user defined
           | NG (PN Int)     -- system generated
@@ -48,7 +49,7 @@ data ResName = StdOut | StdIn
 
 data Prog = Prog [PiDecl]
   deriving (Eq, Show)
-data PiDecl = PiDecl RName Pi
+data PiDecl = PiDecl ProcName Pi
   deriving (Eq, Show)
 
 data Pi = End
@@ -56,7 +57,7 @@ data Pi = End
         | Recv Name [Clause]
         | Par Pi Pi
         | Nu RName (Maybe SType) Pi
-        | Call RName
+        | Call ProcName
    deriving (Eq, Show)
 
 

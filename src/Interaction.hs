@@ -137,7 +137,7 @@ load filePath = do
   env <- getEnv
   -- populate future, the next possible outcomes (there should be only 1)
   updateFuture $ interpret env 0 $ do
-    state <- lineup [Call "main"] (St [] [] [] [] 0)
+    state <- lineup [("main", Call "main")] (St [] [] [] [] 0)
     return (state, Silent)
   -- retrieve state from the recently populated outcome and store it
   outcome <- selectedFuture
@@ -174,11 +174,11 @@ run inputHandler outputHandler = do
   case outcome of
     Failure err -> do
       updateFuture $ [Failure err]
-    Success oldState (Output (Sender _ val p)) i -> do
+    Success oldState (Output (Sender (PID _ name) val p)) i -> do
       outputHandler val
       env <- getEnv
       updateFuture $ interpret env i $ do
-        newState <- lineup [p] oldState
+        newState <- lineup [(name, p)] oldState
         return (newState, Silent)
     Success oldState (React _ _ _) i -> do
       env <- getEnv
