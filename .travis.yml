@@ -38,3 +38,15 @@ install:
 script:
 # Build the package, its tests, and its docs and run the tests
 - stack --no-terminal test --haddock --no-haddock-deps
+
+deploy:
+  provider: releases
+  api_key: "GITHUB OAUTH TOKEN"
+  file: $(stack path --local-install-root)/bin/pi
+  skip_cleanup: true
+  on:
+    tags: true
+
+env:
+  global:
+    secure: RIQglCgLRyExZLMEFQId9H/V+oi66c5EAvUxqFbCVIH210zBD0W8GqA1TdFq61/ZII/bPM/GB9KshQSKUHp/4a/gclxtdle3MwM/OCHqJzqy7h5guC6wY6/eQQSyeVIevJbm40d756jJs8LA+MhPyzBF1adCDp8oGMkP03lY28bvbGteDV8cf/6ikEgFEiYq0IKkSGhNqTXCySl44uAmQGz/8FKMKM8YFt2eFmZhHSuE5uY+Awk24iqTDywo/E3gxJ2lUIPf51a4CJORdbx4aui80egBpEsCEMDyiiHzYnhRbZ+2tAnO9cqwpDEc/NNVbuNwCUfpco3RY0ThRghCWq3rIhVFBgPqBXqKRAr3qySnFnU329d5F6YTYfJTJrdKKO11L4HlTyRXc9AK6qKgtsYfqlAJsOK15mg7UBnKa55z6U25qL8avkOT7tOnOL7aKPeRj3XLjZVgAQa2g9BYx7B03VuKhzFqONG8zUsdTuD3dNqxI3fauWJwLcWBwK4GTx4zsLqKMRC3+odOKlp3EwOn/zcVJkgOg6744srjVGhpbIdGc95+YphzVouQxO+8PHlaP/d2YHhGeO2BewGTRWhTcuTSkhI1DEQWfLf0vf2PxWjQixsd+3+V0AtFeuzJwJ/v0qWXEKWHQQ1LVtyomrQxx/Rcw5qb2bN2soSCLrk=
