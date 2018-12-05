@@ -19,7 +19,7 @@ and then execute it to see if it worked:
 ./pi-linux-x64
 ```
 
-If the files listed above didn't worked out, or you are using Windows,
+If the files listed above didn't worked out, or if you are using Windows,
 please proceed to follow the steps below to build the program.
 
 ## How to build
