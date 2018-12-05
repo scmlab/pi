@@ -1,35 +1,51 @@
-# some unnamed language
+# Language Pi
 
-## Develop
+## How to download
 
-To build the program:
+* Linux:
+* macOS:
+* Windows (32-bit):
+* Windows (64-bit):
 
-```bash
-stack build
-```
+## How to build
 
-To run the program after build:
+### Prerequisite
 
-```bash
-stack exec pi
-```
+You will need `stack` and `git` on your machine:
 
-To enter the REPL:
+* Install `stack`: https://docs.haskellstack.org/en/stable/README/#how-to-install
+* Install `git`: https://git-scm.com/downloads
 
-```bash
-stack repl
-```
+### Steps
 
-### Adding dependencies
-
-Append to `dependencies` at `package.yaml`.
+1. Clone this repo with `git`
 
 ```
-dependencies:
-- base >= 4.7 && < 5
-- mtl
-- ...
-- <insert new dependency here>
+git clone git@github.com:scmlab/pi.git
 ```
 
-**`pi.cabal` NO TOUCHY!**
+2. Change the directory to the cloned repo
+
+```
+cd pi
+```
+
+3. Build the program with `stack`
+
+```
+stack install
+```
+
+The built program should be available as `pi`
+
+```
+pi
+========================================
+  ** Pi Tracer **
+  arrow keys          for navigation
+  :help               for this help message   (:h)
+  :load FILEPATH      for loading files       (:l)
+  :reload             for reloading           (:r)
+  :exec               for execution           (:x)
+========================================
+```
