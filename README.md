@@ -2,7 +2,7 @@
 
 ## Where to download
 
-For Linux or macOS users, please download the following files
+For Linux or macOS users, please try out these prebuilt files
 
 * Linux: [pi-linux-x64](https://github.com/scmlab/pi/releases/download/v1.2.0/pi-linux-x64)
 * macOS: [pi-osx-x64](https://github.com/scmlab/pi/releases/download/v1.2.0/pi-osx-x64)
@@ -11,6 +11,12 @@ For Linux or macOS users, please download the following files
 
 ```
 chmod +x pi-linux-x64
+```
+
+and then execute it to see if it worked:
+
+```
+./pi-linux-x64
 ```
 
 If the files listed above didn't worked out, or you are using Windows,
@@ -49,7 +55,7 @@ The built program should be available as `pi`
 (or execute `stack path --local-install-root` to know where it's placed)
 
 ```
-pi
+./pi
 ========================================
   ** Pi Tracer **
   arrow keys          for navigation
