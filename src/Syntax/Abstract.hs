@@ -87,6 +87,7 @@ data Val = N Name
          | VB Bool
          | VT [Val]    -- n-tuples
          | VL Label
+         | VS Text
    deriving (Eq, Show)
 
 data Ptrn = PN RName         -- patterns
@@ -369,6 +370,7 @@ instance FromConcrete (C.Expr ann) Expr where
   fromConcrete (C.ExprDigit x _) = EV (VI x)
   fromConcrete (C.ExprName  x _) = EV (N (fromConcrete x))
   fromConcrete (C.ExprLabel x _) = EV (VL (fromConcrete x))
+  fromConcrete (C.ExprString x _) = EV (VS x)
 
 instance FromConcrete (C.Sort ann) BType where
   fromConcrete (C.SortInt _)  = TInt

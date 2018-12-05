@@ -52,10 +52,11 @@ data Expr     ann = ExprTuple [Expr ann]                                ann
                   | LT        (Expr ann) (Expr ann)                     ann
                   | LTE       (Expr ann) (Expr ann)                     ann
                   | IfThenElse (Expr ann) (Expr ann) (Expr ann)         ann
-                  | ExprBool  Bool                                    ann
+                  | ExprBool  Bool                                      ann
                   | ExprDigit Int                                       ann
                   | ExprName  (Name ann)                                ann
                   | ExprLabel (Label ann)                               ann
+                  | ExprString Text                                     ann
                   deriving (Show, Functor)
 
 -- Session Types
@@ -136,6 +137,7 @@ instance Located (Expr Loc) where
   locOf (ExprDigit _ loc) = loc
   locOf (ExprName _ loc) = loc
   locOf (ExprLabel _ loc) = loc
+  locOf (ExprString _ loc) = loc
 
 instance Located (Sort Loc) where
   locOf (SortInt loc) = loc

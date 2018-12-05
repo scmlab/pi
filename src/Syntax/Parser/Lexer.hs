@@ -36,6 +36,7 @@ tokenRE =
   <|> TokenSub          <$ "-"
   <|> TokenMul          <$ "*"
   <|> TokenDiv          <$ "/"
+  <|> TokenDoubleQuote  <$ "\""
   <|> TokenComma        <$ ","
   <|> TokenBraceStart   <$ "{"
   <|> TokenBraceEnd     <$ "}"
@@ -55,19 +56,39 @@ tokenRE =
   <|> TokenThen         <$ "then"
   <|> TokenElse         <$ "else"
   <|> TokenLabel        <$> labelRE
+  <|> TokenString       <$> stringRE
   <|> TokenNamePos      <$> namePosRE
   <|> TokenNameNeg      <$> nameNegRE
   <|> TokenInt          <$> intRE
 
 
+(+++) :: RE Char String -> RE Char String -> RE Char String
+(+++) = liftA2 (++)
+
 namePosRE :: RE Char Text
 namePosRE = fmap pack $ (:) <$> psym isLower <*> many (psym (\c -> isAlphaNum c || c == '_' || c == '\''))
 
 nameNegRE :: RE Char Text
-nameNegRE = cons <$> psym (== '`') <*> namePosRE
+nameNegRE = cons <$> psym (== '~') <*> namePosRE
 
 labelRE :: RE Char Text
 labelRE = fmap pack $ (:) <$> psym isUpper <*> many (psym (\c -> isUpper c || isDigit c || c == '_' || c == '\''))
+
+stringRE :: RE Char Text
+stringRE = fmap pack $ string "\"" +++ firstPart +++ secondPart +++ string "\""
+  where
+    -- zero or more characters other than \ and "
+    firstPart :: RE Char String
+    firstPart = many (psym (\c -> c /= '\\' && c /= '\"'))
+
+    -- zero or more sequences of (`secondPart1` and then `firstPart`)
+    secondPart :: RE Char String
+    secondPart = reFoldl Greedy (++) "" (secondPart1 +++ firstPart)
+
+    -- a backslash followed with any character but a newline
+    secondPart1 :: RE Char String
+    secondPart1 = string "\\" +++ msym (\c -> if c == '\n' then Nothing else Just [c])
+
 
 intRE :: RE Char Int
 intRE = read <$> some (psym isDigit)
@@ -79,7 +100,7 @@ commentStartRE :: RE Char String
 commentStartRE = string "--"
 
 commentEndRE :: String -> RE Char Token
-commentEndRE pref = TokenComment <$> fmap pack ((++) <$> pure pref <*> ((++) <$> many anySym <*> string "\n"))
+commentEndRE pref = TokenComment <$> fmap pack (pure pref +++ many anySym +++ string "\n")
 
 lexer :: Lexer Token
 lexer = mconcat

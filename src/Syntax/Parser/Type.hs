@@ -22,11 +22,13 @@ data Token
   | TokenStdIn
   | TokenStdOut
   | TokenLabel Text
+  | TokenString Text
   | TokenNamePos Text
   | TokenNameNeg Text
   | TokenInt Int
   | TokenSortInt
   | TokenSortBool
+  | TokenDoubleQuote
   | TokenParenStart | TokenParenEnd
   | TokenAdd | TokenSub | TokenMul | TokenDiv
   | TokenComma

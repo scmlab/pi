@@ -49,6 +49,8 @@ instance Pretty Val where
   pretty (VL x) = pretty x
   pretty (VT xs) =
     encloseSep langle rangle comma (map pretty xs)
+  pretty (VS s) =
+    pretty s
 
 -- Patterns
 instance Pretty Ptrn where

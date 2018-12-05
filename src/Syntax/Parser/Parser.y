@@ -47,8 +47,9 @@ import Data.Text (Text)
         '->'            { TokenArrow }
         ':'             { TokenTypeOf }
         'Int'           { TokenSortInt }
-        'Bool'          { TokenSortBool }
+        string          { TokenString $$ }
         -- boolean stuff
+        'Bool'          { TokenSortBool }
         'True'          { TokenTrue }
         'False'         { TokenFalse }
         '=='            { TokenEQ }
@@ -144,6 +145,7 @@ Term :: {Expr Loc}
     | Name                                {% locate $ ExprName $1 }
     | int                                 {% locate $ ExprDigit $1 }
     | Label                               {% locate $ ExprLabel $1 }
+    | string                              {% locate $ ExprString $1 }
     | Expr '==' Expr                      {% locate $ EQ  $1 $3 }
     | Expr '!=' Expr                      {% locate $ NEQ $1 $3 }
     | Expr '>'  Expr                      {% locate $ GT  $1 $3 }
