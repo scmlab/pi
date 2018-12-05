@@ -1,35 +1,65 @@
-# some unnamed language
+# Language Pi
 
-## Develop
+## Where to download
 
-To build the program:
+For Linux or macOS users, please download the following files
 
-```bash
-stack build
-```
+* Linux: [pi-linux-x64](https://github.com/scmlab/pi/releases/download/v1.2.0/pi-linux-x64)
+* macOS: [pi-osx-x64](https://github.com/scmlab/pi/releases/download/v1.2.0/pi-osx-x64)
 
-To run the program after build:
-
-```bash
-stack exec pi
-```
-
-To enter the REPL:
-
-```bash
-stack repl
-```
-
-### Adding dependencies
-
-Append to `dependencies` at `package.yaml`.
+`chmod` the downloaded file with the following command to make it executable (`pi-linux-x64` for example):
 
 ```
-dependencies:
-- base >= 4.7 && < 5
-- mtl
-- ...
-- <insert new dependency here>
+chmod +x pi-linux-x64
 ```
 
-**`pi.cabal` NO TOUCHY!**
+If the files listed above didn't worked out, or you are using Windows,
+please proceed to follow the steps below to build the program.
+
+## How to build
+
+### Prerequisite
+
+You will need `stack` and `git` on your machine:
+
+* Install `stack`: https://docs.haskellstack.org/en/stable/README/#how-to-install
+* Install `git`: https://git-scm.com/downloads
+
+### Steps
+
+1. Clone this repo with `git`
+
+```
+git clone git@github.com:scmlab/pi.git
+```
+
+2. Change the directory to the cloned repo
+
+```
+cd pi
+```
+
+3. Build the program with `stack` inside the repo's directory
+
+```
+stack install
+```
+
+The built program should be available as `pi`
+(or execute `stack path --local-install-root` to know where it's placed)
+
+```
+pi
+========================================
+  ** Pi Tracer **
+  arrow keys          for navigation
+  :help               for this help message   (:h)
+  :load FILEPATH      for loading files       (:l)
+  :reload             for reloading           (:r)
+  :exec               for execution           (:x)
+========================================
+```
+
+## Syntax Highlighting
+
+If you are using [Atom](https://atom.io/), please install the language grammar [`language-pi`](https://atom.io/packages/language-pi) for syntax highlighting.
