@@ -9,7 +9,7 @@
 # named .travis.yml
 
 # Use new container infrastructure to enable caching
-sudo: false
+sudo: true
 
 # Do not choose a language; we provide our own build tools.
 language: generic
@@ -142,10 +142,12 @@ script:
 before_deploy:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
         mv $(stack path --local-install-root)/bin/pi $(stack path --local-install-root)/bin/pi-osx-x64;
+        sudo chmod a+rx $(stack path --local-install-root)/bin/pi-osx-x64;
         export BUILT_EXEC_PATH=$(stack path --local-install-root)/bin/pi-osx-x64;
     fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
         mv $(stack path --local-install-root)/bin/pi $(stack path --local-install-root)/bin/pi-linux-x64;
+        sudo chmod a+rx $(stack path --local-install-root)/bin/pi-linux-x64;
         export BUILT_EXEC_PATH=$(stack path --local-install-root)/bin/pi-linux-x64;
     fi
 
