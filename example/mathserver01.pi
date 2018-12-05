@@ -1,0 +1,11 @@
+mathSrv =
+   (nu c) ms!c .
+       c?{ADD -> (c?(x,y) . c!(x+y) . end | mathSrv) ;
+          NEG -> (c?x . c!(0-x) . end     | mathSrv)}
+
+usr1 = ms?c . c!ADD . c!(3,4) .
+         c?r . stdout!"3+4=" . stdout!r . end
+usr2 = ms?c . c!NEG . c!5 .
+         c?r . stdout!"-5=" . stdout!r . end
+
+main = mathSrv | usr1 | usr2
