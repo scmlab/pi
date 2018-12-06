@@ -10,7 +10,7 @@ For Linux or macOS users, please try out these prebuilt files
 `chmod` the downloaded file with the following command to make it executable (`pi-linux-x64` for example):
 
 ```
-chmod +x pi-linux-x64
+sudo chmod +x pi-linux-x64
 ```
 
 and then execute it to see if it worked:
