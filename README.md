@@ -36,7 +36,7 @@ You will need `stack` and `git` on your machine:
 1. Clone this repo with `git`
 
 ```
-git clone git@github.com:scmlab/pi.git
+git clone https://github.com/scmlab/pi.git
 ```
 
 2. Change the directory to the cloned repo
