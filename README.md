@@ -69,3 +69,17 @@ The built program should be available as `pi`
 ## Syntax Highlighting
 
 If you are using [Atom](https://atom.io/), please install the language grammar [`language-pi`](https://atom.io/packages/language-pi) for syntax highlighting.
+
+## How to use this
+
+To trace the program:
+
+```
+pi -t file.pi
+```
+
+To execute the program (very likely to explode in your face):
+
+```
+pi file.pi
+```
