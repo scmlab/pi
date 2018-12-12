@@ -79,7 +79,7 @@ data Reaction = Silent                        -- nothing ever happened
 addPi :: ProcName -> Pi -> St -> PiMonad St
 addPi _    End       st = return st
 addPi name (Par p q) st = addPi name p st >>= addPi name q
-addPi name    (Call callee) (St sends recvs callers inps news i) = do
+addPi name (Call callee) (St sends recvs callers inps news i) = do
   let i' = succ i
   let callers' = (Caller (PID i' name) callee):callers
   return $ St sends recvs callers' inps news i'
@@ -141,8 +141,8 @@ step (St sends recvs callers inps news i) = do
 
     doReduce :: (Caller, [Caller]) -> PiMonad (St, Reaction)
     doReduce (caller, otherCallers) = do
-      (state, p) <- reduce caller (St sends recvs otherCallers inps news i)
-      return (state, Reduce caller p)
+      (state', p) <- reduce caller (St sends recvs otherCallers inps news i)
+      return (state', Reduce caller p)
 
 reduce :: Caller -> St -> PiMonad (St, Pi)
 reduce (Caller _ callee) st = do

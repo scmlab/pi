@@ -34,7 +34,7 @@ tokenRE =
   <|> TokenParenEnd     <$ ")"
   <|> TokenAdd          <$ "+"
   <|> TokenSub          <$ "-"
-  <|> TokenMul          <$ "*"
+  <|> TokenStar         <$ "*"
   <|> TokenDiv          <$ "/"
   <|> TokenDoubleQuote  <$ "\""
   <|> TokenComma        <$ ","

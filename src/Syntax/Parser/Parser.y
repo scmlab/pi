@@ -33,12 +33,12 @@ import Data.Text (Text)
         '!'             { TokenSend      }
         '?'             { TokenRecv      }
         '.'             { TokenSeq       }
+        '*'             { TokenStar      }
         '|'             { TokenPar       }
         '('             { TokenParenStart }
         ')'             { TokenParenEnd }
         '+'             { TokenAdd }
         '-'             { TokenSub }
-        '*'             { TokenMul }
         '/'             { TokenDiv }
         '{'             { TokenBraceStart }
         '}'             { TokenBraceEnd }
@@ -97,6 +97,7 @@ Process :: {Process Loc}
     | 'end'                                   {% locate $ End }
     | '(' 'nu' SimpName ')' Process           {% locate $ Nu $3 Nothing $5 }
     | '(' 'nu' SimpName ':' Type ')' Process  {% locate $ Nu $3 (Just $5) $7 }
+    | '*' Process                             {% locate $ Repl $2 }
     | SimpName                                {% locate $ Call $1 }
     | '(' ProcessPar ')'                      { $2 }
 

@@ -19,6 +19,7 @@ data Token
   | TokenNu
   | TokenSeq
   | TokenPar
+  | TokenStar
   | TokenStdIn
   | TokenStdOut
   | TokenLabel Text
@@ -30,7 +31,7 @@ data Token
   | TokenSortBool
   | TokenDoubleQuote
   | TokenParenStart | TokenParenEnd
-  | TokenAdd | TokenSub | TokenMul | TokenDiv
+  | TokenAdd | TokenSub | TokenDiv
   | TokenComma
   | TokenBraceStart | TokenBraceEnd | TokenSemi | TokenArrow
   | TokenTypeOf

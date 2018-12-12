@@ -29,6 +29,7 @@ data Process  ann = Send      (Name ann)     (Expr ann)         (Process ann) an
                   | Nu        (SimpName ann) (Maybe (Type ann)) (Process ann) ann
                   | Par       (Process ann)  (Process ann)                    ann
                   | Call      (SimpName ann)                                  ann
+                  | Repl      (Process ann)                                   ann
                   | End                                                       ann
                   deriving (Show, Functor)
 

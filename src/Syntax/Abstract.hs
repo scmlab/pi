@@ -57,6 +57,7 @@ data Pi = End
         | Recv Name [Clause]
         | Par Pi Pi
         | Nu RName (Maybe SType) Pi
+        | Repl Pi
         | Call ProcName
    deriving (Eq, Show)
 
@@ -187,7 +188,8 @@ substPi th (Par p q) = Par (substPi th p) (substPi th q)
 substPi th (Nu y t p)
    | PH y `inDom` th = Nu y t p       -- is this right?
    | otherwise = Nu y t (substPi th p)
-substPi _ (Call p) = Call p  -- perhaps this shouldn't be substituted?
+substPi th (Repl p) = Repl (substPi th p)   -- is this right?
+substPi _  (Call p) = Call p  -- perhaps this shouldn't be substituted?
 
 evalExpr :: MonadError ErrMsg m => Expr -> m Val
 evalExpr (EV v) = return v
@@ -293,6 +295,7 @@ freePi (Recv c ps) =
   freeN c `nubapp` nubconcat (map freeClause ps)
 freePi (Par p1 p2) = freePi p1 `nubapp` freePi p2
 freePi (Nu x _ p) = freePi p `setminus` [Pos x, Neg x]
+freePi (Repl p) = freePi p -- is that right?
 freePi (Call _) = undefined -- what to do here?
 
 freeClause :: Clause -> [PN RName]
@@ -348,6 +351,8 @@ instance FromConcrete (C.Process ann) Pi where
     Recv (fromConcrete name) (map fromConcrete clauses)
   fromConcrete (C.Par procA procB _) =
     Par (fromConcrete procA) (fromConcrete procB)
+  fromConcrete (C.Repl process _) =
+    Repl (fromConcrete process)
   fromConcrete (C.Call name _) =
     Call (fromConcrete name)
   fromConcrete (C.End _) =

@@ -198,7 +198,7 @@ printFuture = do
         yellow $ putStrLn $ "\nNo-op"
       printState nextState
       printStatusBar
-    Success nextState (Reduce caller result) _ -> do
+    Success _ (Reduce caller result) _ -> do
       liftIO $ do
         yellow $ putStrLn $ "\nReduce"
       printReduce caller result previousState
