@@ -109,9 +109,9 @@ Patterns :: {[Pattern Loc]}
     | Pattern  ',' Pattern                  { [ $3, $1 ]  }
 
 ClauseDot :: {Clause Loc}
-        : Pattern '.' Process               {% locate $  Clause $1 $3 }
+        : Pattern '.' ProcessPar            {% locate $  Clause $1 $3 }
 ClauseArr :: {Clause Loc}
-        : Pattern '->' Process              {% locate $  Clause $1 $3 }
+        : Pattern '->' ProcessPar           {% locate $  Clause $1 $3 }
 Clauses :: {[Clause Loc]}
         : Clauses ';' ClauseArr             { $3 : $1 }
         | ClauseArr                         { [ $1 ]  }
