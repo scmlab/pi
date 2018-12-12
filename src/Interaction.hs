@@ -4,6 +4,8 @@ module Interaction where
 
 import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
+import qualified Control.Exception as Exception
+import Control.Exception (IOException)
 import Data.Text.Prettyprint.Doc
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
@@ -127,25 +129,28 @@ load filePath = do
   -- storing the filepath
   putFilePath (Just filePath)
   -- storing the source
-  source <- liftIO $ BS.readFile filePath
-  putSource (Just source)
-  -- parse and store the AST
-  case Parser.parseByteString filePath source of
-    Left err  -> throwError $ ParseError err
-    Right ast -> (putEnv . Just . programToEnv) ast
+  readResult <- liftIO $ Exception.try (BS.readFile filePath)
+  case readResult of
+    Left  err -> throwError $ InteractionError $ show (err :: IOException)
+    Right source -> do
+      putSource (Just source)
+      -- parse and store the AST
+      case Parser.parseByteString filePath source of
+        Left err  -> throwError $ ParseError err
+        Right ast -> (putEnv . Just . programToEnv) ast
 
-  env <- getEnv
-  -- populate future, the next possible outcomes (there should be only 1)
-  updateFuture $ interpret env 0 $ do
-    state <- lineup [("main", Call "main")] (St [] [] [] [] 0)
-    return (state, Silent)
-  -- retrieve state from the recently populated outcome and store it
-  outcome <- selectedFuture
-  case outcome of
-    Success state reaction bk -> do
-      pushHistory (Success state reaction bk)
-      updateFuture $ interpret env bk (step state)
-    Failure _ -> throwError $ InteractionError "cannot retrieve outcome"
+      env <- getEnv
+      -- populate future, the next possible outcomes (there should be only 1)
+      updateFuture $ interpret env 0 $ do
+        state <- lineup [("main", Call "main")] (St [] [] [] [] 0)
+        return (state, Silent)
+      -- retrieve state from the recently populated outcome and store it
+      outcome <- selectedFuture
+      case outcome of
+        Success state reaction bk -> do
+          pushHistory (Success state reaction bk)
+          updateFuture $ interpret env bk (step state)
+        Failure _ -> throwError $ InteractionError "cannot retrieve outcome"
 
 test :: (MonadIO m, Monad m) => InteractionM m ()
 test = do
