@@ -253,6 +253,24 @@ printReceivers p printer receivers = do
           green $ putStr $ "[" ++ (unpack $ receiverProcName receiver) ++ "] "
           putStrLn $ abbreviate (show (pretty (receiverToPi (c, receiver))))
 
+printCallers :: (Caller -> Bool) -> IO () -> [Caller] -> IO ()
+printCallers p printer callers = do
+  when (not $ null callers) $ do
+    blue $ putStrLn $ "  callers:"
+    forM_ callers $ \caller -> do
+      if p caller
+        then do
+          red $ putStr $ " ●  "
+          green $ putStr $ "[" ++ (unpack $ callerProcName caller) ++ "] "
+          putStr $ abbreviate (show (pretty (callerToPi caller)))
+          red $ putStr $ " => "
+          printer
+        else do
+          putStr $ " ○  "
+          green $ putStr $ "[" ++ (unpack $ callerProcName caller) ++ "] "
+          putStrLn $ abbreviate (show (pretty (callerToPi caller)))
+
+
 
 printBlocked :: (Receiver -> Bool) -> IO () -> [Receiver] -> IO ()
 printBlocked p printer receivers = do
@@ -271,24 +289,27 @@ printBlocked p printer receivers = do
           putStrLn $ abbreviate (show (pretty (inputToPi receiver)))
 
 printOutput :: Sender -> St -> InteractionM IO ()
-printOutput selected@(Sender _ v _) (St senders receivers blocked _ _) = do
+printOutput selected@(Sender _ v _) (St senders receivers callers blocked _ _) = do
   liftIO $ do
     printSenders ((==) selected) (green $ putStrLn $ show $ pretty v) senders
     printReceivers (const False) (return ()) receivers
+    printCallers   (const False) (return ()) callers
     printBlocked   (const False) (return ()) blocked
 
 printReact :: (Sender, Receiver) -> (Pi, Pi) -> St -> InteractionM IO ()
-printReact (selectedSender, selectedReceiver) (productSender, productReceiver) (St senders receivers blocked _ _) = do
+printReact (selectedSender, selectedReceiver) (productSender, productReceiver) (St senders receivers callers blocked _ _) = do
   liftIO $ do
     printSenders   ((==) selectedSender)   (putStrLn $ abbreviate $ show (pretty productSender)) senders
     printReceivers ((==) selectedReceiver) (putStrLn $ abbreviate $ show (pretty productReceiver)) receivers
+    printCallers   (const False) (return ()) callers
     printBlocked   (const False) (return ()) blocked
 
 printInput :: Receiver -> St -> InteractionM IO ()
-printInput selected (St senders receivers blocked _ _) = do
+printInput selected (St senders receivers callers blocked _ _) = do
   liftIO $ do
     printSenders   (const False) (return ()) senders
     printReceivers (const False) (return ()) receivers
+    printCallers   (const False) (return ()) callers
     printBlocked   ((==) selected) (return ()) blocked
   -- where
   --   readInput :: IO (V)
@@ -300,10 +321,11 @@ printInput selected (St senders receivers blocked _ _) = do
   --     return input
 
 printState :: St -> InteractionM IO ()
-printState (St senders receivers blocked _ _) = do
+printState (St senders receivers callers blocked _ _) = do
   liftIO $ do
     printSenders   (const False) (return ()) senders
     printReceivers (const False) (return ()) receivers
+    printCallers   (const False) (return ()) callers
     printBlocked   (const False) (return ()) blocked
 
 printStatusBar :: InteractionM IO ()

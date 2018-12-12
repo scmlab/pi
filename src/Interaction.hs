@@ -142,7 +142,7 @@ load filePath = do
       env <- getEnv
       -- populate future, the next possible outcomes (there should be only 1)
       updateFuture $ interpret env 0 $ do
-        state <- lineup [("main", Call "main")] (St [] [] [] [] 0)
+        state <- lineup [("main", Call "main")] (St [] [] [] [] [] 0)
         return (state, Silent)
       -- retrieve state from the recently populated outcome and store it
       outcome <- selectedFuture

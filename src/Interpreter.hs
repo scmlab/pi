@@ -4,10 +4,10 @@
 
 module Interpreter
   ( step, lineup, input
-  , PID(..), senderProcName, receiverProcName
-  , Reaction(..), St(..), Sender(..), Receiver(..)
+  , PID(..), senderProcName, receiverProcName, callerProcName
+  , Reaction(..), St(..), Sender(..), Receiver(..), Caller(..)
   , module Interpreter.Monad
-  , senderToPi, receiverToPi, inputToPi
+  , senderToPi, receiverToPi, inputToPi, callerToPi
   ) where
 
 import Control.Monad.State
@@ -37,11 +37,16 @@ senderProcName (Sender (PID _ n) _ _) = n
 
 receiverProcName :: Receiver -> ProcName
 receiverProcName (Receiver (PID _ n) _) = n
+
+callerProcName :: Caller -> ProcName
+callerProcName (Caller (PID _ n) _) = n
+
 --------------------------------------------------------------------------------
 -- |
 
 data Sender   = Sender   PID Val Pi deriving (Show)
 data Receiver = Receiver PID [Clause] deriving (Show)
+data Caller   = Caller   PID ProcName deriving (Show)
 
 instance Eq Sender where
   Sender i _ _ == Sender j _ _ = i == j
@@ -49,11 +54,15 @@ instance Eq Sender where
 instance Eq Receiver where
   Receiver i _ == Receiver j _ = i == j
 
+instance Eq Caller where
+  Caller i _ == Caller j _ = i == j
+
 data St = St
-  { stSenders   :: FMap Name Sender      -- senders
+  { stSenders   :: FMap Name Sender     -- senders
   , stReceivers :: FMap Name Receiver   -- receivers
+  , stCallers   :: [Caller]             -- callers to some processes
   , stWaiting   :: [Receiver]           -- blocked at stdin
-  , stFreshVars :: [Name]                   -- new variables
+  , stFreshVars :: [Name]               -- new variables
   , stIDCount   :: Int
   } deriving (Show)
 
@@ -69,24 +78,27 @@ data Reaction = Silent                       -- nothing ever happened
 addPi :: ProcName -> Pi -> St -> PiMonad St
 addPi _    End       st = return st
 addPi name (Par p q) st = addPi name p st >>= addPi name q
-addPi _    (Call x) st = do
-  env <- ask
-  case Map.lookup (ND (Pos x)) env of
-    Just p  -> addPi x p st
-    Nothing -> throwError $ "definition not found (looking for " ++ show (pretty x) ++ ")"
-addPi name (Send c x p) (St sends recvs inps news i) = do
+addPi name    (Call callee) (St sends recvs callers inps news i) = do
+  let i' = succ i
+  let callers' = (Caller (PID i' name) callee):callers
+  return $ St sends recvs callers' inps news i
+  -- env <- ask
+  -- case Map.lookup (ND (Pos x)) env of
+  --   Just p  -> addPi x p st
+  --   Nothing -> throwError $ "definition not found (looking for " ++ show (pretty x) ++ ")"
+addPi name (Send c x p) (St sends recvs callers inps news i) = do
   let i' = succ i
   val <- evalExpr x
-  return $ St ((c, (Sender (PID i' name) val p)):sends) recvs inps news i'
-addPi name (Recv (NR StdIn) pps) (St sends recvs inps news i) = do
+  return $ St ((c, (Sender (PID i' name) val p)):sends) recvs callers inps news i'
+addPi name (Recv (NR StdIn) pps) (St sends recvs callers inps news i) = do
   let i' = succ i
-  return $ St sends recvs (Receiver (PID i' name) pps:inps) news i'
-addPi name (Recv c pps) (St sends recvs inps news i) = do
+  return $ St sends recvs callers (Receiver (PID i' name) pps:inps) news i'
+addPi name (Recv c pps) (St sends recvs callers inps news i) = do
   let i' = succ i
-  return $ St sends ((c,Receiver (PID i' name) pps):recvs) inps news i'
-addPi name (Nu x _ p) (St sends recvs inps news i) = do
+  return $ St sends ((c,Receiver (PID i' name) pps):recvs) callers inps news i'
+addPi name (Nu x _ p) (St sends recvs callers inps news i) = do
   var <- fresh
-  addPi name (substPi [(PH x, N var)] p) (St sends recvs inps (var:news) i)
+  addPi name (substPi [(PH x, N var)] p) (St sends recvs callers inps (var:news) i)
 
 lineup :: [(ProcName, Pi)] -> St -> PiMonad St
 lineup = flip (foldM (flip (uncurry addPi)))
@@ -96,6 +108,9 @@ senderToPi (c, (Sender _ v p)) = Send c (EV v) p
 
 receiverToPi :: (Name, Receiver) -> Pi
 receiverToPi (c, (Receiver _ clauses)) = Recv c clauses
+
+callerToPi :: Caller -> Pi
+callerToPi (Caller _ callee) = Call callee
 
 inputToPi :: Receiver -> Pi
 inputToPi (Receiver _ clauses) = Recv (NR StdIn) clauses
@@ -113,12 +128,12 @@ inputToPi (Receiver _ clauses) = Recv (NR StdIn) clauses
 -- |
 
 step :: St -> PiMonad (St, Reaction)
-step (St sends recvs inps news i) = do
+step (St sends recvs callers inps news i) = do
   (select inps >>= doInput) `mplus` (select sends >>= doSend)
   where
     doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad (St, Reaction)
     doSend ((NR StdOut, sender), otherSenders) =
-      return (St otherSenders recvs inps news i, Output sender)
+      return (St otherSenders recvs callers inps news i, Output sender)
     doSend ((channel, sender), otherSenders) = do
       -- selected a reagent from the lists of receivers
       (receiver, otherReceivers) <- selectByKey channel recvs
@@ -129,12 +144,12 @@ step (St sends recvs inps news i) = do
         [ (senderProcName   sender,   sender'  )
         , (receiverProcName receiver, receiver')
         ]
-        (St otherSenders otherReceivers inps news i)
+        (St otherSenders otherReceivers callers inps news i)
       return (st, React channel (sender, receiver) (sender', receiver'))
 
     doInput :: (Receiver, [Receiver]) -> PiMonad (St, Reaction)
     doInput (blocked, otherBlocked) =
-      return (St sends recvs otherBlocked news i, Input blocked)
+      return (St sends recvs callers otherBlocked news i, Input blocked)
 
 input :: Val -> Receiver -> St -> PiMonad St
 input val (Receiver (PID _ n) pps) st =
@@ -176,17 +191,17 @@ instance Pretty Reaction where
           ]
 
 instance Pretty St where
-  pretty (St sends recvs inps news _) =
+  pretty (St sends recvs callers inps news _) =
     vsep  [ pretty "Senders  :"
-          , indent 2 (vsep (map pretty ss))
+          , indent 2 (vsep (map (pretty . senderToPi) sends))
           , pretty "Receivers:"
-          , indent 2 (vsep (map pretty rs))
+          , indent 2 (vsep (map (pretty . receiverToPi) recvs))
+          , pretty "Callers:"
+          , indent 2 (vsep (map (pretty . callerToPi) callers))
+          , pretty "Inputs:"
+          , indent 2 (vsep (map (pretty . inputToPi) inps))
           , encloseSep (pretty "New: ") (pretty ".") comma (map pretty news)
           ]
-    where ss = [ Send c (EV v) p         | (c, (Sender _ v p))     <- sends ]
-          rs = [ Recv (NR StdIn) clauses | (Receiver _ clauses)    <- inps  ]
-            ++ [ Recv c          clauses | (c, Receiver _ clauses) <- recvs ]
-
 {-
 type St = ( [Pi]               -- processes running
           , FMap Name Waiting  -- processes waiting at each channels
