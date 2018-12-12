@@ -18,13 +18,16 @@ restoreStdin = do
   hSetBuffering stdin LineBuffering
   hSetEcho      stdin True
 
+-- to capture keys that is longer than 1 character
 interceptStdin :: String -> IO String
-interceptStdin buffer = do
-  char <- getChar
-  more <- hReady stdin
-  if more
-    then interceptStdin (char:buffer)
-    else return         (char:buffer)
+interceptStdin input = reverse <$> interceptStdin' input
+  where
+    interceptStdin' buffer = do
+      char <- getChar
+      more <- hReady stdin
+      if more
+        then interceptStdin' (char:buffer)
+        else return          (char:buffer)
 
 
 --------------------------------------------------------------------------------

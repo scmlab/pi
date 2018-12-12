@@ -122,9 +122,13 @@ parseRequest key
   | "l"    `isPrefixOf` key = (Load . trim . drop 1) key
   | otherwise = case trim key of
       "\ESC[A"  -> CursorPrev
+      "w"       -> CursorPrev
       "\ESC[B"  -> CursorNext
+      "s"       -> CursorNext
       "\ESC[C"  -> CursorForth
+      "d"       -> CursorForth
       "\ESC[D"  -> CursorBack
+      "a"       -> CursorBack
       "\n"      -> CursorForth
       "h"       -> Help
       "help"    -> Help
@@ -148,11 +152,15 @@ getKey = do
     ':' -> do
       restoreStdin
       runInputT defaultSettings $ do
-        minput <- getInputLine "π > "
+        minput <- getInputLine "π : "
         case minput of
-            Nothing    -> lift getKey
+            Nothing     -> lift getKey
             Just input' -> return input'
-    _ -> reverse <$> interceptStdin [firstChar]
+    'w' -> return "w"
+    'a' -> return "a"
+    's' -> return "s"
+    'd' -> return "d"
+    _   -> interceptStdin [firstChar]
 
   restoreStdin
   return key
@@ -164,11 +172,11 @@ displayHelp :: InteractionM IO ()
 displayHelp = liftIO $ do
   putStrLn "========================================"
   putStrLn "  ** Pi Tracer **   "
-  putStrLn "  arrow keys          for navigation"
-  putStrLn "  :help               for this help message   (:h)"
-  putStrLn "  :load FILEPATH      for loading files       (:l)"
-  putStrLn "  :reload             for reloading           (:r)"
-  putStrLn "  :exec               for execution           (:x)"
+  putStrLn "  arrow keys or 'wasd'  for navigation"
+  putStrLn "  :help                 for this help message   (:h)"
+  putStrLn "  :load FILEPATH        for loading files       (:l)"
+  putStrLn "  :reload               for reloading           (:r)"
+  putStrLn "  :exec                 for execution           (:x)"
   putStrLn "========================================"
 
 printFuture :: InteractionM IO ()
