@@ -1,0 +1,17 @@
+mathSrv = (nu c) ms!c . mw!c . mathSrv
+
+mathWork =
+  mw?c .
+     (c?{ADD -> (c?(x,y) . c!(x+y) . mw!c . end) ;
+         NEG -> (c?x .     c!(0-x) . mw!c . end) ;
+         END -> end } | mathWork)
+
+usr1 = ms?c .
+         c!ADD . c!(3,4) . c?r . stdout!r .
+         c!NEG . c!6 .     c?r . stdout!r .
+         c!END . end
+usr2 = ms?c .
+         c!NEG . c!5 . c?r . stdout!r .
+         c!END . end
+
+main = mathSrv | mathWork | usr1 | usr2
