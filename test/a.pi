@@ -6,4 +6,4 @@ p3 = x!200 . end
 -- p2 = stdin?v . x!v . end
 -- p4 = x?v . x!v . end
 
-main = p0 | p1 | p2 | p3 | main
+main = p0 | p2 | main
