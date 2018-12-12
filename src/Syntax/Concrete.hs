@@ -111,6 +111,7 @@ instance Located (Process Loc) where
   locOf (Nu _ _ _ loc) = loc
   locOf (Par _ _ loc) = loc
   locOf (Call _ loc) = loc
+  locOf (Repl _ loc) = loc
   locOf (End loc) = loc
 
 instance Located (Pattern Loc) where

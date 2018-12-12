@@ -40,13 +40,16 @@ receiverProcName (Receiver (PID _ n) _) = n
 
 callerProcName :: Caller -> ProcName
 callerProcName (Caller (PID _ n) _) = n
+callerProcName (Replicater (PID _ n) _) = n
 
 --------------------------------------------------------------------------------
 -- |
 
 data Sender   = Sender   PID Val Pi deriving (Show)
 data Receiver = Receiver PID [Clause] deriving (Show)
-data Caller   = Caller   PID ProcName deriving (Show)
+data Caller   = Caller   PID ProcName
+              | Replicater PID Pi
+              deriving (Show)
 
 instance Eq Sender where
   Sender i _ _ == Sender j _ _ = i == j
@@ -55,7 +58,9 @@ instance Eq Receiver where
   Receiver i _ == Receiver j _ = i == j
 
 instance Eq Caller where
-  Caller i _ == Caller j _ = i == j
+  Caller     i _ == Caller     j _ = i == j
+  Replicater i _ == Replicater j _ = i == j
+  _ == _ = False
 
 data St = St
   { stSenders   :: FMap Name Sender     -- senders
@@ -79,6 +84,10 @@ data Reaction = Silent                        -- nothing ever happened
 addPi :: ProcName -> Pi -> St -> PiMonad St
 addPi _    End       st = return st
 addPi name (Par p q) st = addPi name p st >>= addPi name q
+addPi name (Repl p) (St sends recvs callers inps news i) = do
+  let i' = succ i
+  let callers' = (Replicater (PID i' name) p):callers
+  return $ St sends recvs callers' inps news i'
 addPi name (Call callee) (St sends recvs callers inps news i) = do
   let i' = succ i
   let callers' = (Caller (PID i' name) callee):callers
@@ -108,6 +117,7 @@ receiverToPi (c, (Receiver _ clauses)) = Recv c clauses
 
 callerToPi :: Caller -> Pi
 callerToPi (Caller _ callee) = Call callee
+callerToPi (Replicater _ p) = Repl p
 
 inputToPi :: Receiver -> Pi
 inputToPi (Receiver _ clauses) = Recv (NR StdIn) clauses
@@ -152,6 +162,9 @@ reduce (Caller _ callee) st = do
       st' <- addPi callee p st
       return (st', p)
     Nothing -> throwError $ "definition not found (looking for " ++ show (pretty callee) ++ ")"
+reduce (Replicater (PID _ name) p) st = do
+  st'  <- addPi name p st >>= addPi name (Repl p)
+  return (st', (Par (Repl p) p))
 
 input :: Val -> Receiver -> St -> PiMonad St
 input val (Receiver (PID _ n) pps) st =

@@ -138,6 +138,7 @@ ppPi (Nu x t p) pr =
       [ pretty "(nu " <> pretty x <> pretty " : " <> pretty t <> pretty ")"
       , ppPi p 4
       ]
+ppPi (Repl p) _ = pretty "*" <+> pretty p
 ppPi (Call p) _ = pretty p
 
 -- ppClauses [(xs,p)] =
