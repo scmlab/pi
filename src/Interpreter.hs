@@ -3,7 +3,7 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 
 module Interpreter
-  ( step, lineup, input
+  ( step, lineup, input, reduce
   , PID(..), senderProcName, receiverProcName, callerProcName
   , Reaction(..), St(..), Sender(..), Receiver(..), Caller(..)
   , module Interpreter.Monad
@@ -66,10 +66,11 @@ data St = St
   , stIDCount   :: Int
   } deriving (Show)
 
-data Reaction = Silent                       -- nothing ever happened
+data Reaction = Silent                        -- nothing ever happened
+              | Reduce Caller Pi              -- calling some process
               | React  Name (Sender, Receiver) (Pi, Pi)  -- some chemical reaction
-              | Output Sender                -- stdout
-              | Input  Receiver              -- stdin
+              | Output Sender                 -- stdout
+              | Input  Receiver               -- stdin
               deriving (Show)
 
 --------------------------------------------------------------------------------
@@ -81,11 +82,7 @@ addPi name (Par p q) st = addPi name p st >>= addPi name q
 addPi name    (Call callee) (St sends recvs callers inps news i) = do
   let i' = succ i
   let callers' = (Caller (PID i' name) callee):callers
-  return $ St sends recvs callers' inps news i
-  -- env <- ask
-  -- case Map.lookup (ND (Pos x)) env of
-  --   Just p  -> addPi x p st
-  --   Nothing -> throwError $ "definition not found (looking for " ++ show (pretty x) ++ ")"
+  return $ St sends recvs callers' inps news i'
 addPi name (Send c x p) (St sends recvs callers inps news i) = do
   let i' = succ i
   val <- evalExpr x
@@ -114,22 +111,13 @@ callerToPi (Caller _ callee) = Call callee
 
 inputToPi :: Receiver -> Pi
 inputToPi (Receiver _ clauses) = Recv (NR StdIn) clauses
--- stToPi :: St -> Pi
--- stToPi (St sends recvs inps news) =
---   foldr Nu (foldr par End ss `par`
---             foldr par End rs `par`
---             foldr par End is ) news
---   where
---     ss = [ Send c (EV v) p      | (c,(Sender v p)) <- sends ]
---     rs = [ Recv c pps           | (c, Receiver pps) <- recvs ]
---     is = [ Recv (NR StdIn) pps  | Receiver pps <- inps]
 
 --------------------------------------------------------------------------------
 -- |
 
 step :: St -> PiMonad (St, Reaction)
 step (St sends recvs callers inps news i) = do
-  (select inps >>= doInput) `mplus` (select sends >>= doSend)
+  (select inps >>= doInput) `mplus` (select sends >>= doSend) `mplus` (select callers >>= doReduce)
   where
     doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad (St, Reaction)
     doSend ((NR StdOut, sender), otherSenders) =
@@ -150,6 +138,20 @@ step (St sends recvs callers inps news i) = do
     doInput :: (Receiver, [Receiver]) -> PiMonad (St, Reaction)
     doInput (blocked, otherBlocked) =
       return (St sends recvs callers otherBlocked news i, Input blocked)
+
+    doReduce :: (Caller, [Caller]) -> PiMonad (St, Reaction)
+    doReduce (caller, otherCallers) = do
+      (state, p) <- reduce caller (St sends recvs otherCallers inps news i)
+      return (state, Reduce caller p)
+
+reduce :: Caller -> St -> PiMonad (St, Pi)
+reduce (Caller _ callee) st = do
+  env <- ask
+  case Map.lookup (ND (Pos callee)) env of
+    Just p  -> do
+      st' <- addPi callee p st
+      return (st', p)
+    Nothing -> throwError $ "definition not found (looking for " ++ show (pretty callee) ++ ")"
 
 input :: Val -> Receiver -> St -> PiMonad St
 input val (Receiver (PID _ n) pps) st =
@@ -175,6 +177,9 @@ react (Sender _ v q) (Receiver _ clauses) =
 instance Pretty Reaction where
   pretty Silent =
     vsep  [ pretty "[Silent]"
+          ]
+  pretty (Reduce caller _) =
+    vsep  [ pretty "[Reduce]   :" <+> pretty (callerToPi caller)
           ]
   pretty (React channel (sender, receiver) products) =
     vsep  [ pretty "[React]"

@@ -198,6 +198,11 @@ printFuture = do
         yellow $ putStrLn $ "\nNo-op"
       printState nextState
       printStatusBar
+    Success nextState (Reduce caller result) _ -> do
+      liftIO $ do
+        yellow $ putStrLn $ "\nReduce"
+      printReduce caller result previousState
+      printStatusBar
     Success _ (Output sender) _ -> do
       liftIO $ do
         yellow $ putStrLn $ "\nOutput"
@@ -288,12 +293,12 @@ printBlocked p printer receivers = do
           green $ putStr $ "[" ++ (unpack $ receiverProcName receiver) ++ "] "
           putStrLn $ abbreviate (show (pretty (inputToPi receiver)))
 
-printOutput :: Sender -> St -> InteractionM IO ()
-printOutput selected@(Sender _ v _) (St senders receivers callers blocked _ _) = do
+printReduce :: Caller -> Pi -> St -> InteractionM IO ()
+printReduce selected result (St senders receivers callers blocked _ _) = do
   liftIO $ do
-    printSenders ((==) selected) (green $ putStrLn $ show $ pretty v) senders
+    printSenders   (const False) (return ()) senders
     printReceivers (const False) (return ()) receivers
-    printCallers   (const False) (return ()) callers
+    printCallers   ((==) selected) (putStrLn $ show (pretty result)) callers
     printBlocked   (const False) (return ()) blocked
 
 printReact :: (Sender, Receiver) -> (Pi, Pi) -> St -> InteractionM IO ()
@@ -319,6 +324,14 @@ printInput selected (St senders receivers callers blocked _ _) = do
   --     input <- getLine
   --     controlStdin
   --     return input
+
+printOutput :: Sender -> St -> InteractionM IO ()
+printOutput selected@(Sender _ v _) (St senders receivers callers blocked _ _) = do
+  liftIO $ do
+    printSenders   ((==) selected) (green $ putStrLn $ show $ pretty v) senders
+    printReceivers (const False) (return ()) receivers
+    printCallers   (const False) (return ()) callers
+    printBlocked   (const False) (return ()) blocked
 
 printState :: St -> InteractionM IO ()
 printState (St senders receivers callers blocked _ _) = do
