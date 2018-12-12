@@ -33,10 +33,10 @@ instance Eq PID where
   PID i _ == PID j _ = i == j
 
 senderProcName :: Sender -> ProcName
-senderProcName (Sender (PID _ n) _ _) = n
+senderProcName (Sender (PID _ n) _ _ _) = n
 
 receiverProcName :: Receiver -> ProcName
-receiverProcName (Receiver (PID _ n) _) = n
+receiverProcName (Receiver (PID _ n) _ _) = n
 
 callerProcName :: Caller -> ProcName
 callerProcName (Caller (PID _ n) _) = n
@@ -45,17 +45,17 @@ callerProcName (Replicater (PID _ n) _) = n
 --------------------------------------------------------------------------------
 -- |
 
-data Sender   = Sender   PID Val Pi deriving (Show)
-data Receiver = Receiver PID [Clause] deriving (Show)
+data Sender   = Sender   PID Name Val Pi deriving (Show)
+data Receiver = Receiver PID Name [Clause] deriving (Show)
 data Caller   = Caller   PID ProcName
               | Replicater PID Pi
               deriving (Show)
 
 instance Eq Sender where
-  Sender i _ _ == Sender j _ _ = i == j
+  Sender i _ _ _ == Sender j _ _ _ = i == j
 
 instance Eq Receiver where
-  Receiver i _ == Receiver j _ = i == j
+  Receiver i _ _ == Receiver j _ _ = i == j
 
 instance Eq Caller where
   Caller     i _ == Caller     j _ = i == j
@@ -95,13 +95,13 @@ addPi name (Call callee) (St sends recvs callers inps news i) = do
 addPi name (Send c x p) (St sends recvs callers inps news i) = do
   let i' = succ i
   val <- evalExpr x
-  return $ St ((c, (Sender (PID i' name) val p)):sends) recvs callers inps news i'
+  return $ St ((c, (Sender (PID i' name) c val p)):sends) recvs callers inps news i'
 addPi name (Recv (NR StdIn) pps) (St sends recvs callers inps news i) = do
   let i' = succ i
-  return $ St sends recvs callers (Receiver (PID i' name) pps:inps) news i'
+  return $ St sends recvs callers (Receiver (PID i' name) (NR StdIn) pps:inps) news i'
 addPi name (Recv c pps) (St sends recvs callers inps news i) = do
   let i' = succ i
-  return $ St sends ((c,Receiver (PID i' name) pps):recvs) callers inps news i'
+  return $ St sends ((c,Receiver (PID i' name) c pps):recvs) callers inps news i'
 addPi name (Nu x _ p) (St sends recvs callers inps news i) = do
   var <- fresh
   addPi name (substPi [(PH x, N var)] p) (St sends recvs callers inps (var:news) i)
@@ -109,18 +109,18 @@ addPi name (Nu x _ p) (St sends recvs callers inps news i) = do
 lineup :: [(ProcName, Pi)] -> St -> PiMonad St
 lineup = flip (foldM (flip (uncurry addPi)))
 
-senderToPi :: (Name, Sender) -> Pi
-senderToPi (c, (Sender _ v p)) = Send c (EV v) p
+senderToPi :: Sender -> Pi
+senderToPi (Sender _ c v p) = Send c (EV v) p
 
-receiverToPi :: (Name, Receiver) -> Pi
-receiverToPi (c, (Receiver _ clauses)) = Recv c clauses
+receiverToPi :: Receiver -> Pi
+receiverToPi (Receiver _ c clauses) = Recv c clauses
 
 callerToPi :: Caller -> Pi
 callerToPi (Caller _ callee) = Call callee
 callerToPi (Replicater _ p) = Repl p
 
 inputToPi :: Receiver -> Pi
-inputToPi (Receiver _ clauses) = Recv (NR StdIn) clauses
+inputToPi (Receiver _ _ clauses) = Recv (NR StdIn) clauses
 
 --------------------------------------------------------------------------------
 -- |
@@ -167,7 +167,7 @@ reduce (Replicater (PID _ name) p) st = do
   return (st', (Par (Repl p) p))
 
 input :: Val -> Receiver -> St -> PiMonad St
-input val (Receiver (PID _ n) pps) st =
+input val (Receiver (PID _ n) _ pps) st =
   case matchClauses pps val of
     Just (th, p) -> lineup [(n, substPi th p)] st
     Nothing -> throwError "input fails to match"
@@ -179,7 +179,7 @@ select (x:xs) = return (x, xs) `mplus`
                 ((id *** (x:)) <$> select xs)
 
 react :: Sender -> Receiver -> PiMonad (Pi, Pi)
-react (Sender _ v q) (Receiver _ clauses) =
+react (Sender _ _ v q) (Receiver _ _ clauses) =
   case matchClauses clauses v of
     Just (th, p) -> return (q, substPi th p)
     Nothing -> throwError "failed to match sender and receiver"
@@ -197,23 +197,23 @@ instance Pretty Reaction where
   pretty (React channel (sender, receiver) products) =
     vsep  [ pretty "[React]"
           , pretty "Channel  :" <+> pretty channel
-          , pretty "Sender   :" <+> pretty (senderToPi   (channel, sender))
-          , pretty "Receiver :" <+> pretty (receiverToPi (channel, receiver))
+          , pretty "Sender   :" <+> pretty (senderToPi   sender)
+          , pretty "Receiver :" <+> pretty (receiverToPi receiver)
           , pretty "Products :" <+> pretty products
           ]
-  pretty (Output (Sender _ v p)) =
+  pretty (Output (Sender _ _ v p)) =
     vsep  [ pretty "[Output]   :" <+> pretty (Send (NR StdOut) (EV v) p)
           ]
-  pretty (Input (Receiver _ clauses)) =
+  pretty (Input (Receiver _ _ clauses)) =
     vsep  [ pretty "[Input]    :" <+> pretty (Recv (NR StdIn) clauses)
           ]
 
 instance Pretty St where
   pretty (St sends recvs callers inps news _) =
     vsep  [ pretty "Senders  :"
-          , indent 2 (vsep (map (pretty . senderToPi) sends))
+          , indent 2 (vsep (map (pretty . senderToPi . snd) sends))
           , pretty "Receivers:"
-          , indent 2 (vsep (map (pretty . receiverToPi) recvs))
+          , indent 2 (vsep (map (pretty . receiverToPi . snd) recvs))
           , pretty "Callers:"
           , indent 2 (vsep (map (pretty . callerToPi) callers))
           , pretty "Inputs:"

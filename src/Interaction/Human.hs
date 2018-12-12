@@ -228,35 +228,35 @@ printSenders :: (Sender -> Bool) -> IO () -> [(Name, Sender)] -> IO ()
 printSenders p printer senders = do
   when (not $ null senders) $ do
     blue $ putStrLn $ "  senders:"
-    forM_ senders $ \(c, sender) -> do
+    forM_ senders $ \(_, sender) -> do
       if p sender
         then do
           red $ putStr $ " ●  "
           green $ putStr $ "[" ++ (unpack $ senderProcName sender) ++ "] "
-          putStr $ abbreviate (show (pretty (senderToPi (c, sender))))
+          putStr $ abbreviate (show (pretty (senderToPi sender)))
           red $ putStr $ " => "
           printer
         else do
           putStr $ " ○  "
           green $ putStr $ "[" ++ (unpack $ senderProcName sender) ++ "] "
-          putStrLn $ abbreviate (show (pretty (senderToPi (c, sender))))
+          putStrLn $ abbreviate (show (pretty (senderToPi sender)))
 
 printReceivers :: (Receiver -> Bool) -> IO () -> [(Name, Receiver)] -> IO ()
 printReceivers p printer receivers = do
   when (not $ null receivers) $ do
     blue $ putStrLn $ "  receivers:"
-    forM_ receivers $ \(c, receiver) -> do
+    forM_ receivers $ \(_, receiver) -> do
       if p receiver
         then do
           red $ putStr $ " ●  "
           green $ putStr $ "[" ++ (unpack $ receiverProcName receiver) ++ "] "
-          putStr $ abbreviate (show (pretty (receiverToPi (c, receiver))))
+          putStr $ abbreviate (show (pretty (receiverToPi receiver)))
           red $ putStr $ " => "
           printer
         else do
           putStr $ " ○  "
           green $ putStr $ "[" ++ (unpack $ receiverProcName receiver) ++ "] "
-          putStrLn $ abbreviate (show (pretty (receiverToPi (c, receiver))))
+          putStrLn $ abbreviate (show (pretty (receiverToPi receiver)))
 
 printCallers :: (Caller -> Bool) -> IO () -> [Caller] -> IO ()
 printCallers p printer callers = do
@@ -326,7 +326,7 @@ printInput selected (St senders receivers callers blocked _ _) = do
   --     return input
 
 printOutput :: Sender -> St -> InteractionM IO ()
-printOutput selected@(Sender _ v _) (St senders receivers callers blocked _ _) = do
+printOutput selected@(Sender _ _ v _) (St senders receivers callers blocked _ _) = do
   liftIO $ do
     printSenders   ((==) selected) (green $ putStrLn $ show $ pretty v) senders
     printReceivers (const False) (return ()) receivers

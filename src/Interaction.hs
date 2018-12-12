@@ -182,7 +182,7 @@ run inputHandler outputHandler = do
     Success oldState (Reduce _ _) i -> do
       env <- getEnv
       updateFuture $ interpret env i (step oldState)
-    Success oldState (Output (Sender (PID _ name) val p)) i -> do
+    Success oldState (Output (Sender (PID _ name) _ val p)) i -> do
       outputHandler val
       env <- getEnv
       updateFuture $ interpret env i $ do
