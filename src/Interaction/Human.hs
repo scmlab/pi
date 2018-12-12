@@ -27,18 +27,26 @@ import Syntax.Parser (printParseError)
 humanREPL :: Bool -> [FilePath] -> IO ()
 humanREPL _traceMode [] = void $ runInteraction $ do
   displayHelp
+  prompt
   loop
 humanREPL True (filePath:_) = void $ runInteraction $ do
   handleError (handleRequest (Load filePath))
+  prompt
   loop
 humanREPL False (filePath:_) = void $ runInteraction $ do
   handleError $ do
     load filePath
     execute
 
+prompt :: InteractionM IO ()
+prompt = liftIO $ do
+  putStr "π > "
+  hFlush stdout
+
 loop :: InteractionM IO ()
 loop = do
   liftIO getKey >>= handleError . handleRequest . parseRequest
+  prompt
   loop
 
 handleError :: InteractionM IO () -> InteractionM IO ()
@@ -152,7 +160,7 @@ getKey = do
     ':' -> do
       restoreStdin
       runInputT defaultSettings $ do
-        minput <- getInputLine "π : "
+        minput <- getInputLine ":"
         case minput of
             Nothing     -> lift getKey
             Just input' -> return input'
