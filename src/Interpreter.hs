@@ -211,7 +211,11 @@ step = do
       -- communicate!
       (sender', receiver') <- communicate sender receiver
       -- adjust the state accordingly
-      st <- lineup
+      modify $ \st -> st
+        { stSenders   = otherSenders
+        , stReceivers = otherReceivers
+        }
+      lineup
         [ (invoker   sender,   sender')
         , (invoker receiver, receiver')
         ]
@@ -219,42 +223,16 @@ step = do
 
     doIO :: (IOTask, [IOTask]) -> PM Effect
     doIO (task, otherTasks) = do
+      -- adjust the state accordingly
+      modify $ \st -> st { stIOTasks = otherTasks }
       return (EffIO task)
 
     doCall :: (Caller, [Caller]) -> PM Effect
     doCall (caller, otherCallers) = do
+      -- adjust the state accordingly
+      modify $ \st -> st { stCallers = otherCallers }
       p <- call caller
       return (EffCall caller p)
-
---
--- step :: St -> PiMonad (St, Effect)
--- step (St sends recvs callers io news i v) = do
---   (select io >>= doIO) `mplus` (select sends >>= doSend) `mplus` (select callers >>= doEffCall)
---   where
---     doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad (St, Effect)
---     -- doSend ((NR StdOut, sender), otherSenders) =
---     --   return (St otherSenders recvs callers io news i, EffIO sender)
---     doSend ((channel, sender), otherSenders) = do
---       -- selected a reagent from the lists of receivers
---       (receiver, otherReceivers) <- selectByKey channel recvs
---       -- communicate!
---       (sender', receiver') <- communicate sender receiver
---       -- adjust the state accordingly
---       st <- lineup
---         [ (invoker   sender,   sender'  )
---         , (invoker receiver, receiver')
---         ]
---         (St otherSenders otherReceivers callers io news i v)
---       return (st, EffComm channel (sender, receiver) (sender', receiver'))
---
---     doIO :: (IOTask, [IOTask]) -> PiMonad (St, Effect)
---     doIO (task, otherTasks) =
---       return (St sends recvs callers otherTasks news i v, EffIO task)
---
---     doEffCall :: (Caller, [Caller]) -> PiMonad (St, Effect)
---     doEffCall (caller, otherCallers) = do
---       (state', p) <- call caller (St sends recvs otherCallers io news i v)
---       return (state', EffCall caller p)
 
 call :: Caller -> PM Pi
 call (Caller _ callee) = do
