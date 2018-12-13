@@ -203,20 +203,15 @@ printFuture = do
         yellow $ putStrLn $ "\nReduce"
       printReduce caller result previousState
       printStatusBar
-    Success _ (Output sender) _ -> do
+    Success _ (IOEff task) _ -> do
       liftIO $ do
-        yellow $ putStrLn $ "\nOutput"
-      printOutput sender previousState
+        yellow $ putStrLn $ "\nI/O"
+      printIOEff task previousState
       printStatusBar
     Success _ (React _ reagents products) _ -> do
       liftIO $ do
         yellow $ putStrLn $ "\nReact"
       printReact reagents products previousState
-      printStatusBar
-    Success _ (Input receiver) _ -> do
-      liftIO $ do
-        yellow $ putStrLn $ "\nInput"
-      printInput receiver previousState
       printStatusBar
 
 abbreviate :: String -> String
@@ -228,18 +223,22 @@ printSenders :: (Sender -> Bool) -> IO () -> [(Name, Sender)] -> IO ()
 printSenders p printer senders = do
   when (not $ null senders) $ do
     blue $ putStrLn $ "  senders:"
-    forM_ senders $ \(_, sender) -> do
+    mapM_ printSender senders
+  where
+    printSender :: (Name, Sender) -> IO ()
+    printSender (_, sender) = do
       if p sender
         then do
           red $ putStr $ " ●  "
-          green $ putStr $ "[" ++ (unpack $ senderProcName sender) ++ "] "
-          putStr $ abbreviate (show (pretty (senderToPi sender)))
+          green $ putStr $ "[" ++ (unpack $ invoker sender) ++ "] "
+          putStr $ abbreviate (show (pretty sender))
           red $ putStr $ " => "
           printer
         else do
           putStr $ " ○  "
-          green $ putStr $ "[" ++ (unpack $ senderProcName sender) ++ "] "
-          putStrLn $ abbreviate (show (pretty (senderToPi sender)))
+          green $ putStr $ "[" ++ (unpack $ invoker sender) ++ "] "
+          putStrLn $ abbreviate (show (pretty sender))
+
 
 printReceivers :: (Receiver -> Bool) -> IO () -> [(Name, Receiver)] -> IO ()
 printReceivers p printer receivers = do
@@ -249,14 +248,14 @@ printReceivers p printer receivers = do
       if p receiver
         then do
           red $ putStr $ " ●  "
-          green $ putStr $ "[" ++ (unpack $ receiverProcName receiver) ++ "] "
-          putStr $ abbreviate (show (pretty (receiverToPi receiver)))
+          green $ putStr $ "[" ++ (unpack $ invoker receiver) ++ "] "
+          putStr $ abbreviate (show (pretty receiver))
           red $ putStr $ " => "
           printer
         else do
           putStr $ " ○  "
-          green $ putStr $ "[" ++ (unpack $ receiverProcName receiver) ++ "] "
-          putStrLn $ abbreviate (show (pretty (receiverToPi receiver)))
+          green $ putStr $ "[" ++ (unpack $ invoker receiver) ++ "] "
+          putStrLn $ abbreviate (show (pretty receiver))
 
 printCallers :: (Caller -> Bool) -> IO () -> [Caller] -> IO ()
 printCallers p printer callers = do
@@ -266,80 +265,63 @@ printCallers p printer callers = do
       if p caller
         then do
           red $ putStr $ " ●  "
-          green $ putStr $ "[" ++ (unpack $ callerProcName caller) ++ "] "
-          putStr $ abbreviate (show (pretty (callerToPi caller)))
+          green $ putStr $ "[" ++ (unpack $ invoker caller) ++ "] "
+          putStr $ abbreviate (show (pretty caller))
           red $ putStr $ " => "
           printer
         else do
           putStr $ " ○  "
-          green $ putStr $ "[" ++ (unpack $ callerProcName caller) ++ "] "
-          putStrLn $ abbreviate (show (pretty (callerToPi caller)))
+          green $ putStr $ "[" ++ (unpack $ invoker caller) ++ "] "
+          putStrLn $ abbreviate (show (pretty caller))
 
 
-
-printBlocked :: (Receiver -> Bool) -> IO () -> [Receiver] -> IO ()
-printBlocked p printer receivers = do
-  when (not $ null receivers) $ do
-    blue $ putStrLn $ "  blocked:"
-    forM_ receivers $ \receiver -> do
-      if p receiver
-        then do
-          red $ putStr $ " ●  "
-          green $ putStr $ "[" ++ (unpack $ receiverProcName receiver) ++ "] "
-          putStrLn $ abbreviate (show (pretty (inputToPi receiver)))
-          printer
-        else do
-          putStr $ " ○  "
-          green $ putStr $ "[" ++ (unpack $ receiverProcName receiver) ++ "] "
-          putStrLn $ abbreviate (show (pretty (inputToPi receiver)))
+printIOTasks :: (IOTask -> Bool) -> [IOTask] -> IO ()
+printIOTasks p tasks = do
+  when (not $ null tasks) $ do
+    blue $ putStrLn $ "  io:"
+    forM_ tasks $ \task -> do
+      if p task
+        then red $ putStr $ " ●  "
+        else putStr $ " ○  "
+      green $ putStr $ "[" ++ (unpack $ invoker task) ++ "] "
+      putStrLn $ abbreviate (show (pretty task))
 
 printReduce :: Caller -> Pi -> St -> InteractionM IO ()
-printReduce selected result (St senders receivers callers blocked _ _) = do
+printReduce selected result (St senders receivers callers io _ _) = do
   liftIO $ do
     printSenders   (const False) (return ()) senders
     printReceivers (const False) (return ()) receivers
     printCallers   ((==) selected) (putStrLn $ show (pretty result)) callers
-    printBlocked   (const False) (return ()) blocked
+    printIOTasks   (const False) io
 
 printReact :: (Sender, Receiver) -> (Pi, Pi) -> St -> InteractionM IO ()
-printReact (selectedSender, selectedReceiver) (productSender, productReceiver) (St senders receivers callers blocked _ _) = do
+printReact (selectedSender, selectedReceiver) (productSender, productReceiver) (St senders receivers callers io _ _) = do
   liftIO $ do
     printSenders   ((==) selectedSender)   (putStrLn $ abbreviate $ show (pretty productSender)) senders
     printReceivers ((==) selectedReceiver) (putStrLn $ abbreviate $ show (pretty productReceiver)) receivers
     printCallers   (const False) (return ()) callers
-    printBlocked   (const False) (return ()) blocked
+    printIOTasks   (const False) io
 
-printInput :: Receiver -> St -> InteractionM IO ()
-printInput selected (St senders receivers callers blocked _ _) = do
-  liftIO $ do
+printIOEff :: IOTask -> St -> InteractionM IO ()
+printIOEff selected@(Input _ _) (St senders receivers callers io _ _) = liftIO $ do
     printSenders   (const False) (return ()) senders
     printReceivers (const False) (return ()) receivers
     printCallers   (const False) (return ()) callers
-    printBlocked   ((==) selected) (return ()) blocked
-  -- where
-  --   readInput :: IO (V)
-  --   readInput = do
-  --     hFlush stdout
-  --     restoreStdin
-  --     input <- getLine
-  --     controlStdin
-  --     return input
-
-printOutput :: Sender -> St -> InteractionM IO ()
-printOutput selected@(Sender _ _ v _) (St senders receivers callers blocked _ _) = do
-  liftIO $ do
-    printSenders   ((==) selected) (green $ putStrLn $ show $ pretty v) senders
+    printIOTasks   ((==) selected) io
+printIOEff selected@(Output _ _ _) (St senders receivers callers io _ _) = liftIO $ do
+    printSenders   (const False) (return ()) senders
     printReceivers (const False) (return ()) receivers
     printCallers   (const False) (return ()) callers
-    printBlocked   (const False) (return ()) blocked
+    printIOTasks   ((==) selected) io
+    -- printIOTasks   ((==) selected) (green $ putStrLn $ show $ pretty v) io
 
 printState :: St -> InteractionM IO ()
-printState (St senders receivers callers blocked _ _) = do
+printState (St senders receivers callers io _ _) = do
   liftIO $ do
     printSenders   (const False) (return ()) senders
     printReceivers (const False) (return ()) receivers
     printCallers   (const False) (return ()) callers
-    printBlocked   (const False) (return ()) blocked
+    printIOTasks   (const False) io
 
 printStatusBar :: InteractionM IO ()
 printStatusBar = do

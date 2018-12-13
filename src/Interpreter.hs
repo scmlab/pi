@@ -4,10 +4,10 @@
 
 module Interpreter
   ( step, lineup, input, reduce
-  , PID(..), senderProcName, receiverProcName, callerProcName
-  , Reaction(..), St(..), Sender(..), Receiver(..), Caller(..)
+  , PID(..), HasPID(..), invoker
+  , Reaction(..), IOTask(..), St(..), Sender(..), Receiver(..), Caller(..)
   , module Interpreter.Monad
-  , senderToPi, receiverToPi, inputToPi, callerToPi
+  , senderToPi, receiverToPi, ioTaskToPi, callerToPi
   ) where
 
 import Control.Monad.State
@@ -16,6 +16,7 @@ import Control.Monad.Except
 import Control.Arrow ((***))
 
 import qualified Data.Map as Map
+import Data.Function (on)
 
 import Data.Text.Prettyprint.Doc
 import PPrint ()
@@ -27,20 +28,33 @@ import Utilities
 --------------------------------------------------------------------------------
 -- | PID: data type for tracking processes
 
-data PID = PID Int ProcName deriving (Show)
+data PID = PID
+  Int       -- unique ID
+  ProcName  -- the process that invoked this
+  deriving (Show)
 
 instance Eq PID where
   PID i _ == PID j _ = i == j
 
-senderProcName :: Sender -> ProcName
-senderProcName (Sender (PID _ n) _ _ _) = n
+invoker :: HasPID a => a -> ProcName
+invoker x = let PID _ name = getPID x in name
 
-receiverProcName :: Receiver -> ProcName
-receiverProcName (Receiver (PID _ n) _ _) = n
+class HasPID a where
+  getPID :: a -> PID
 
-callerProcName :: Caller -> ProcName
-callerProcName (Caller (PID _ n) _) = n
-callerProcName (Replicater (PID _ n) _) = n
+instance HasPID Sender where
+  getPID (Sender pid _ _ _) = pid
+
+instance HasPID Receiver where
+  getPID (Receiver pid _ _) = pid
+
+instance HasPID Caller where
+  getPID (Caller pid _) = pid
+  getPID (Replicater pid _) = pid
+
+instance HasPID IOTask where
+  getPID (Input pid _) = pid
+  getPID (Output pid _ _) = pid
 
 --------------------------------------------------------------------------------
 -- |
@@ -50,23 +64,27 @@ data Receiver = Receiver PID Name [Clause] deriving (Show)
 data Caller   = Caller   PID ProcName
               | Replicater PID Pi
               deriving (Show)
+data IOTask   = Input PID [Clause]
+              | Output PID Val Pi
+              deriving (Show)
 
 instance Eq Sender where
-  Sender i _ _ _ == Sender j _ _ _ = i == j
+  (==) = (==) `on` getPID
 
 instance Eq Receiver where
-  Receiver i _ _ == Receiver j _ _ = i == j
+  (==) = (==) `on` getPID
 
 instance Eq Caller where
-  Caller     i _ == Caller     j _ = i == j
-  Replicater i _ == Replicater j _ = i == j
-  _ == _ = False
+  (==) = (==) `on` getPID
+
+instance Eq IOTask where
+  (==) = (==) `on` getPID
 
 data St = St
   { stSenders   :: FMap Name Sender     -- senders
   , stReceivers :: FMap Name Receiver   -- receivers
   , stCallers   :: [Caller]             -- callers to some processes
-  , stWaiting   :: [Receiver]           -- blocked at stdin
+  , stWaiting   :: [IOTask]             -- I/O tasks
   , stFreshVars :: [Name]               -- new variables
   , stIDCount   :: Int
   } deriving (Show)
@@ -74,8 +92,7 @@ data St = St
 data Reaction = Silent                        -- nothing ever happened
               | Reduce Caller Pi              -- calling some process
               | React  Name (Sender, Receiver) (Pi, Pi)  -- some chemical reaction
-              | Output Sender                 -- stdout
-              | Input  Receiver               -- stdin
+              | IOEff IOTask
               deriving (Show)
 
 --------------------------------------------------------------------------------
@@ -84,27 +101,33 @@ data Reaction = Silent                        -- nothing ever happened
 addPi :: ProcName -> Pi -> St -> PiMonad St
 addPi _    End       st = return st
 addPi name (Par p q) st = addPi name p st >>= addPi name q
-addPi name (Repl p) (St sends recvs callers inps news i) = do
+addPi name (Repl p) (St sends recvs callers io news i) = do
   let i' = succ i
   let callers' = (Replicater (PID i' name) p):callers
-  return $ St sends recvs callers' inps news i'
-addPi name (Call callee) (St sends recvs callers inps news i) = do
+  return $ St sends recvs callers' io news i'
+addPi name (Call callee) (St sends recvs callers io news i) = do
   let i' = succ i
   let callers' = (Caller (PID i' name) callee):callers
-  return $ St sends recvs callers' inps news i'
-addPi name (Send c x p) (St sends recvs callers inps news i) = do
+  return $ St sends recvs callers' io news i'
+addPi name (Send (NR StdOut) x p) (St sends recvs callers io news i) = do
   let i' = succ i
   val <- evalExpr x
-  return $ St ((c, (Sender (PID i' name) c val p)):sends) recvs callers inps news i'
-addPi name (Recv (NR StdIn) pps) (St sends recvs callers inps news i) = do
+  let output = Output (PID i' name) val p
+  return $ St sends recvs callers (output:io) news i'
+addPi name (Send c x p) (St sends recvs callers io news i) = do
   let i' = succ i
-  return $ St sends recvs callers (Receiver (PID i' name) (NR StdIn) pps:inps) news i'
-addPi name (Recv c pps) (St sends recvs callers inps news i) = do
+  val <- evalExpr x
+  return $ St ((c, (Sender (PID i' name) c val p)):sends) recvs callers io news i'
+addPi name (Recv (NR StdIn) pps) (St sends recvs callers io news i) = do
   let i' = succ i
-  return $ St sends ((c,Receiver (PID i' name) c pps):recvs) callers inps news i'
-addPi name (Nu x _ p) (St sends recvs callers inps news i) = do
+  let input = Input (PID i' name) pps
+  return $ St sends recvs callers (input:io) news i'
+addPi name (Recv c pps) (St sends recvs callers io news i) = do
+  let i' = succ i
+  return $ St sends ((c,Receiver (PID i' name) c pps):recvs) callers io news i'
+addPi name (Nu x _ p) (St sends recvs callers io news i) = do
   var <- fresh
-  addPi name (substPi [(PH x, N var)] p) (St sends recvs callers inps (var:news) i)
+  addPi name (substPi [(PH x, N var)] p) (St sends recvs callers io (var:news) i)
 
 lineup :: [(ProcName, Pi)] -> St -> PiMonad St
 lineup = flip (foldM (flip (uncurry addPi)))
@@ -119,19 +142,20 @@ callerToPi :: Caller -> Pi
 callerToPi (Caller _ callee) = Call callee
 callerToPi (Replicater _ p) = Repl p
 
-inputToPi :: Receiver -> Pi
-inputToPi (Receiver _ _ clauses) = Recv (NR StdIn) clauses
+ioTaskToPi :: IOTask -> Pi
+ioTaskToPi (Input _ clauses) = Recv (NR StdIn) clauses
+ioTaskToPi (Output _ v p) = Send (NR StdOut) (EV v) p
 
 --------------------------------------------------------------------------------
 -- |
 
 step :: St -> PiMonad (St, Reaction)
-step (St sends recvs callers inps news i) = do
-  (select inps >>= doInput) `mplus` (select sends >>= doSend) `mplus` (select callers >>= doReduce)
+step (St sends recvs callers io news i) = do
+  (select io >>= doIO) `mplus` (select sends >>= doSend) `mplus` (select callers >>= doReduce)
   where
     doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad (St, Reaction)
-    doSend ((NR StdOut, sender), otherSenders) =
-      return (St otherSenders recvs callers inps news i, Output sender)
+    -- doSend ((NR StdOut, sender), otherSenders) =
+    --   return (St otherSenders recvs callers io news i, IOEff sender)
     doSend ((channel, sender), otherSenders) = do
       -- selected a reagent from the lists of receivers
       (receiver, otherReceivers) <- selectByKey channel recvs
@@ -139,19 +163,19 @@ step (St sends recvs callers inps news i) = do
       (sender', receiver') <- react sender receiver
       -- adjust the state accordingly
       st <- lineup
-        [ (senderProcName   sender,   sender'  )
-        , (receiverProcName receiver, receiver')
+        [ (invoker   sender,   sender'  )
+        , (invoker receiver, receiver')
         ]
-        (St otherSenders otherReceivers callers inps news i)
+        (St otherSenders otherReceivers callers io news i)
       return (st, React channel (sender, receiver) (sender', receiver'))
 
-    doInput :: (Receiver, [Receiver]) -> PiMonad (St, Reaction)
-    doInput (blocked, otherBlocked) =
-      return (St sends recvs callers otherBlocked news i, Input blocked)
+    doIO :: (IOTask, [IOTask]) -> PiMonad (St, Reaction)
+    doIO (task, otherTasks) =
+      return (St sends recvs callers otherTasks news i, IOEff task)
 
     doReduce :: (Caller, [Caller]) -> PiMonad (St, Reaction)
     doReduce (caller, otherCallers) = do
-      (state', p) <- reduce caller (St sends recvs otherCallers inps news i)
+      (state', p) <- reduce caller (St sends recvs otherCallers io news i)
       return (state', Reduce caller p)
 
 reduce :: Caller -> St -> PiMonad (St, Pi)
@@ -166,12 +190,13 @@ reduce (Replicater (PID _ name) p) st = do
   st'  <- addPi name p st >>= addPi name (Repl p)
   return (st', (Par (Repl p) p))
 
-input :: Val -> Receiver -> St -> PiMonad St
-input val (Receiver (PID _ n) _ pps) st =
+input :: Val -> IOTask -> St -> PiMonad St
+input val (Input (PID _ n) pps) st =
   case matchClauses pps val of
     Just (th, p) -> lineup [(n, substPi th p)] st
     Nothing -> throwError "input fails to match"
-
+input _ (Output _ _ _) _ =
+    throwError "expecting Input but got Output"
 
 select :: [a] -> PiMonad (a, [a])
 select []     = mzero
@@ -201,23 +226,32 @@ instance Pretty Reaction where
           , pretty "Receiver :" <+> pretty (receiverToPi receiver)
           , pretty "Products :" <+> pretty products
           ]
-  pretty (Output (Sender _ _ v p)) =
-    vsep  [ pretty "[Output]   :" <+> pretty (Send (NR StdOut) (EV v) p)
-          ]
-  pretty (Input (Receiver _ _ clauses)) =
-    vsep  [ pretty "[Input]    :" <+> pretty (Recv (NR StdIn) clauses)
+  pretty (IOEff task) =
+    vsep  [ pretty "[I/O]   :" <+> pretty task
           ]
 
+instance Pretty IOTask where
+  pretty = pretty . ioTaskToPi
+
+instance Pretty Sender where
+  pretty = pretty . senderToPi
+
+instance Pretty Receiver where
+  pretty = pretty . receiverToPi
+
+instance Pretty Caller where
+  pretty = pretty . callerToPi
+
 instance Pretty St where
-  pretty (St sends recvs callers inps news _) =
+  pretty (St sends recvs callers io news _) =
     vsep  [ pretty "Senders  :"
           , indent 2 (vsep (map (pretty . senderToPi . snd) sends))
           , pretty "Receivers:"
           , indent 2 (vsep (map (pretty . receiverToPi . snd) recvs))
           , pretty "Callers:"
           , indent 2 (vsep (map (pretty . callerToPi) callers))
-          , pretty "Inputs:"
-          , indent 2 (vsep (map (pretty . inputToPi) inps))
+          , pretty "I/O:"
+          , indent 2 (vsep (map (pretty . ioTaskToPi) io))
           , encloseSep (pretty "New: ") (pretty ".") comma (map pretty news)
           ]
 {-

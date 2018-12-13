@@ -88,6 +88,7 @@ interpret env i program = map toOutcome (runPiMonad env i program)
 -- | Cursor related operations
 
 withCursor :: Monad m => (Int -> InteractionM m a) -> InteractionM m a
+-- withCursor :: Monad m => (Int -> InteractionM m a) -> InteractionM m a
 withCursor f = do
   cursor <- gets stCursor
   case cursor of
@@ -182,20 +183,22 @@ run inputHandler outputHandler = do
     Success oldState (Reduce _ _) i -> do
       env <- getEnv
       updateFuture $ interpret env i (step oldState)
-    Success oldState (Output (Sender (PID _ name) _ val p)) i -> do
+    Success oldState (React _ _ _) i -> do
+      env <- getEnv
+      updateFuture $ interpret env i (step oldState)
+    -- Output
+    Success oldState (IOEff (Output (PID _ name) val p)) i -> do
       outputHandler val
       env <- getEnv
       updateFuture $ interpret env i $ do
         newState <- lineup [(name, p)] oldState
         return (newState, Silent)
-    Success oldState (React _ _ _) i -> do
-      env <- getEnv
-      updateFuture $ interpret env i (step oldState)
-    Success oldState (Input pps) i -> do
+    -- Input
+    Success oldState (IOEff task) i -> do
       val <- inputHandler
       env <- getEnv
       updateFuture $ interpret env i $ do
-        state' <- input val pps oldState
+        state' <- input val task oldState
         return (state', Silent)
     Success oldState Silent i -> do
       env <- getEnv
