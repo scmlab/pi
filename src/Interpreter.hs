@@ -5,6 +5,7 @@
 module Interpreter
   ( step, lineup, input, call
   , PID(..), HasPID(..), invoker
+  , PM(..), runPM
   , Effect(..), IOTask(..), St(..), Sender(..), Receiver(..), Caller(..)
   , module Interpreter.Monad
   , senderToPi, receiverToPi, ioTaskToPi, callerToPi
@@ -84,9 +85,10 @@ data St = St
   { stSenders   :: FMap Name Sender     -- senders
   , stReceivers :: FMap Name Receiver   -- receivers
   , stCallers   :: [Caller]             -- callers to some processes
-  , stWaiting   :: [IOTask]             -- I/O tasks
+  , stIOTasks   :: [IOTask]             -- I/O tasks
   , stFreshVars :: [Name]               -- new variables
-  , stIDCount   :: Int
+  , stPIDCount  :: Int
+  , stVarCount  :: Int
   } deriving (Show)
 
 data Effect = EffNoop                                   -- nothing ever happened
@@ -95,42 +97,87 @@ data Effect = EffNoop                                   -- nothing ever happened
             | EffIO   IOTask
             deriving (Show)
 
+
+type PM = ReaderT Env (StateT St (EitherT String []))
+
+instance MonadFresh PM where
+  fresh = do
+    i <- gets stVarCount
+    modify $ \st -> st { stVarCount = succ i }
+    return (NG (Pos i))
+
+runPM :: Env -> St -> PM a -> [Either String (a, St)]
+runPM env st m = runEitherT (runStateT (runReaderT m env) st)
+
+freshPID :: ProcName -> PM PID
+freshPID name = do
+  i <- gets stPIDCount
+  let pid = PID (succ i) name
+  modify $ \st -> st { stPIDCount = succ i }
+  return pid
+
+addSender :: Name -> Sender -> PM ()
+addSender name x = do
+  xs <- gets stSenders
+  modify $ \st -> st { stSenders = (name, x):xs }
+
+addReceiver :: Name -> Receiver -> PM ()
+addReceiver name x = do
+  xs <- gets stReceivers
+  modify $ \st -> st { stReceivers = (name, x):xs }
+
+addCaller :: Caller -> PM ()
+addCaller x = do
+  xs <- gets stCallers
+  modify $ \st -> st { stCallers = x:xs }
+
+addIOTask :: IOTask -> PM ()
+addIOTask x = do
+  xs <- gets stIOTasks
+  modify $ \st -> st { stIOTasks = x:xs }
+
+addFreshVar :: Name -> PM ()
+addFreshVar x = do
+  xs <- gets stFreshVars
+  modify $ \st -> st { stFreshVars = x:xs }
+
 --------------------------------------------------------------------------------
 -- | Pi <-> St
-
-addPi :: ProcName -> Pi -> St -> PiMonad St
-addPi _    End       st = return st
-addPi name (Par p q) st = addPi name p st >>= addPi name q
-addPi name (Repl p) (St sends recvs callers io news i) = do
-  let i' = succ i
-  let callers' = (Replicater (PID i' name) p):callers
-  return $ St sends recvs callers' io news i'
-addPi name (Call callee) (St sends recvs callers io news i) = do
-  let i' = succ i
-  let callers' = (Caller (PID i' name) callee):callers
-  return $ St sends recvs callers' io news i'
-addPi name (Send (NR StdOut) x p) (St sends recvs callers io news i) = do
-  let i' = succ i
+addPi :: ProcName -> Pi -> PM ()
+addPi _    End       = return ()
+addPi name (Par p q) = do
+  addPi name p
+  addPi name q
+addPi name (Repl p) = do
+  pid <- freshPID name
+  addCaller (Replicater pid p)
+addPi name (Call callee) = do
+  pid <- freshPID name
+  addCaller (Caller pid callee)
+addPi name (Send (NR StdOut) x p) = do
+  pid <- freshPID name
   val <- evalExpr x
-  let output = Output (PID i' name) val p
-  return $ St sends recvs callers (output:io) news i'
-addPi name (Send c x p) (St sends recvs callers io news i) = do
-  let i' = succ i
+  addIOTask (Output pid val p)
+addPi name (Send c x p) = do
+  pid <- freshPID name
   val <- evalExpr x
-  return $ St ((c, (Sender (PID i' name) c val p)):sends) recvs callers io news i'
-addPi name (Recv (NR StdIn) pps) (St sends recvs callers io news i) = do
-  let i' = succ i
-  let input' = Input (PID i' name) pps
-  return $ St sends recvs callers (input':io) news i'
-addPi name (Recv c pps) (St sends recvs callers io news i) = do
-  let i' = succ i
-  return $ St sends ((c,Receiver (PID i' name) c pps):recvs) callers io news i'
-addPi name (Nu x _ p) (St sends recvs callers io news i) = do
+  addSender c (Sender pid c val p)
+addPi name (Recv (NR StdIn) clauses) = do
+  pid <- freshPID name
+  addIOTask (Input pid clauses)
+addPi name (Recv c clauses) = do
+  pid <- freshPID name
+  addReceiver c (Receiver pid c clauses)
+addPi name (Nu x _ p) = do
   var <- fresh
-  addPi name (substPi [(PH x, N var)] p) (St sends recvs callers io (var:news) i)
+  addFreshVar var
+  addPi name (substPi [(PH x, N var)] p)
 
-lineup :: [(ProcName, Pi)] -> St -> PiMonad St
-lineup = flip (foldM (flip (uncurry addPi)))
+lineup :: [(ProcName, Pi)] -> PM ()
+lineup []     = return ()
+lineup ((c, x):xs) = do
+  addPi c x
+  lineup xs
 
 senderToPi :: Sender -> Pi
 senderToPi (Sender _ c v p) = Send c (EV v) p
@@ -149,62 +196,94 @@ ioTaskToPi (Output _ v p) = Send (NR StdOut) (EV v) p
 --------------------------------------------------------------------------------
 -- |
 
-step :: St -> PiMonad (St, Effect)
-step (St sends recvs callers io news i) = do
-  (select io >>= doIO) `mplus` (select sends >>= doSend) `mplus` (select callers >>= doEffCall)
+step :: PM Effect
+step = do
+  io        <- gets stIOTasks
+  senders   <- gets stSenders
+  receivers <- gets stReceivers
+  callers   <- gets stCallers
+  (select io >>= doIO) `mplus` (select senders >>= doSend receivers) `mplus` (select callers >>= doCall)
   where
-    doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad (St, Effect)
-    -- doSend ((NR StdOut, sender), otherSenders) =
-    --   return (St otherSenders recvs callers io news i, EffIO sender)
-    doSend ((channel, sender), otherSenders) = do
+    doSend :: FMap Name Receiver -> ((Name, Sender), FMap Name Sender) -> PM Effect
+    doSend receivers ((channel, sender), otherSenders) = do
       -- selected a reagent from the lists of receivers
-      (receiver, otherReceivers) <- selectByKey channel recvs
+      (receiver, otherReceivers) <- selectByKey channel receivers
       -- communicate!
       (sender', receiver') <- communicate sender receiver
       -- adjust the state accordingly
       st <- lineup
-        [ (invoker   sender,   sender'  )
+        [ (invoker   sender,   sender')
         , (invoker receiver, receiver')
         ]
-        (St otherSenders otherReceivers callers io news i)
-      return (st, EffComm channel (sender, receiver) (sender', receiver'))
+      return (EffComm channel (sender, receiver) (sender', receiver'))
 
-    doIO :: (IOTask, [IOTask]) -> PiMonad (St, Effect)
-    doIO (task, otherTasks) =
-      return (St sends recvs callers otherTasks news i, EffIO task)
+    doIO :: (IOTask, [IOTask]) -> PM Effect
+    doIO (task, otherTasks) = do
+      return (EffIO task)
 
-    doEffCall :: (Caller, [Caller]) -> PiMonad (St, Effect)
-    doEffCall (caller, otherCallers) = do
-      (state', p) <- call caller (St sends recvs otherCallers io news i)
-      return (state', EffCall caller p)
+    doCall :: (Caller, [Caller]) -> PM Effect
+    doCall (caller, otherCallers) = do
+      p <- call caller
+      return (EffCall caller p)
 
-call :: Caller -> St -> PiMonad (St, Pi)
-call (Caller _ callee) st = do
+--
+-- step :: St -> PiMonad (St, Effect)
+-- step (St sends recvs callers io news i v) = do
+--   (select io >>= doIO) `mplus` (select sends >>= doSend) `mplus` (select callers >>= doEffCall)
+--   where
+--     doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad (St, Effect)
+--     -- doSend ((NR StdOut, sender), otherSenders) =
+--     --   return (St otherSenders recvs callers io news i, EffIO sender)
+--     doSend ((channel, sender), otherSenders) = do
+--       -- selected a reagent from the lists of receivers
+--       (receiver, otherReceivers) <- selectByKey channel recvs
+--       -- communicate!
+--       (sender', receiver') <- communicate sender receiver
+--       -- adjust the state accordingly
+--       st <- lineup
+--         [ (invoker   sender,   sender'  )
+--         , (invoker receiver, receiver')
+--         ]
+--         (St otherSenders otherReceivers callers io news i v)
+--       return (st, EffComm channel (sender, receiver) (sender', receiver'))
+--
+--     doIO :: (IOTask, [IOTask]) -> PiMonad (St, Effect)
+--     doIO (task, otherTasks) =
+--       return (St sends recvs callers otherTasks news i v, EffIO task)
+--
+--     doEffCall :: (Caller, [Caller]) -> PiMonad (St, Effect)
+--     doEffCall (caller, otherCallers) = do
+--       (state', p) <- call caller (St sends recvs otherCallers io news i v)
+--       return (state', EffCall caller p)
+
+call :: Caller -> PM Pi
+call (Caller _ callee) = do
   env <- ask
   case Map.lookup (ND (Pos callee)) env of
     Just p  -> do
-      st' <- addPi callee p st
-      return (st', p)
+      addPi callee p
+      return p
     Nothing -> throwError $ "definition not found (looking for " ++ show (pretty callee) ++ ")"
-call (Replicater (PID _ name) p) st = do
-  st'  <- addPi name p st >>= addPi name (Repl p)
-  return (st', (Par (Repl p) p))
+call (Replicater (PID _ name) p) = do
+  addPi name p
+  addPi name (Repl p)
+  return (Par (Repl p) p)
 
-input :: Val -> IOTask -> St -> PiMonad St
-input val (Input (PID _ n) pps) st =
+input :: Val -> IOTask -> PM ()
+input val (Input (PID _ n) pps) =
   case matchClauses pps val of
-    Just (th, p) -> lineup [(n, substPi th p)] st
+    Just (th, p) -> lineup [(n, substPi th p)]
     Nothing -> throwError "input fails to match"
-input _ (Output _ _ _) _ =
+input _ (Output _ _ _) =
     throwError "expecting Input but got Output"
 
-communicate :: Sender -> Receiver -> PiMonad (Pi, Pi)
+communicate :: Sender -> Receiver -> PM (Pi, Pi)
 communicate (Sender _ _ v q) (Receiver _ _ clauses) =
   case matchClauses clauses v of
     Just (th, p) -> return (q, substPi th p)
     Nothing -> throwError "failed to match sender and receiver"
 
-select :: [a] -> PiMonad (a, [a])
+select :: [a] -> PM (a, [a])
 select []     = mzero
 select (x:xs) = return (x, xs) `mplus`
                 ((id *** (x:)) <$> select xs)
@@ -243,7 +322,7 @@ instance Pretty Caller where
   pretty = pretty . callerToPi
 
 instance Pretty St where
-  pretty (St sends recvs callers io news _) =
+  pretty (St sends recvs callers io news _ _) =
     vsep  [ pretty "Senders  :"
           , indent 2 (vsep (map (pretty . senderToPi . snd) sends))
           , pretty "Receivers:"

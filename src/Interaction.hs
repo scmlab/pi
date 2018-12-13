@@ -19,13 +19,13 @@ import Interpreter
  --------------------------------------------------------------------------------
  -- | Interaction Monad
 
-data Outcome = Success St Effect BkSt
+data Outcome = Success St Effect
              | Failure ErrMsg
              deriving (Show)
 
 instance Pretty Outcome where
   pretty (Failure msg)          = pretty ("error:" :: String) <+> pretty msg
-  pretty (Success _ reaction _) = pretty reaction
+  pretty (Success _ reaction) = pretty reaction
 
 data InteractionState = State
   { stFilePath :: Maybe String        -- loaded filepath
@@ -76,12 +76,12 @@ runInteraction handler =
   runStateT (runExceptT handler) (State Nothing Nothing Nothing [] initialOutcomes Nothing)
   where initialOutcomes = [Failure "please load first"]
 
-interpret :: Env -> BkSt -> PiMonad (St, Effect) -> [Outcome]
-interpret env i program = map toOutcome (runPiMonad env i program)
+interpret :: Env -> St -> PM Effect -> [Outcome]
+interpret env st program = map toOutcome (runPM env st program)
   where
-    toOutcome :: Either String ((St, Effect), BkSt) -> Outcome
-    toOutcome (Left err)                     = Failure err
-    toOutcome (Right ((state, reaction), j)) = Success state reaction j
+    toOutcome :: Either String (Effect, St) -> Outcome
+    toOutcome (Left err)              = Failure err
+    toOutcome (Right (effect, state)) = Success state effect
 
 
 --------------------------------------------------------------------------------
@@ -119,7 +119,7 @@ latestState :: Monad m => InteractionM m St
 latestState = do
   outcome <- latestHistory
   case outcome of
-    (Success state _ _) -> return state
+    (Success state _) -> return state
     _ -> throwError $ InteractionError "cannot retrieve state"
 
 --------------------------------------------------------------------------------
@@ -142,15 +142,15 @@ load filePath = do
 
       env <- getEnv
       -- populate future, the next possible outcomes (there should be only 1)
-      updateFuture $ interpret env 0 $ do
-        (state, _) <- call (Caller (PID (-1) "you") "main") (St [] [] [] [] [] 0)
-        return (state, EffNoop)
+      updateFuture $ interpret env (St [] [] [] [] [] 0 0) $ do
+        call (Caller (PID (-1) "you") "main")
+        return EffNoop
       -- retrieve state from the recently populated outcome and store it
       outcome <- selectedFuture
       case outcome of
-        Success state reaction bk -> do
-          pushHistory (Success state reaction bk)
-          updateFuture $ interpret env bk (step state)
+        Success state reaction -> do
+          pushHistory (Success state reaction)
+          updateFuture $ interpret env state step
         Failure _ -> throwError $ InteractionError "cannot retrieve outcome"
 
 test :: (MonadIO m, Monad m) => InteractionM m ()
@@ -180,29 +180,29 @@ run inputHandler outputHandler = do
   case outcome of
     Failure err -> do
       updateFuture $ [Failure err]
-    Success oldState (EffCall _ _) i -> do
+    Success oldState (EffCall _ _) -> do
       env <- getEnv
-      updateFuture $ interpret env i (step oldState)
-    Success oldState (EffComm _ _ _) i -> do
+      updateFuture $ interpret env oldState step
+    Success oldState (EffComm _ _ _) -> do
       env <- getEnv
-      updateFuture $ interpret env i (step oldState)
+      updateFuture $ interpret env oldState step
     -- Output
-    Success oldState (EffIO (Output (PID _ name) val p)) i -> do
+    Success oldState (EffIO (Output (PID _ name) val p)) -> do
       outputHandler val
       env <- getEnv
-      updateFuture $ interpret env i $ do
-        newState <- lineup [(name, p)] oldState
-        return (newState, EffNoop)
+      updateFuture $ interpret env oldState $ do
+        lineup [(name, p)]
+        return EffNoop
     -- Input
-    Success oldState (EffIO task) i -> do
+    Success oldState (EffIO task) -> do
       val <- inputHandler
       env <- getEnv
-      updateFuture $ interpret env i $ do
-        state' <- input val task oldState
-        return (state', EffNoop)
-    Success oldState EffNoop i -> do
+      updateFuture $ interpret env oldState $ do
+        input val task
+        return EffNoop
+    Success oldState EffNoop -> do
       env <- getEnv
-      updateFuture $ interpret env i (step oldState)
+      updateFuture $ interpret env oldState step
 
 --------------------------------------------------------------------------------
 -- | Helpers
