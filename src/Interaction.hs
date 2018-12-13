@@ -19,7 +19,7 @@ import Interpreter
  --------------------------------------------------------------------------------
  -- | Interaction Monad
 
-data Outcome = Success St Reaction BkSt
+data Outcome = Success St Effect BkSt
              | Failure ErrMsg
              deriving (Show)
 
@@ -76,10 +76,10 @@ runInteraction handler =
   runStateT (runExceptT handler) (State Nothing Nothing Nothing [] initialOutcomes Nothing)
   where initialOutcomes = [Failure "please load first"]
 
-interpret :: Env -> BkSt -> PiMonad (St, Reaction) -> [Outcome]
+interpret :: Env -> BkSt -> PiMonad (St, Effect) -> [Outcome]
 interpret env i program = map toOutcome (runPiMonad env i program)
   where
-    toOutcome :: Either String ((St, Reaction), BkSt) -> Outcome
+    toOutcome :: Either String ((St, Effect), BkSt) -> Outcome
     toOutcome (Left err)                     = Failure err
     toOutcome (Right ((state, reaction), j)) = Success state reaction j
 
@@ -143,8 +143,8 @@ load filePath = do
       env <- getEnv
       -- populate future, the next possible outcomes (there should be only 1)
       updateFuture $ interpret env 0 $ do
-        (state, _) <- reduce (Caller (PID (-1) "you") "main") (St [] [] [] [] [] 0)
-        return (state, Silent)
+        (state, _) <- call (Caller (PID (-1) "you") "main") (St [] [] [] [] [] 0)
+        return (state, EffNoop)
       -- retrieve state from the recently populated outcome and store it
       outcome <- selectedFuture
       case outcome of
@@ -180,27 +180,27 @@ run inputHandler outputHandler = do
   case outcome of
     Failure err -> do
       updateFuture $ [Failure err]
-    Success oldState (Reduce _ _) i -> do
+    Success oldState (EffCall _ _) i -> do
       env <- getEnv
       updateFuture $ interpret env i (step oldState)
-    Success oldState (React _ _ _) i -> do
+    Success oldState (EffComm _ _ _) i -> do
       env <- getEnv
       updateFuture $ interpret env i (step oldState)
     -- Output
-    Success oldState (IOEff (Output (PID _ name) val p)) i -> do
+    Success oldState (EffIO (Output (PID _ name) val p)) i -> do
       outputHandler val
       env <- getEnv
       updateFuture $ interpret env i $ do
         newState <- lineup [(name, p)] oldState
-        return (newState, Silent)
+        return (newState, EffNoop)
     -- Input
-    Success oldState (IOEff task) i -> do
+    Success oldState (EffIO task) i -> do
       val <- inputHandler
       env <- getEnv
       updateFuture $ interpret env i $ do
         state' <- input val task oldState
-        return (state', Silent)
-    Success oldState Silent i -> do
+        return (state', EffNoop)
+    Success oldState EffNoop i -> do
       env <- getEnv
       updateFuture $ interpret env i (step oldState)
 

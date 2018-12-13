@@ -40,5 +40,5 @@ skipSilent :: InteractionM IO ()
 skipSilent = do
   next <- selectedFuture
   case next of
-    Success _ Silent _ -> execute
+    Success _ EffNoop _ -> execute
     _ -> return ()

@@ -3,9 +3,9 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 
 module Interpreter
-  ( step, lineup, input, reduce
+  ( step, lineup, input, call
   , PID(..), HasPID(..), invoker
-  , Reaction(..), IOTask(..), St(..), Sender(..), Receiver(..), Caller(..)
+  , Effect(..), IOTask(..), St(..), Sender(..), Receiver(..), Caller(..)
   , module Interpreter.Monad
   , senderToPi, receiverToPi, ioTaskToPi, callerToPi
   ) where
@@ -89,11 +89,11 @@ data St = St
   , stIDCount   :: Int
   } deriving (Show)
 
-data Reaction = Silent                        -- nothing ever happened
-              | Reduce Caller Pi              -- calling some process
-              | React  Name (Sender, Receiver) (Pi, Pi)  -- some chemical reaction
-              | IOEff IOTask
-              deriving (Show)
+data Effect = EffNoop                                   -- nothing ever happened
+            | EffCall Caller Pi                         -- calling some process
+            | EffComm Name (Sender, Receiver) (Pi, Pi)  -- some chemical communicateion
+            | EffIO   IOTask
+            deriving (Show)
 
 --------------------------------------------------------------------------------
 -- | Pi <-> St
@@ -120,8 +120,8 @@ addPi name (Send c x p) (St sends recvs callers io news i) = do
   return $ St ((c, (Sender (PID i' name) c val p)):sends) recvs callers io news i'
 addPi name (Recv (NR StdIn) pps) (St sends recvs callers io news i) = do
   let i' = succ i
-  let input = Input (PID i' name) pps
-  return $ St sends recvs callers (input:io) news i'
+  let input' = Input (PID i' name) pps
+  return $ St sends recvs callers (input':io) news i'
 addPi name (Recv c pps) (St sends recvs callers io news i) = do
   let i' = succ i
   return $ St sends ((c,Receiver (PID i' name) c pps):recvs) callers io news i'
@@ -149,44 +149,44 @@ ioTaskToPi (Output _ v p) = Send (NR StdOut) (EV v) p
 --------------------------------------------------------------------------------
 -- |
 
-step :: St -> PiMonad (St, Reaction)
+step :: St -> PiMonad (St, Effect)
 step (St sends recvs callers io news i) = do
-  (select io >>= doIO) `mplus` (select sends >>= doSend) `mplus` (select callers >>= doReduce)
+  (select io >>= doIO) `mplus` (select sends >>= doSend) `mplus` (select callers >>= doEffCall)
   where
-    doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad (St, Reaction)
+    doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad (St, Effect)
     -- doSend ((NR StdOut, sender), otherSenders) =
-    --   return (St otherSenders recvs callers io news i, IOEff sender)
+    --   return (St otherSenders recvs callers io news i, EffIO sender)
     doSend ((channel, sender), otherSenders) = do
       -- selected a reagent from the lists of receivers
       (receiver, otherReceivers) <- selectByKey channel recvs
-      -- react!
-      (sender', receiver') <- react sender receiver
+      -- communicate!
+      (sender', receiver') <- communicate sender receiver
       -- adjust the state accordingly
       st <- lineup
         [ (invoker   sender,   sender'  )
         , (invoker receiver, receiver')
         ]
         (St otherSenders otherReceivers callers io news i)
-      return (st, React channel (sender, receiver) (sender', receiver'))
+      return (st, EffComm channel (sender, receiver) (sender', receiver'))
 
-    doIO :: (IOTask, [IOTask]) -> PiMonad (St, Reaction)
+    doIO :: (IOTask, [IOTask]) -> PiMonad (St, Effect)
     doIO (task, otherTasks) =
-      return (St sends recvs callers otherTasks news i, IOEff task)
+      return (St sends recvs callers otherTasks news i, EffIO task)
 
-    doReduce :: (Caller, [Caller]) -> PiMonad (St, Reaction)
-    doReduce (caller, otherCallers) = do
-      (state', p) <- reduce caller (St sends recvs otherCallers io news i)
-      return (state', Reduce caller p)
+    doEffCall :: (Caller, [Caller]) -> PiMonad (St, Effect)
+    doEffCall (caller, otherCallers) = do
+      (state', p) <- call caller (St sends recvs otherCallers io news i)
+      return (state', EffCall caller p)
 
-reduce :: Caller -> St -> PiMonad (St, Pi)
-reduce (Caller _ callee) st = do
+call :: Caller -> St -> PiMonad (St, Pi)
+call (Caller _ callee) st = do
   env <- ask
   case Map.lookup (ND (Pos callee)) env of
     Just p  -> do
       st' <- addPi callee p st
       return (st', p)
     Nothing -> throwError $ "definition not found (looking for " ++ show (pretty callee) ++ ")"
-reduce (Replicater (PID _ name) p) st = do
+call (Replicater (PID _ name) p) st = do
   st'  <- addPi name p st >>= addPi name (Repl p)
   return (st', (Par (Repl p) p))
 
@@ -198,35 +198,35 @@ input val (Input (PID _ n) pps) st =
 input _ (Output _ _ _) _ =
     throwError "expecting Input but got Output"
 
+communicate :: Sender -> Receiver -> PiMonad (Pi, Pi)
+communicate (Sender _ _ v q) (Receiver _ _ clauses) =
+  case matchClauses clauses v of
+    Just (th, p) -> return (q, substPi th p)
+    Nothing -> throwError "failed to match sender and receiver"
+
 select :: [a] -> PiMonad (a, [a])
 select []     = mzero
 select (x:xs) = return (x, xs) `mplus`
                 ((id *** (x:)) <$> select xs)
 
-react :: Sender -> Receiver -> PiMonad (Pi, Pi)
-react (Sender _ _ v q) (Receiver _ _ clauses) =
-  case matchClauses clauses v of
-    Just (th, p) -> return (q, substPi th p)
-    Nothing -> throwError "failed to match sender and receiver"
-
 --------------------------------------------------------------------------------
 -- | Pretty printing
 
-instance Pretty Reaction where
-  pretty Silent =
-    vsep  [ pretty "[Silent]"
+instance Pretty Effect where
+  pretty EffNoop =
+    vsep  [ pretty "[No-op]"
           ]
-  pretty (Reduce caller _) =
-    vsep  [ pretty "[Reduce]   :" <+> pretty (callerToPi caller)
+  pretty (EffCall caller _) =
+    vsep  [ pretty "[Call]   :" <+> pretty (callerToPi caller)
           ]
-  pretty (React channel (sender, receiver) products) =
-    vsep  [ pretty "[React]"
+  pretty (EffComm channel (sender, receiver) products) =
+    vsep  [ pretty "[Communicate]"
           , pretty "Channel  :" <+> pretty channel
           , pretty "Sender   :" <+> pretty (senderToPi   sender)
           , pretty "Receiver :" <+> pretty (receiverToPi receiver)
           , pretty "Products :" <+> pretty products
           ]
-  pretty (IOEff task) =
+  pretty (EffIO task) =
     vsep  [ pretty "[I/O]   :" <+> pretty task
           ]
 
@@ -284,7 +284,7 @@ stToPi (ps, waits, news) =
           foldr1 par [ Recv c pps | pps <- ps ]
 
 instance Functor Res where
-  fmap f (Silent x) = Silent (f x)
+  fmap f (EffNoop x) = EffNoop (f x)
   fmap f (Output v x) = Output (f x) v
   fmap f (Input x) = Input (f x)
 
@@ -321,13 +321,13 @@ doRecv :: MonadError ErrMsg m =>
 doRecv c pps (ps, waits, news) =
   case lookup c waits of
     Nothing ->
-      return . Silent $ (ps, (c, Receivers [pps]):waits, news)
+      return . EffNoop $ (ps, (c, Receivers [pps]):waits, news)
     Just (Receivers _) ->
-      return . Silent $ (ps, fMapUpdate c (addReceiver pps) waits, news)
+      return . EffNoop $ (ps, fMapUpdate c (addReceiver pps) waits, news)
     Just (Senders ((v,q):qs)) ->
        case matchClauses pps v of
         Just (th, p) ->
-          return . Silent$ ( [q] ++ ps ++ [substPi th p]
+          return . EffNoop$ ( [q] ++ ps ++ [substPi th p]
                  , popSender c qs waits, news)
         Nothing -> throwError "pattern matching fails"
   where addReceiver pps (Receivers qs) = Receivers (pps:qs)

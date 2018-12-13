@@ -129,8 +129,8 @@ module Interaction.JSON where
 --     , "reaction"  .= reaction
 --     ]
 --
--- instance ToJSON Reaction where
---   toJSON Silent = object
+-- instance ToJSON Effect where
+--   toJSON EffNoop = object
 --     [ "kind"  .= ("silent" :: Text)
 --     -- , "state" .= state
 --     ]

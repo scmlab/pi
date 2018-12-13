@@ -104,7 +104,7 @@ handleRequest CursorForth        = do
     skipSilent = do
       next <- selectedFuture
       case next of
-        Success _ Silent _ -> run handleInput handleOutput
+        Success _ EffNoop _ -> run handleInput handleOutput
         _ -> return ()
 
 handleRequest CursorBack        = displayHelp
@@ -193,22 +193,22 @@ printFuture = do
   next <- selectedFuture
   case next of
     Failure err -> throwError (InteractionError err)
-    Success nextState Silent _ -> do
+    Success nextState EffNoop _ -> do
       liftIO $ do
         yellow $ putStrLn $ "\nNo-op"
       printState nextState
       printStatusBar
-    Success _ (Reduce caller result) _ -> do
+    Success _ (EffCall caller result) _ -> do
       liftIO $ do
-        yellow $ putStrLn $ "\nReduce"
-      printReduce caller result previousState
+        yellow $ putStrLn $ "\nEffCall"
+      printEffCall caller result previousState
       printStatusBar
-    Success _ (IOEff task) _ -> do
+    Success _ (EffIO task) _ -> do
       liftIO $ do
         yellow $ putStrLn $ "\nI/O"
-      printIOEff task previousState
+      printEffIO task previousState
       printStatusBar
-    Success _ (React _ reagents products) _ -> do
+    Success _ (EffComm _ reagents products) _ -> do
       liftIO $ do
         yellow $ putStrLn $ "\nReact"
       printReact reagents products previousState
@@ -286,8 +286,8 @@ printIOTasks p tasks = do
       green $ putStr $ "[" ++ (unpack $ invoker task) ++ "] "
       putStrLn $ abbreviate (show (pretty task))
 
-printReduce :: Caller -> Pi -> St -> InteractionM IO ()
-printReduce selected result (St senders receivers callers io _ _) = do
+printEffCall :: Caller -> Pi -> St -> InteractionM IO ()
+printEffCall selected result (St senders receivers callers io _ _) = do
   liftIO $ do
     printSenders   (const False) (return ()) senders
     printReceivers (const False) (return ()) receivers
@@ -302,13 +302,13 @@ printReact (selectedSender, selectedReceiver) (productSender, productReceiver) (
     printCallers   (const False) (return ()) callers
     printIOTasks   (const False) io
 
-printIOEff :: IOTask -> St -> InteractionM IO ()
-printIOEff selected@(Input _ _) (St senders receivers callers io _ _) = liftIO $ do
+printEffIO :: IOTask -> St -> InteractionM IO ()
+printEffIO selected@(Input _ _) (St senders receivers callers io _ _) = liftIO $ do
     printSenders   (const False) (return ()) senders
     printReceivers (const False) (return ()) receivers
     printCallers   (const False) (return ()) callers
     printIOTasks   ((==) selected) io
-printIOEff selected@(Output _ _ _) (St senders receivers callers io _ _) = liftIO $ do
+printEffIO selected@(Output _ _ _) (St senders receivers callers io _ _) = liftIO $ do
     printSenders   (const False) (return ()) senders
     printReceivers (const False) (return ()) receivers
     printCallers   (const False) (return ()) callers
