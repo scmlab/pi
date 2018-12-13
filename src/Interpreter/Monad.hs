@@ -8,24 +8,8 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 
 import Syntax.Abstract
-import Control.Monad.State
-import Control.Monad.Reader
 
-class Monad m => MonadFresh m where
-  fresh :: m Name
-
-instance MonadFresh PiMonad where
-  fresh = get >>= \i ->
-          put (i+1) >>
-          return (NG (Pos i))
-
-type BkSt = Int
 type Env = Map Name Pi
-
-type PiMonad = ReaderT Env (StateT BkSt (EitherT String []))
-
-runPiMonad :: Env -> BkSt -> PiMonad a -> [Either String (a, BkSt)]
-runPiMonad env bk m = runEitherT (runStateT (runReaderT m env) bk)
 
 programToEnv :: Prog -> Env
 programToEnv (Prog declrations) =

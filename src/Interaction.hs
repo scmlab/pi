@@ -76,8 +76,8 @@ runInteraction handler =
   runStateT (runExceptT handler) (State Nothing Nothing Nothing [] initialOutcomes Nothing)
   where initialOutcomes = [Failure "please load first"]
 
-interpret :: Env -> St -> PM Effect -> [Outcome]
-interpret env st program = map toOutcome (runPM env st program)
+interpret :: Env -> St -> PiMonad Effect -> [Outcome]
+interpret env st program = map toOutcome (runPiMonad env st program)
   where
     toOutcome :: Either String (Effect, St) -> Outcome
     toOutcome (Left err)              = Failure err
@@ -143,7 +143,7 @@ load filePath = do
       env <- getEnv
       -- populate future, the next possible outcomes (there should be only 1)
       updateFuture $ interpret env (St [] [] [] [] [] 0 0) $ do
-        call (Caller (PID (-1) "you") "main")
+        _ <- call (Caller (PID (-1) "you") "main")
         return EffNoop
       -- retrieve state from the recently populated outcome and store it
       outcome <- selectedFuture

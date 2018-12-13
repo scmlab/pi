@@ -5,7 +5,7 @@
 module Interpreter
   ( step, lineup, input, call
   , PID(..), HasPID(..), invoker
-  , PM(..), runPM
+  , PiMonad, runPiMonad
   , Effect(..), IOTask(..), St(..), Sender(..), Receiver(..), Caller(..)
   , module Interpreter.Monad
   , senderToPi, receiverToPi, ioTaskToPi, callerToPi
@@ -97,53 +97,52 @@ data Effect = EffNoop                                   -- nothing ever happened
             | EffIO   IOTask
             deriving (Show)
 
+type PiMonad = ReaderT Env (StateT St (EitherT String []))
 
-type PM = ReaderT Env (StateT St (EitherT String []))
+freshVar :: PiMonad Name
+freshVar = do
+  i <- gets stVarCount
+  modify $ \st -> st { stVarCount = succ i }
+  return (NG (Pos i))
 
-instance MonadFresh PM where
-  fresh = do
-    i <- gets stVarCount
-    modify $ \st -> st { stVarCount = succ i }
-    return (NG (Pos i))
+runPiMonad :: Env -> St -> PiMonad a -> [Either String (a, St)]
+runPiMonad env st m = runEitherT (runStateT (runReaderT m env) st)
 
-runPM :: Env -> St -> PM a -> [Either String (a, St)]
-runPM env st m = runEitherT (runStateT (runReaderT m env) st)
-
-freshPID :: ProcName -> PM PID
+freshPID :: ProcName -> PiMonad PID
 freshPID name = do
   i <- gets stPIDCount
   let pid = PID (succ i) name
   modify $ \st -> st { stPIDCount = succ i }
   return pid
 
-addSender :: Name -> Sender -> PM ()
+addSender :: Name -> Sender -> PiMonad ()
 addSender name x = do
   xs <- gets stSenders
   modify $ \st -> st { stSenders = (name, x):xs }
 
-addReceiver :: Name -> Receiver -> PM ()
+addReceiver :: Name -> Receiver -> PiMonad ()
 addReceiver name x = do
   xs <- gets stReceivers
   modify $ \st -> st { stReceivers = (name, x):xs }
 
-addCaller :: Caller -> PM ()
+addCaller :: Caller -> PiMonad ()
 addCaller x = do
   xs <- gets stCallers
   modify $ \st -> st { stCallers = x:xs }
 
-addIOTask :: IOTask -> PM ()
+addIOTask :: IOTask -> PiMonad ()
 addIOTask x = do
   xs <- gets stIOTasks
   modify $ \st -> st { stIOTasks = x:xs }
 
-addFreshVar :: Name -> PM ()
+addFreshVar :: Name -> PiMonad ()
 addFreshVar x = do
   xs <- gets stFreshVars
   modify $ \st -> st { stFreshVars = x:xs }
 
 --------------------------------------------------------------------------------
 -- | Pi <-> St
-addPi :: ProcName -> Pi -> PM ()
+addPi :: ProcName -> Pi -> PiMonad ()
 addPi _    End       = return ()
 addPi name (Par p q) = do
   addPi name p
@@ -169,11 +168,11 @@ addPi name (Recv c clauses) = do
   pid <- freshPID name
   addReceiver c (Receiver pid c clauses)
 addPi name (Nu x _ p) = do
-  var <- fresh
+  var <- freshVar
   addFreshVar var
   addPi name (substPi [(PH x, N var)] p)
 
-lineup :: [(ProcName, Pi)] -> PM ()
+lineup :: [(ProcName, Pi)] -> PiMonad ()
 lineup []     = return ()
 lineup ((c, x):xs) = do
   addPi c x
@@ -196,7 +195,7 @@ ioTaskToPi (Output _ v p) = Send (NR StdOut) (EV v) p
 --------------------------------------------------------------------------------
 -- |
 
-step :: PM Effect
+step :: PiMonad Effect
 step = do
   io        <- gets stIOTasks
   senders   <- gets stSenders
@@ -204,7 +203,7 @@ step = do
   callers   <- gets stCallers
   (select io >>= doIO) `mplus` (select senders >>= doSend receivers) `mplus` (select callers >>= doCall)
   where
-    doSend :: FMap Name Receiver -> ((Name, Sender), FMap Name Sender) -> PM Effect
+    doSend :: FMap Name Receiver -> ((Name, Sender), FMap Name Sender) -> PiMonad Effect
     doSend receivers ((channel, sender), otherSenders) = do
       -- selected a reagent from the lists of receivers
       (receiver, otherReceivers) <- selectByKey channel receivers
@@ -221,20 +220,20 @@ step = do
         ]
       return (EffComm channel (sender, receiver) (sender', receiver'))
 
-    doIO :: (IOTask, [IOTask]) -> PM Effect
+    doIO :: (IOTask, [IOTask]) -> PiMonad Effect
     doIO (task, otherTasks) = do
       -- adjust the state accordingly
       modify $ \st -> st { stIOTasks = otherTasks }
       return (EffIO task)
 
-    doCall :: (Caller, [Caller]) -> PM Effect
+    doCall :: (Caller, [Caller]) -> PiMonad Effect
     doCall (caller, otherCallers) = do
       -- adjust the state accordingly
       modify $ \st -> st { stCallers = otherCallers }
       p <- call caller
       return (EffCall caller p)
 
-call :: Caller -> PM Pi
+call :: Caller -> PiMonad Pi
 call (Caller _ callee) = do
   env <- ask
   case Map.lookup (ND (Pos callee)) env of
@@ -247,7 +246,7 @@ call (Replicater (PID _ name) p) = do
   addPi name (Repl p)
   return (Par (Repl p) p)
 
-input :: Val -> IOTask -> PM ()
+input :: Val -> IOTask -> PiMonad ()
 input val (Input (PID _ n) pps) =
   case matchClauses pps val of
     Just (th, p) -> lineup [(n, substPi th p)]
@@ -255,13 +254,13 @@ input val (Input (PID _ n) pps) =
 input _ (Output _ _ _) =
     throwError "expecting Input but got Output"
 
-communicate :: Sender -> Receiver -> PM (Pi, Pi)
+communicate :: Sender -> Receiver -> PiMonad (Pi, Pi)
 communicate (Sender _ _ v q) (Receiver _ _ clauses) =
   case matchClauses clauses v of
     Just (th, p) -> return (q, substPi th p)
     Nothing -> throwError "failed to match sender and receiver"
 
-select :: [a] -> PM (a, [a])
+select :: [a] -> PiMonad (a, [a])
 select []     = mzero
 select (x:xs) = return (x, xs) `mplus`
                 ((id *** (x:)) <$> select xs)
