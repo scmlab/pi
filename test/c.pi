@@ -1,0 +1,3 @@
+p0 = stdout!"hey" . end
+
+main = p0

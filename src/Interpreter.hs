@@ -4,7 +4,7 @@
 
 module Interpreter
   ( step, lineup, input, call
-  , PID(..), HasPID(..), invoker
+  , PID(..), HasPID(..), invokedBy
   , PiMonad, runPiMonad
   , Effect(..), IOTask(..), St(..), Sender(..), Receiver(..), Caller(..)
   , module Interpreter.Monad
@@ -30,15 +30,26 @@ import Utilities
 -- | PID: data type for tracking processes
 
 data PID = PID
-  Int       -- unique ID
-  ProcName  -- the process that invoked this
+  { pReplicable   :: Bool       -- can be infinitely replicated
+  , pRestrictive  :: Bool       -- should create a new name
+  , pInvokedBy    :: ProcName   -- the process that invoked this
+  , pID           :: Int        -- unique ID
+  }
   deriving (Show)
 
-instance Eq PID where
-  PID i _ == PID j _ = i == j
+type Attr = Int -> PID -- attributes of PID without the ID part
 
-invoker :: HasPID a => a -> ProcName
-invoker x = let PID _ name = getPID x in name
+makeReplicable :: Attr -> Attr
+makeReplicable attr i = (attr i) { pReplicable = True }
+
+makeRestrictive :: Attr -> Attr
+makeRestrictive attr i = (attr i) { pRestrictive = True }
+
+instance Eq PID where
+  (==) = (==) `on` pID
+
+invokedBy :: HasPID a => a -> ProcName
+invokedBy = pInvokedBy . getPID
 
 class HasPID a where
   getPID :: a -> PID
@@ -51,7 +62,7 @@ instance HasPID Receiver where
 
 instance HasPID Caller where
   getPID (Caller pid _) = pid
-  getPID (Replicater pid _) = pid
+  -- getPID (Replicater pid _) = pid
 
 instance HasPID IOTask where
   getPID (Input pid _) = pid
@@ -60,13 +71,11 @@ instance HasPID IOTask where
 --------------------------------------------------------------------------------
 -- |
 
-data Sender   = Sender   PID Name Val Pi deriving (Show)
-data Receiver = Receiver PID Name [Clause] deriving (Show)
-data Caller   = Caller   PID ProcName
-              | Replicater PID Pi
-              deriving (Show)
-data IOTask   = Input PID [Clause]
-              | Output PID Val Pi
+data Sender   = Sender   PID Name Val Pi    deriving (Show)
+data Receiver = Receiver PID Name [Clause]  deriving (Show)
+data Caller   = Caller   PID ProcName       deriving (Show)
+data IOTask   = Input    PID      [Clause]
+              | Output   PID      Val Pi
               deriving (Show)
 
 instance Eq Sender where
@@ -108,10 +117,10 @@ freshVar = do
 runPiMonad :: Env -> St -> PiMonad a -> [Either String (a, St)]
 runPiMonad env st m = runEitherT (runStateT (runReaderT m env) st)
 
-freshPID :: ProcName -> PiMonad PID
-freshPID name = do
+freshPID :: Attr -> PiMonad PID
+freshPID attr = do
   i <- gets stPIDCount
-  let pid = PID (succ i) name
+  let pid = attr (succ i)
   modify $ \st -> st { stPIDCount = succ i }
   return pid
 
@@ -142,40 +151,43 @@ addFreshVar x = do
 
 --------------------------------------------------------------------------------
 -- | Pi <-> St
-addPi :: ProcName -> Pi -> PiMonad ()
-addPi _    End       = return ()
-addPi name (Par p q) = do
-  addPi name p
-  addPi name q
-addPi name (Repl p) = do
-  pid <- freshPID name
-  addCaller (Replicater pid p)
-addPi name (Call callee) = do
-  pid <- freshPID name
+addPi :: Attr -> Pi -> PiMonad ()
+addPi _ End = return ()
+addPi attr (Par p q) = do
+  addPi attr p
+  addPi attr q
+addPi attr (Repl p) = do
+  addPi (makeReplicable attr) p
+addPi attr (Call callee) = do
+  pid <- freshPID attr
   addCaller (Caller pid callee)
-addPi name (Send (NR StdOut) x p) = do
-  pid <- freshPID name
+addPi attr (Send (NR StdOut) x p) = do
+  pid <- freshPID attr
   val <- evalExpr x
   addIOTask (Output pid val p)
-addPi name (Send c x p) = do
-  pid <- freshPID name
+addPi attr (Send c x p) = do
+  pid <- freshPID attr
   val <- evalExpr x
   addSender c (Sender pid c val p)
-addPi name (Recv (NR StdIn) clauses) = do
-  pid <- freshPID name
+addPi attr (Recv (NR StdIn) clauses) = do
+  pid <- freshPID attr
   addIOTask (Input pid clauses)
-addPi name (Recv c clauses) = do
-  pid <- freshPID name
+addPi attr (Recv c clauses) = do
+  pid <- freshPID attr
   addReceiver c (Receiver pid c clauses)
-addPi name (Nu x _ p) = do
-  var <- freshVar
-  addFreshVar var
-  addPi name (substPi [(PH x, N var)] p)
+-- TODO: fix this, don't instantiate new variable now
+addPi attr (Nu x _ p) = do
+  addPi (makeRestrictive attr) p
+  -- var <- freshVar
+
+  -- var <- freshVar
+  -- addFreshVar var
+  -- addPi replicable name (substPi [(PH x, N var)] p)
 
 lineup :: [(ProcName, Pi)] -> PiMonad ()
 lineup []     = return ()
 lineup ((c, x):xs) = do
-  addPi c x
+  addPi (PID False False c) x
   lineup xs
 
 senderToPi :: Sender -> Pi
@@ -186,7 +198,7 @@ receiverToPi (Receiver _ c clauses) = Recv c clauses
 
 callerToPi :: Caller -> Pi
 callerToPi (Caller _ callee) = Call callee
-callerToPi (Replicater _ p) = Repl p
+-- callerToPi (Replicater _ p) = Repl p
 
 ioTaskToPi :: IOTask -> Pi
 ioTaskToPi (Input _ clauses) = Recv (NR StdIn) clauses
@@ -215,8 +227,8 @@ step = do
         , stReceivers = otherReceivers
         }
       lineup
-        [ (invoker   sender,   sender')
-        , (invoker receiver, receiver')
+        [ (invokedBy   sender,   sender')
+        , (invokedBy receiver, receiver')
         ]
       return (EffComm channel (sender, receiver) (sender', receiver'))
 
@@ -238,18 +250,18 @@ call (Caller _ callee) = do
   env <- ask
   case Map.lookup (ND (Pos callee)) env of
     Just p  -> do
-      addPi callee p
+      addPi (PID False False callee) p
       return p
     Nothing -> throwError $ "definition not found (looking for " ++ show (pretty callee) ++ ")"
-call (Replicater (PID _ name) p) = do
-  addPi name p
-  addPi name (Repl p)
-  return (Par (Repl p) p)
+-- call (Replicater (PID _ _ name) p) = do
+--   addPi name p
+--   addPi name (Repl p)
+--   return (Par (Repl p) p)
 
 input :: Val -> IOTask -> PiMonad ()
-input val (Input (PID _ n) pps) =
+input val (Input pid pps) =
   case matchClauses pps val of
-    Just (th, p) -> lineup [(n, substPi th p)]
+    Just (th, p) -> lineup [(pInvokedBy pid, substPi th p)]
     Nothing -> throwError "input fails to match"
 input _ (Output _ _ _) =
     throwError "expecting Input but got Output"

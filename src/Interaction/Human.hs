@@ -230,13 +230,13 @@ printSenders p printer senders = do
       if p sender
         then do
           red $ putStr $ " ●  "
-          green $ putStr $ "[" ++ (unpack $ invoker sender) ++ "] "
+          green $ putStr $ "[" ++ (unpack $ invokedBy sender) ++ "] "
           putStr $ abbreviate (show (pretty sender))
           red $ putStr $ " => "
           printer
         else do
           putStr $ " ○  "
-          green $ putStr $ "[" ++ (unpack $ invoker sender) ++ "] "
+          green $ putStr $ "[" ++ (unpack $ invokedBy sender) ++ "] "
           putStrLn $ abbreviate (show (pretty sender))
 
 
@@ -248,13 +248,13 @@ printReceivers p printer receivers = do
       if p receiver
         then do
           red $ putStr $ " ●  "
-          green $ putStr $ "[" ++ (unpack $ invoker receiver) ++ "] "
+          green $ putStr $ "[" ++ (unpack $ invokedBy receiver) ++ "] "
           putStr $ abbreviate (show (pretty receiver))
           red $ putStr $ " => "
           printer
         else do
           putStr $ " ○  "
-          green $ putStr $ "[" ++ (unpack $ invoker receiver) ++ "] "
+          green $ putStr $ "[" ++ (unpack $ invokedBy receiver) ++ "] "
           putStrLn $ abbreviate (show (pretty receiver))
 
 printCallers :: (Caller -> Bool) -> IO () -> [Caller] -> IO ()
@@ -265,13 +265,13 @@ printCallers p printer callers = do
       if p caller
         then do
           red $ putStr $ " ●  "
-          green $ putStr $ "[" ++ (unpack $ invoker caller) ++ "] "
+          green $ putStr $ "[" ++ (unpack $ invokedBy caller) ++ "] "
           putStr $ abbreviate (show (pretty caller))
           red $ putStr $ " => "
           printer
         else do
           putStr $ " ○  "
-          green $ putStr $ "[" ++ (unpack $ invoker caller) ++ "] "
+          green $ putStr $ "[" ++ (unpack $ invokedBy caller) ++ "] "
           putStrLn $ abbreviate (show (pretty caller))
 
 
@@ -283,7 +283,7 @@ printIOTasks p tasks = do
       if p task
         then red $ putStr $ " ●  "
         else putStr $ " ○  "
-      green $ putStr $ "[" ++ (unpack $ invoker task) ++ "] "
+      green $ putStr $ "[" ++ (unpack $ invokedBy task) ++ "] "
       putStrLn $ abbreviate (show (pretty task))
 
 printEffCall :: Caller -> Pi -> St -> InteractionM IO ()
