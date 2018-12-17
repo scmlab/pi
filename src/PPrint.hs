@@ -132,7 +132,13 @@ ppPi (Recv c clauses) pr =
            ppPi p 4
 ppPi (Par p1 p2) pr =
   ppInfixL 3 (pretty "|") (ppPi p1) (ppPi p2) pr
-ppPi (Nu x t p) pr =
+ppPi (Nu x Nothing p) pr =
+  shParen (pr > 4) $
+    group . nest 4 . vsep $
+      [ pretty "(nu " <> pretty x <> pretty ")"
+      , ppPi p 4
+      ]
+ppPi (Nu x (Just t) p) pr =
   shParen (pr > 4) $
     group . nest 4 . vsep $
       [ pretty "(nu " <> pretty x <> pretty " : " <> pretty t <> pretty ")"

@@ -142,8 +142,8 @@ load filePath = do
 
       env <- getEnv
       -- populate future, the next possible outcomes (there should be only 1)
-      updateFuture $ interpret env (St [] [] [] [] [] 0 0) $ do
-        _ <- call (Caller (PID False False "you" (-1)) "main")
+      updateFuture $ interpret env (St [] [] [] [] [] [] 0 0) $ do
+        _ <- call (Caller (PID False "you" (-1)) "main")
         return EffNoop
       -- retrieve state from the recently populated outcome and store it
       outcome <- selectedFuture
@@ -181,6 +181,9 @@ run inputHandler outputHandler = do
     Failure err -> do
       updateFuture $ [Failure err]
     Success oldState (EffCall _ _) -> do
+      env <- getEnv
+      updateFuture $ interpret env oldState step
+    Success oldState (EffReplNu _ _) -> do
       env <- getEnv
       updateFuture $ interpret env oldState step
     Success oldState (EffComm _ _ _) -> do

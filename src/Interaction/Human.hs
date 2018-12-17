@@ -196,12 +196,17 @@ printFuture = do
     Success nextState EffNoop -> do
       liftIO $ do
         yellow $ putStrLn $ "\nNo-op"
-      printState nextState
+      printEffNoop nextState
       printStatusBar
     Success _ (EffCall caller result) -> do
       liftIO $ do
-        yellow $ putStrLn $ "\nEffCall"
+        yellow $ putStrLn $ "\nCall"
       printEffCall caller result previousState
+      printStatusBar
+    Success _ (EffReplNu replNu result) -> do
+      liftIO $ do
+        yellow $ putStrLn $ "\nReplicate and create new channel"
+      printEffReplNu replNu result previousState
       printStatusBar
     Success _ (EffIO task) -> do
       liftIO $ do
@@ -210,8 +215,8 @@ printFuture = do
       printStatusBar
     Success _ (EffComm _ reagents products) -> do
       liftIO $ do
-        yellow $ putStrLn $ "\nReact"
-      printReact reagents products previousState
+        yellow $ putStrLn $ "\nCommunicate"
+      printEffComm reagents products previousState
       printStatusBar
 
 abbreviate :: String -> String
@@ -274,6 +279,23 @@ printCallers p printer callers = do
           green $ putStr $ "[" ++ (unpack $ invokedBy caller) ++ "] "
           putStrLn $ abbreviate (show (pretty caller))
 
+printReplNus :: (ReplNu -> Bool) -> IO () -> [ReplNu] -> IO ()
+printReplNus p printer replNus = do
+  when (not $ null replNus) $ do
+    blue $ putStrLn $ "  replicable nus:"
+    forM_ replNus $ \replNu -> do
+      if p replNu
+        then do
+          red $ putStr $ " ●  "
+          green $ putStr $ "[" ++ (unpack $ invokedBy replNu) ++ "] "
+          putStr $ abbreviate (show (pretty replNu))
+          red $ putStr $ " => "
+          printer
+        else do
+          putStr $ " ○  "
+          green $ putStr $ "[" ++ (unpack $ invokedBy replNu) ++ "] "
+          putStrLn $ abbreviate (show (pretty replNu))
+
 
 printIOTasks :: (IOTask -> Bool) -> [IOTask] -> IO ()
 printIOTasks p tasks = do
@@ -287,40 +309,53 @@ printIOTasks p tasks = do
       putStrLn $ abbreviate (show (pretty task))
 
 printEffCall :: Caller -> Pi -> St -> InteractionM IO ()
-printEffCall selected result (St senders receivers callers io _ _ _) = do
+printEffCall selected result (St senders receivers callers replNus io _ _ _) = do
   liftIO $ do
     printSenders   (const False) (return ()) senders
     printReceivers (const False) (return ()) receivers
     printCallers   ((==) selected) (putStrLn $ show (pretty result)) callers
+    printReplNus   (const False) (return ()) replNus
     printIOTasks   (const False) io
 
-printReact :: (Sender, Receiver) -> (Pi, Pi) -> St -> InteractionM IO ()
-printReact (selectedSender, selectedReceiver) (productSender, productReceiver) (St senders receivers callers io _ _ _) = do
+printEffReplNu :: ReplNu -> Pi -> St -> InteractionM IO ()
+printEffReplNu selected result (St senders receivers callers replNus io _ _ _) = do
+  liftIO $ do
+    printSenders   (const False) (return ()) senders
+    printReceivers (const False) (return ()) receivers
+    printCallers   (const False) (return ()) callers
+    printReplNus   ((==) selected) (putStrLn $ abbreviate $ show (pretty result)) replNus
+    printIOTasks   (const False) io
+
+printEffComm :: (Sender, Receiver) -> (Pi, Pi) -> St -> InteractionM IO ()
+printEffComm (selectedSender, selectedReceiver) (productSender, productReceiver) (St senders receivers callers replNus io _ _ _) = do
   liftIO $ do
     printSenders   ((==) selectedSender)   (putStrLn $ abbreviate $ show (pretty productSender)) senders
     printReceivers ((==) selectedReceiver) (putStrLn $ abbreviate $ show (pretty productReceiver)) receivers
     printCallers   (const False) (return ()) callers
+    printReplNus   (const False) (return ()) replNus
     printIOTasks   (const False) io
 
 printEffIO :: IOTask -> St -> InteractionM IO ()
-printEffIO selected@(Input _ _) (St senders receivers callers io _ _ _) = liftIO $ do
+printEffIO selected@(Input _ _) (St senders receivers callers replNus io _ _ _) = liftIO $ do
     printSenders   (const False) (return ()) senders
     printReceivers (const False) (return ()) receivers
     printCallers   (const False) (return ()) callers
+    printReplNus   (const False) (return ()) replNus
     printIOTasks   ((==) selected) io
-printEffIO selected@(Output _ _ _) (St senders receivers callers io _ _ _) = liftIO $ do
+printEffIO selected@(Output _ _ _) (St senders receivers callers replNus io _ _ _) = liftIO $ do
     printSenders   (const False) (return ()) senders
     printReceivers (const False) (return ()) receivers
     printCallers   (const False) (return ()) callers
+    printReplNus   (const False) (return ()) replNus
     printIOTasks   ((==) selected) io
-    -- printIOTasks   ((==) selected) (green $ putStrLn $ show $ pretty v) io
 
-printState :: St -> InteractionM IO ()
-printState (St senders receivers callers io _ _ _) = do
+printEffNoop :: St -> InteractionM IO ()
+printEffNoop (St senders receivers callers replNus io _ _ _) = do
   liftIO $ do
     printSenders   (const False) (return ()) senders
     printReceivers (const False) (return ()) receivers
     printCallers   (const False) (return ()) callers
+    printReplNus   (const False) (return ()) replNus
     printIOTasks   (const False) io
 
 printStatusBar :: InteractionM IO ()

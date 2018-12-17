@@ -1,3 +1,5 @@
-p0 = stdout!"hey" . end
+-- p1 = stdout!"hey" . end
+-- p2 = stdout!"ha" . end
+p0 = * ((nu a) (a!3 . end | a?x . stdout!x . end))
 
 main = p0

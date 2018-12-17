@@ -6,7 +6,7 @@ module Interpreter
   ( step, lineup, input, call
   , PID(..), HasPID(..), invokedBy
   , PiMonad, runPiMonad
-  , Effect(..), IOTask(..), St(..), Sender(..), Receiver(..), Caller(..)
+  , Effect(..), IOTask(..), St(..), Sender(..), Receiver(..), Caller(..), ReplNu(..)
   , module Interpreter.Monad
   , senderToPi, receiverToPi, ioTaskToPi, callerToPi
   ) where
@@ -31,7 +31,7 @@ import Utilities
 
 data PID = PID
   { pReplicable   :: Bool       -- can be infinitely replicated
-  , pRestrictive  :: Bool       -- should create a new name
+  -- , pRestrictive  :: Bool       -- should create a new name
   , pInvokedBy    :: ProcName   -- the process that invoked this
   , pID           :: Int        -- unique ID
   }
@@ -42,14 +42,14 @@ type Attr = Int -> PID -- attributes of PID without the ID part
 makeReplicable :: Attr -> Attr
 makeReplicable attr i = (attr i) { pReplicable = True }
 
-makeRestrictive :: Attr -> Attr
-makeRestrictive attr i = (attr i) { pRestrictive = True }
-
 instance Eq PID where
   (==) = (==) `on` pID
 
 invokedBy :: HasPID a => a -> ProcName
 invokedBy = pInvokedBy . getPID
+
+isReplicable :: HasPID a => a -> Bool
+isReplicable = pReplicable . getPID
 
 class HasPID a where
   getPID :: a -> PID
@@ -64,6 +64,9 @@ instance HasPID Caller where
   getPID (Caller pid _) = pid
   -- getPID (Replicater pid _) = pid
 
+instance HasPID ReplNu where
+  getPID (ReplNu pid _ _) = pid
+
 instance HasPID IOTask where
   getPID (Input pid _) = pid
   getPID (Output pid _ _) = pid
@@ -71,12 +74,14 @@ instance HasPID IOTask where
 --------------------------------------------------------------------------------
 -- |
 
-data Sender   = Sender   PID Name Val Pi    deriving (Show)
-data Receiver = Receiver PID Name [Clause]  deriving (Show)
-data Caller   = Caller   PID ProcName       deriving (Show)
+data Sender   = Sender   PID Name Val Pi            deriving (Show)
+data Receiver = Receiver PID Name [Clause]          deriving (Show)
+data Caller   = Caller   PID ProcName               deriving (Show)
+data ReplNu   = ReplNu   PID RName Pi               deriving (Show)
 data IOTask   = Input    PID      [Clause]
               | Output   PID      Val Pi
               deriving (Show)
+
 
 instance Eq Sender where
   (==) = (==) `on` getPID
@@ -87,6 +92,9 @@ instance Eq Receiver where
 instance Eq Caller where
   (==) = (==) `on` getPID
 
+instance Eq ReplNu where
+  (==) = (==) `on` getPID
+
 instance Eq IOTask where
   (==) = (==) `on` getPID
 
@@ -94,6 +102,7 @@ data St = St
   { stSenders   :: FMap Name Sender     -- senders
   , stReceivers :: FMap Name Receiver   -- receivers
   , stCallers   :: [Caller]             -- callers to some processes
+  , stReplNus   :: [ReplNu]             -- replicable restrictions
   , stIOTasks   :: [IOTask]             -- I/O tasks
   , stFreshVars :: [Name]               -- new variables
   , stPIDCount  :: Int
@@ -102,7 +111,8 @@ data St = St
 
 data Effect = EffNoop                                   -- nothing ever happened
             | EffCall Caller Pi                         -- calling some process
-            | EffComm Name (Sender, Receiver) (Pi, Pi)  -- some chemical communicateion
+            | EffComm Name (Sender, Receiver) (Pi, Pi)  -- process communicateion
+            | EffReplNu ReplNu Pi
             | EffIO   IOTask
             deriving (Show)
 
@@ -139,6 +149,11 @@ addCaller x = do
   xs <- gets stCallers
   modify $ \st -> st { stCallers = x:xs }
 
+addReplNu :: ReplNu -> PiMonad ()
+addReplNu x = do
+  xs <- gets stReplNus
+  modify $ \st -> st { stReplNus = x:xs }
+
 addIOTask :: IOTask -> PiMonad ()
 addIOTask x = do
   xs <- gets stIOTasks
@@ -152,42 +167,53 @@ addFreshVar x = do
 --------------------------------------------------------------------------------
 -- | Pi <-> St
 addPi :: Attr -> Pi -> PiMonad ()
+
 addPi _ End = return ()
+
 addPi attr (Par p q) = do
   addPi attr p
   addPi attr q
+
 addPi attr (Repl p) = do
   addPi (makeReplicable attr) p
+
 addPi attr (Call callee) = do
   pid <- freshPID attr
   addCaller (Caller pid callee)
+
 addPi attr (Send (NR StdOut) x p) = do
   pid <- freshPID attr
   val <- evalExpr x
   addIOTask (Output pid val p)
+
 addPi attr (Send c x p) = do
   pid <- freshPID attr
   val <- evalExpr x
   addSender c (Sender pid c val p)
+
 addPi attr (Recv (NR StdIn) clauses) = do
   pid <- freshPID attr
   addIOTask (Input pid clauses)
+
 addPi attr (Recv c clauses) = do
   pid <- freshPID attr
   addReceiver c (Receiver pid c clauses)
+
 -- TODO: fix this, don't instantiate new variable now
 addPi attr (Nu x _ p) = do
-  addPi (makeRestrictive attr) p
-  -- var <- freshVar
+  pid <- freshPID attr
+  let replNu = ReplNu pid x p
 
-  -- var <- freshVar
-  -- addFreshVar var
-  -- addPi replicable name (substPi [(PH x, N var)] p)
+  if pReplicable (attr 0)
+    then do
+      addReplNu replNu
+    else do
+      restict replNu >>= addPi attr
 
 lineup :: [(ProcName, Pi)] -> PiMonad ()
 lineup []     = return ()
 lineup ((c, x):xs) = do
-  addPi (PID False False c) x
+  addPi (PID False c) x
   lineup xs
 
 senderToPi :: Sender -> Pi
@@ -198,7 +224,9 @@ receiverToPi (Receiver _ c clauses) = Recv c clauses
 
 callerToPi :: Caller -> Pi
 callerToPi (Caller _ callee) = Call callee
--- callerToPi (Replicater _ p) = Repl p
+
+replNuToPi :: ReplNu -> Pi
+replNuToPi (ReplNu _ x p) = Repl (Nu x Nothing p)
 
 ioTaskToPi :: IOTask -> Pi
 ioTaskToPi (Input _ clauses) = Recv (NR StdIn) clauses
@@ -209,23 +237,24 @@ ioTaskToPi (Output _ v p) = Send (NR StdOut) (EV v) p
 
 step :: PiMonad Effect
 step = do
-  io        <- gets stIOTasks
-  senders   <- gets stSenders
-  receivers <- gets stReceivers
-  callers   <- gets stCallers
-  (select io >>= doIO) `mplus` (select senders >>= doSend receivers) `mplus` (select callers >>= doCall)
+  (gets stSenders >>= select >>= doSend)
+    `mplus` (gets stCallers >>= select >>= doCall)
+    `mplus` (gets stReplNus >>= select >>= doReplNu)
+    `mplus` (gets stIOTasks >>= select >>= doIO)
   where
-    doSend :: FMap Name Receiver -> ((Name, Sender), FMap Name Sender) -> PiMonad Effect
-    doSend receivers ((channel, sender), otherSenders) = do
+    doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad Effect
+    doSend ((channel, sender), otherSenders) = do
+      receivers <- gets stReceivers
       -- selected a reagent from the lists of receivers
       (receiver, otherReceivers) <- selectByKey channel receivers
       -- communicate!
       (sender', receiver') <- communicate sender receiver
       -- adjust the state accordingly
-      modify $ \st -> st
-        { stSenders   = otherSenders
-        , stReceivers = otherReceivers
-        }
+      unless (isReplicable sender) $ do
+        modify $ \st -> st { stSenders = otherSenders }
+      unless (isReplicable receiver) $ do
+        modify $ \st -> st { stReceivers = otherReceivers }
+      -- push the products back to the queue
       lineup
         [ (invokedBy   sender,   sender')
         , (invokedBy receiver, receiver')
@@ -234,23 +263,35 @@ step = do
 
     doIO :: (IOTask, [IOTask]) -> PiMonad Effect
     doIO (task, otherTasks) = do
-      -- adjust the state accordingly
-      modify $ \st -> st { stIOTasks = otherTasks }
+      unless (isReplicable task) $ do
+        modify $ \st -> st { stIOTasks = otherTasks }
       return (EffIO task)
 
     doCall :: (Caller, [Caller]) -> PiMonad Effect
     doCall (caller, otherCallers) = do
-      -- adjust the state accordingly
-      modify $ \st -> st { stCallers = otherCallers }
+      unless (isReplicable caller) $ do
+        modify $ \st -> st { stCallers = otherCallers }
       p <- call caller
       return (EffCall caller p)
+
+    doReplNu :: (ReplNu, [ReplNu]) -> PiMonad Effect
+    doReplNu (replNu, _) = do
+      p <- restict replNu
+      lineup [ (invokedBy replNu, p) ]
+      return (EffReplNu replNu p)
+
+restict :: ReplNu -> PiMonad Pi
+restict (ReplNu _ x p) = do
+  var <- freshVar
+  addFreshVar var
+  return $ substPi [(PH x, N var)] p
 
 call :: Caller -> PiMonad Pi
 call (Caller _ callee) = do
   env <- ask
   case Map.lookup (ND (Pos callee)) env of
     Just p  -> do
-      addPi (PID False False callee) p
+      addPi (PID False callee) p
       return p
     Nothing -> throwError $ "definition not found (looking for " ++ show (pretty callee) ++ ")"
 -- call (Replicater (PID _ _ name) p) = do
@@ -294,30 +335,48 @@ instance Pretty Effect where
           , pretty "Receiver :" <+> pretty (receiverToPi receiver)
           , pretty "Products :" <+> pretty products
           ]
+  pretty (EffReplNu replNu p) =
+    vsep  [ pretty "[Replicate Nu]   :"
+          , pretty "ReplNu  :" <+> pretty replNu
+          , pretty "Result  :" <+> pretty p
+          ]
   pretty (EffIO task) =
     vsep  [ pretty "[I/O]   :" <+> pretty task
           ]
 
 instance Pretty IOTask where
-  pretty = pretty . ioTaskToPi
+  pretty p = pretty $ if isReplicable p
+                        then Repl (ioTaskToPi p)
+                        else ioTaskToPi p
 
 instance Pretty Sender where
-  pretty = pretty . senderToPi
+  pretty p = pretty $ if isReplicable p
+                        then Repl (senderToPi p)
+                        else senderToPi p
 
 instance Pretty Receiver where
-  pretty = pretty . receiverToPi
+  pretty p = pretty $ if isReplicable p
+                        then Repl (receiverToPi p)
+                        else receiverToPi p
 
 instance Pretty Caller where
-  pretty = pretty . callerToPi
+  pretty p = pretty $ if isReplicable p
+                        then Repl (callerToPi p)
+                        else callerToPi p
+
+instance Pretty ReplNu where
+  pretty p = pretty $ replNuToPi p
 
 instance Pretty St where
-  pretty (St sends recvs callers io news _ _) =
+  pretty (St sends recvs callers replNus io news _ _) =
     vsep  [ pretty "Senders  :"
-          , indent 2 (vsep (map (pretty . senderToPi . snd) sends))
+          , indent 2 (vsep (map (pretty . snd) sends))
           , pretty "Receivers:"
-          , indent 2 (vsep (map (pretty . receiverToPi . snd) recvs))
+          , indent 2 (vsep (map (pretty . snd) recvs))
           , pretty "Callers:"
-          , indent 2 (vsep (map (pretty . callerToPi) callers))
+          , indent 2 (vsep (map pretty callers))
+          , pretty "Replicating Nus:"
+          , indent 2 (vsep (map pretty replNus))
           , pretty "I/O:"
           , indent 2 (vsep (map (pretty . ioTaskToPi) io))
           , encloseSep (pretty "New: ") (pretty ".") comma (map pretty news)
