@@ -39,23 +39,6 @@ build-tools:
 executable:
   main:                Main.hs
   source-dirs:         src
-  other-modules:
-  - Interaction.Human
-  - Interaction.Scheduler
-  - Interaction.Util
-  - Interaction
-  - Interpreter
-  - Interpreter.Monad
-  - PPrint
-  - Syntax.Abstract
-  - Syntax.Concrete
-  - Syntax.Parser
-  - Syntax.Parser.Lexer
-  - Syntax.Parser.Parser
-  - Syntax.Parser.Type
-  - Type
-  - Type.TypeCheck
-  - Utilities
   ghc-options:
   - -Wall
   - -threaded

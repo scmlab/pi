@@ -5,8 +5,7 @@ module Main where
 import System.Console.GetOpt
 import System.Environment
 
-import Interaction.Human (humanREPL)
--- import Interaction.JSON (jsonREPL)
+import Runtime.Human (humanREPL)
 
 import System.IO
 
@@ -19,7 +18,7 @@ main = do
     Trace -> humanREPL True filePaths
     Execute -> humanREPL False filePaths
     Help -> putStrLn $ usageInfo usage options
-    
+
 --------------------------------------------------------------------------------
 -- | Command-line arguments
 

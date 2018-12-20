@@ -1,4 +1,4 @@
-module Interaction.Util where
+module Runtime.Util where
 
 import System.IO
 import System.Console.ANSI

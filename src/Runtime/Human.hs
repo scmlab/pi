@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Interaction.Human where
+module Runtime.Human where
 
 import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
@@ -13,9 +13,9 @@ import System.Console.Haskeline
 import System.IO
 import Text.Read (readMaybe)
 
-import Interaction
-import Interaction.Scheduler
-import Interaction.Util
+import Runtime
+import Runtime.Scheduler
+import Runtime.Util
 -- import Interpreter (St(..))
 import Interpreter
 import Syntax.Abstract
@@ -25,36 +25,32 @@ import Syntax.Parser (printParseError)
 -- | Interfacing with Humans
 
 humanREPL :: Bool -> [FilePath] -> IO ()
-humanREPL _traceMode [] = void $ runInteraction $ do
+humanREPL _traceMode [] = void $ runRuntimeM $ do
   displayHelp
   loop
-humanREPL True (filePath:_) = void $ runInteraction $ do
+humanREPL True (filePath:_) = void $ runRuntimeM $ do
   handleError (handleRequest (Load filePath))
   loop
-humanREPL False (filePath:_) = void $ runInteraction $ do
+humanREPL False (filePath:_) = void $ runRuntimeM $ do
   handleError $ do
     load filePath
     execute
 
-loop :: InteractionM IO ()
+loop :: RuntimeM IO ()
 loop = do
   liftIO getKey >>= handleError . handleRequest . parseRequest
   loop
 
-handleError :: InteractionM IO () -> InteractionM IO ()
+handleError :: RuntimeM IO () -> RuntimeM IO ()
 handleError program = program `catchError` \ err -> case err of
   ParseError parseError -> gets stSource >>= liftIO . printParseError parseError
   TypeError msg -> liftIO (putStrLn (show msg))
   RuntimeError msg -> liftIO (putStrLn (show msg))
-  InteractionError msg -> do
-    -- liftIO (putStr ("\r"))
-    liftIO (putStrLn (show msg))
-    -- liftIO (hFlush stdout)
 
-try :: InteractionM IO () -> InteractionM IO ()
+try :: RuntimeM IO () -> RuntimeM IO ()
 try program = program `catchError` \_ -> return ()
 
-handleRequest :: Request -> InteractionM IO ()
+handleRequest :: Request -> RuntimeM IO ()
 handleRequest (CursorMoveTo n)  = do
   choose n
   printFuture
@@ -69,7 +65,7 @@ handleRequest CursorForth        = do
   skipSilent
   printFuture
   where
-    handleInput :: InteractionM IO Val
+    handleInput :: RuntimeM IO Val
     handleInput = do
       raw <- liftIO $ do
         yellow $ putStrLn $ "\nInput:"
@@ -87,12 +83,12 @@ handleRequest CursorForth        = do
           liftIO $ red $ putStrLn $ "cannot parse the input"
           handleInput
 
-    handleOutput :: Val -> InteractionM IO ()
+    handleOutput :: Val -> RuntimeM IO ()
     handleOutput val = liftIO $ do
       yellow $ putStrLn $ "\nOutput:"
       green $ putStrLn $ show $ pretty val
 
-    skipSilent :: InteractionM IO ()
+    skipSilent :: RuntimeM IO ()
     skipSilent = do
       next <- selectedFuture
       case next of
@@ -168,7 +164,7 @@ getKey = do
 --------------------------------------------------------------------------------
 -- | Printing stuff
 
-displayHelp :: InteractionM IO ()
+displayHelp :: RuntimeM IO ()
 displayHelp = liftIO $ do
   putStrLn "========================================"
   putStrLn "  ** Pi Tracer **   "
@@ -179,12 +175,12 @@ displayHelp = liftIO $ do
   putStrLn "  :exec                 for execution           (:x)"
   putStrLn "========================================"
 
-printFuture :: InteractionM IO ()
+printFuture :: RuntimeM IO ()
 printFuture = do
   previousState <- latestState
   next <- selectedFuture
   case next of
-    Failure err -> throwError (InteractionError err)
+    Failure err -> throwError (RuntimeError err)
     Success nextState EffNoop -> do
       liftIO $ do
         yellow $ putStrLn $ "\nNo-op"
@@ -250,7 +246,7 @@ printPool name selected processes = do
           printProcess
           putStrLn ""
 
-printPools :: [(PID, IO ())] -> St -> InteractionM IO ()
+printPools :: [(PID, IO ())] -> St -> RuntimeM IO ()
 printPools targets (St senders receivers callers replNus io _ _ _) = liftIO $ do
   printPool "senders"         targets (map snd senders)
   printPool "receivers"       targets (map snd receivers)
@@ -259,7 +255,7 @@ printPools targets (St senders receivers callers replNus io _ _ _) = liftIO $ do
   printPool "I/O tasks"       targets io
 
 
-printStatusBar :: InteractionM IO ()
+printStatusBar :: RuntimeM IO ()
 printStatusBar = do
   outcomes <- gets stFuture
   cursor <- gets stCursor

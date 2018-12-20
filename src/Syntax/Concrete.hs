@@ -155,19 +155,3 @@ instance Located (Type Loc) where
 
 instance Located (TypeOfLabel Loc) where
   locOf (TypeOfLabel _ _ loc) = loc
-
-  -- bimap :: (Pos -> Pos) -> (Pos -> Pos) -> Loc -> Loc
--- bimap _ _ NoLoc     = NoLoc
--- bimap f g (Loc a b) = Loc (f a) (g b)
---
--- class RestoreLocation a where
---   restore :: a Loc -> a Loc
---
--- instance RestoreLocation Program where
---   restore (Program decl NoLoc) = Program (map restore decl) $ NoLoc
---   restore (Program decl loc)   = Program (map restore decl) $ bimap (startPos . posFile) id loc
---
--- instance RestoreLocation ProcDecl where
---   restore (ProcDecl name process NoLoc) = ProcDecl name process $ NoLoc
---   restore (ProcDecl name process loc)   = ProcDecl name' process $ bimap (const $ startPos name') id loc
---     where name' = restore name

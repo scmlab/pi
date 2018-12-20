@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Interaction where
+module Runtime where
 
 import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
@@ -17,7 +17,7 @@ import Interpreter
 
 
  --------------------------------------------------------------------------------
- -- | Interaction Monad
+ -- | Runtime Monad
 
 data Outcome = Success St Effect
              | Failure ErrMsg
@@ -27,7 +27,7 @@ instance Pretty Outcome where
   pretty (Failure msg)          = pretty ("error:" :: String) <+> pretty msg
   pretty (Success _ reaction) = pretty reaction
 
-data InteractionState = State
+data RuntimeState = State
   { stFilePath :: Maybe String        -- loaded filepath
   , stSource   :: Maybe ByteString    -- source code
   , stEnv      :: Maybe Env           -- syntax tree
@@ -39,40 +39,39 @@ data InteractionState = State
 data Error = ParseError Parser.ParseError
            | TypeError String
            | RuntimeError String
-           | InteractionError String
            deriving (Show)
 
-type InteractionM m = ExceptT Error (StateT InteractionState m)
+type RuntimeM m = ExceptT Error (StateT RuntimeState m)
 
 --------------------------------------------------------------------------------
 
-putFilePath :: Monad m => Maybe FilePath -> InteractionM m ()
+putFilePath :: Monad m => Maybe FilePath -> RuntimeM m ()
 putFilePath x = modify $ \ st -> st { stFilePath = x }
 
-putSource :: Monad m => Maybe ByteString -> InteractionM m ()
+putSource :: Monad m => Maybe ByteString -> RuntimeM m ()
 putSource x = modify $ \ st -> st { stSource = x }
 
-putEnv :: Monad m => Maybe Env -> InteractionM m ()
+putEnv :: Monad m => Maybe Env -> RuntimeM m ()
 putEnv x = modify $ \ st -> st { stEnv = x }
 
-pushHistory :: Monad m => Outcome -> InteractionM m ()
+pushHistory :: Monad m => Outcome -> RuntimeM m ()
 pushHistory x = do
   xs <- gets stHistory
   modify $ \st -> st { stHistory = x:xs }
 
-updateFuture :: Monad m => [Outcome] -> InteractionM m ()
+updateFuture :: Monad m => [Outcome] -> RuntimeM m ()
 updateFuture outcomes = modify $ \ st -> st
   { stFuture = outcomes
   , stCursor = if null outcomes then Nothing else Just 0
   }
 
-putCursor :: Monad m => Maybe Int -> InteractionM m ()
+putCursor :: Monad m => Maybe Int -> RuntimeM m ()
 putCursor x = modify $ \ st -> st { stCursor = x }
 
 --------------------------------------------------------------------------------
 
-runInteraction :: Monad m => InteractionM m a -> m (Either Error a, InteractionState)
-runInteraction handler =
+runRuntimeM :: Monad m => RuntimeM m a -> m (Either Error a, RuntimeState)
+runRuntimeM handler =
   runStateT (runExceptT handler) (State Nothing Nothing Nothing [] initialOutcomes Nothing)
   where initialOutcomes = [Failure "please load first"]
 
@@ -87,15 +86,15 @@ interpret env st program = map toOutcome (runPiMonad env st program)
 --------------------------------------------------------------------------------
 -- | Cursor related operations
 
-withCursor :: Monad m => (Int -> InteractionM m a) -> InteractionM m a
--- withCursor :: Monad m => (Int -> InteractionM m a) -> InteractionM m a
+withCursor :: Monad m => (Int -> RuntimeM m a) -> RuntimeM m a
+-- withCursor :: Monad m => (Int -> RuntimeM m a) -> RuntimeM m a
 withCursor f = do
   cursor <- gets stCursor
   case cursor of
-    Nothing -> throwError $ InteractionError "cannot go any further"
+    Nothing -> throwError $ RuntimeError "cannot go any further"
     Just n -> f n
 
-choose :: Monad m => Int -> InteractionM m ()
+choose :: Monad m => Int -> RuntimeM m ()
 choose n = do
   len <- length <$> gets stFuture
   if n >= len then
@@ -106,35 +105,35 @@ choose n = do
     putCursor (Just n)
 
 -- retrieve the next appointed outcome
-selectedFuture :: Monad m => InteractionM m Outcome
+selectedFuture :: Monad m => RuntimeM m Outcome
 selectedFuture = do
   withCursor $ \n -> (!! n) <$> gets stFuture
 
-latestHistory :: Monad m => InteractionM m Outcome
+latestHistory :: Monad m => RuntimeM m Outcome
 latestHistory = do
   history <- gets stHistory
   if null history
-    then throwError $ InteractionError "no history to retrieve from"
+    then throwError $ RuntimeError "no history to retrieve from"
     else return (head history)
 
-latestState :: Monad m => InteractionM m St
+latestState :: Monad m => RuntimeM m St
 latestState = do
   outcome <- latestHistory
   case outcome of
     (Success state _) -> return state
-    _ -> throwError $ InteractionError "cannot retrieve state"
+    _ -> throwError $ RuntimeError "cannot retrieve state"
 
 --------------------------------------------------------------------------------
 -- | Commands
 
-load :: (MonadIO m, Monad m) => FilePath -> InteractionM m ()
+load :: (MonadIO m, Monad m) => FilePath -> RuntimeM m ()
 load filePath = do
   -- storing the filepath
   putFilePath (Just filePath)
   -- storing the source
   readResult <- liftIO $ Exception.try (BS.readFile filePath)
   case readResult of
-    Left  err -> throwError $ InteractionError $ show (err :: IOException)
+    Left  err -> throwError $ RuntimeError $ show (err :: IOException)
     Right source -> do
       putSource (Just source)
       -- parse and store the AST
@@ -153,9 +152,9 @@ load filePath = do
         Success state reaction -> do
           pushHistory (Success state reaction)
           updateFuture $ interpret env state step
-        Failure _ -> throwError $ InteractionError "cannot retrieve outcome"
+        Failure _ -> throwError $ RuntimeError "cannot retrieve outcome"
 
-test :: (MonadIO m, Monad m) => InteractionM m ()
+test :: (MonadIO m, Monad m) => RuntimeM m ()
 test = do
   filePath <- getFilePath
   rawFile <- liftIO $ BS.readFile filePath
@@ -166,16 +165,16 @@ test = do
 
 
 -- read and parse and store program from the stored filepath
-reload :: (MonadIO m, Monad m) => InteractionM m ()
+reload :: (MonadIO m, Monad m) => RuntimeM m ()
 reload = do
   filePath <- getFilePath
   load filePath
 
 -- run the appointed outcome
 run :: Monad m
-  => InteractionM m Val   -- input handler
-  -> (Val -> InteractionM m ())   -- output handler
-  -> InteractionM m ()
+  => RuntimeM m Val   -- input handler
+  -> (Val -> RuntimeM m ())   -- output handler
+  -> RuntimeM m ()
 run inputHandler outputHandler = do
   outcome <- selectedFuture
   pushHistory outcome
@@ -213,18 +212,18 @@ run inputHandler outputHandler = do
 -- | Helpers
 
 -- get existing filepath from the state
-getFilePath :: Monad m => InteractionM m FilePath
+getFilePath :: Monad m => RuntimeM m FilePath
 getFilePath = do
   result <- gets stFilePath
   case result of
-    Nothing       -> throwError $ InteractionError "please load the program first"
+    Nothing       -> throwError $ RuntimeError "please load the program first"
     Just filePath -> return filePath
 
-getEnv :: Monad m => InteractionM m Env
+getEnv :: Monad m => RuntimeM m Env
 getEnv = do
   result <- gets stEnv
   case result of
-    Nothing   -> throwError $ InteractionError "panic: the AST has not been parsed and stored"
+    Nothing   -> throwError $ RuntimeError "panic: the AST has not been parsed and stored"
     Just env  -> return env
 
 --------------------------------------------------------------------------------
