@@ -1,16 +1,19 @@
-module Main where
+module Test where
 
 import Test.Tasty
 import Test.Tasty.HUnit
 
-import qualified Parser
+import qualified Test.Parser as Parser
+import qualified Test.TypeChecker as TypeChecker
 
 main :: IO ()
 main = defaultMain tests
 
 tests :: TestTree
 tests = testGroup "Tests"
-    [ Parser.tests ]
+    [ Parser.tests
+    , TypeChecker.tests
+    ]
   -- [ testCase "2+2=4" $
   --     2+2 @?= 4
   -- , testCase "7 is even" $

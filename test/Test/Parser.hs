@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser where
+module Test.Parser where
 
 import qualified Data.ByteString.Lazy as B
 import Test.Tasty
