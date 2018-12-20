@@ -8,7 +8,6 @@ module Interpreter
   , PiMonad, runPiMonad
   , Effect(..), IOTask(..), St(..), Sender(..), Receiver(..), Caller(..), ReplNu(..)
   , module Interpreter.Monad
-  , senderToPi, receiverToPi, ioTaskToPi, callerToPi
   ) where
 
 import Control.Monad.State
@@ -118,14 +117,14 @@ data Effect = EffNoop                                   -- nothing ever happened
 
 type PiMonad = ReaderT Env (StateT St (EitherT String []))
 
+runPiMonad :: Env -> St -> PiMonad a -> [Either String (a, St)]
+runPiMonad env st m = runEitherT (runStateT (runReaderT m env) st)
+
 freshVar :: PiMonad Name
 freshVar = do
   i <- gets stVarCount
   modify $ \st -> st { stVarCount = succ i }
   return (NG (Pos i))
-
-runPiMonad :: Env -> St -> PiMonad a -> [Either String (a, St)]
-runPiMonad env st m = runEitherT (runStateT (runReaderT m env) st)
 
 freshPID :: Attr -> PiMonad PID
 freshPID attr = do
@@ -199,7 +198,6 @@ addPi attr (Recv c clauses) = do
   pid <- freshPID attr
   addReceiver c (Receiver pid c clauses)
 
--- TODO: fix this, don't instantiate new variable now
 addPi attr (Nu x _ p) = do
   pid <- freshPID attr
   let replNu = ReplNu pid x p
@@ -215,22 +213,6 @@ lineup []     = return ()
 lineup ((c, x):xs) = do
   addPi (PID False c) x
   lineup xs
-
-senderToPi :: Sender -> Pi
-senderToPi (Sender _ c v p) = Send c (EV v) p
-
-receiverToPi :: Receiver -> Pi
-receiverToPi (Receiver _ c clauses) = Recv c clauses
-
-callerToPi :: Caller -> Pi
-callerToPi (Caller _ callee) = Call callee
-
-replNuToPi :: ReplNu -> Pi
-replNuToPi (ReplNu _ x p) = Repl (Nu x Nothing p)
-
-ioTaskToPi :: IOTask -> Pi
-ioTaskToPi (Input _ clauses) = Recv (NR StdIn) clauses
-ioTaskToPi (Output _ v p) = Send (NR StdOut) (EV v) p
 
 --------------------------------------------------------------------------------
 -- |
@@ -294,7 +276,7 @@ call (Caller _ callee) = do
       addPi (PID False callee) p
       return p
     Nothing -> throwError $ "definition not found (looking for " ++ show (pretty callee) ++ ")"
--- call (Replicater (PID _ _ name) p) = do
+-- call (Replicator (PID _ _ name) p) = do
 --   addPi name p
 --   addPi name (Repl p)
 --   return (Par (Repl p) p)
@@ -326,13 +308,13 @@ instance Pretty Effect where
     vsep  [ pretty "[No-op]"
           ]
   pretty (EffCall caller _) =
-    vsep  [ pretty "[Call]   :" <+> pretty (callerToPi caller)
+    vsep  [ pretty "[Call]   :" <+> pretty caller
           ]
   pretty (EffComm channel (sender, receiver) products) =
     vsep  [ pretty "[Communicate]"
           , pretty "Channel  :" <+> pretty channel
-          , pretty "Sender   :" <+> pretty (senderToPi   sender)
-          , pretty "Receiver :" <+> pretty (receiverToPi receiver)
+          , pretty "Sender   :" <+> pretty sender
+          , pretty "Receiver :" <+> pretty receiver
           , pretty "Products :" <+> pretty products
           ]
   pretty (EffReplNu replNu p) =
@@ -344,25 +326,36 @@ instance Pretty Effect where
     vsep  [ pretty "[I/O]   :" <+> pretty task
           ]
 
+applyRepl :: HasPID a => a -> Pi -> Pi
+applyRepl p q = if isReplicable p then Repl q else q
+
+senderToPi :: Sender -> Pi
+senderToPi (Sender _ c v p) = Send c (EV v) p
+
+receiverToPi :: Receiver -> Pi
+receiverToPi (Receiver _ c clauses) = Recv c clauses
+
+callerToPi :: Caller -> Pi
+callerToPi (Caller _ callee) = Call callee
+
+replNuToPi :: ReplNu -> Pi
+replNuToPi (ReplNu _ x p) = Repl (Nu x Nothing p)
+
+ioTaskToPi :: IOTask -> Pi
+ioTaskToPi (Input _ clauses) = Recv (NR StdIn) clauses
+ioTaskToPi (Output _ v p) = Send (NR StdOut) (EV v) p
+
 instance Pretty IOTask where
-  pretty p = pretty $ if isReplicable p
-                        then Repl (ioTaskToPi p)
-                        else ioTaskToPi p
+  pretty p = pretty $ applyRepl p (ioTaskToPi p)
 
 instance Pretty Sender where
-  pretty p = pretty $ if isReplicable p
-                        then Repl (senderToPi p)
-                        else senderToPi p
+  pretty p = pretty $ applyRepl p (senderToPi p)
 
 instance Pretty Receiver where
-  pretty p = pretty $ if isReplicable p
-                        then Repl (receiverToPi p)
-                        else receiverToPi p
+  pretty p = pretty $ applyRepl p (receiverToPi p)
 
 instance Pretty Caller where
-  pretty p = pretty $ if isReplicable p
-                        then Repl (callerToPi p)
-                        else callerToPi p
+  pretty p = pretty $ applyRepl p (callerToPi p)
 
 instance Pretty ReplNu where
   pretty p = pretty $ replNuToPi p
@@ -381,89 +374,3 @@ instance Pretty St where
           , indent 2 (vsep (map (pretty . ioTaskToPi) io))
           , encloseSep (pretty "New: ") (pretty ".") comma (map pretty news)
           ]
-{-
-type St = ( [Pi]               -- processes running
-          , FMap Name Waiting  -- processes waiting at each channels
-          , [Name]             -- generated names
-          )
-
-type Waiting = [Sender] -- only senders wait in the queue
-
--- data Waiting = Senders [Sender]
---              | Receivers [Receiver]
---    deriving (Eq, Show)
-       -- non-empty
-
-stopped :: St -> Bool
-stopped (ps, waits, news) =
-    null ps && and (map (nullW . snd) waits)
-  where nullW (Senders ps) = null ps
-        nullW (Receivers pps) = null pps
-
-stToPi :: St -> Pi
-stToPi (ps, waits, news) =
-  foldr Nu
-    ((foldr par End ps) `par`
-     (foldr par End (map letWait waits))) news
-  where letWait (c, Senders ps) =
-          foldr1 par [ Send c (EV v) p | (v,p) <- ps ]
-        letWait (c, Receivers ps) =
-          foldr1 par [ Recv c pps | pps <- ps ]
-
-instance Functor Res where
-  fmap f (EffNoop x) = EffNoop (f x)
-  fmap f (Output v x) = Output (f x) v
-  fmap f (Input x) = Input (f x)
-
-step :: (MonadFresh m, MonadError ErrMsg m) =>
-        Env -> St -> m (Res St)
-step defs ([], waits, news) = mzero
-step defs (End : ps, waits, news) =
-  step defs (ps, waits, news)
-step defs (Par p1 p2 : ps, waits, news) =
-  step defs (p1:p2:ps, waits, news)
-step defs (Send c x p : ps, waits, news) =
-  evalExpr x >>= \v ->
-    doSend c v p (ps, waits, news) `mplus`
-  fmap (fork3 (Send c x p :) id id)
-    step defs (ps, waits, news)
-step defs (Recv c pps : ps, waits, news) =
-  doRecv c pps (ps, waits, news)
-step defs (Nu x p : ps, waits, news) =
-  doNu x p (ps, waits, news)
-step defs (Call x : ps, waits, news)
-  | Just p <- lookup x defs =
-    step defs (p:ps, waits, news)
-  | otherwise = throwError "definition not found"
-
-doSend :: MonadError ErrMsg m =>
-          Name -> Val -> Pi -> St -> m (Res St)
-doSend (NR StdOut) v p (ps, waits, news) =
-  return (Output v (p:ps, waits, news))
-doSend c v p (ps, waits, news) =
-  step (ps, fMapUpdate c (v,p) ((v,p):) waits, news)
-
-doRecv :: MonadError ErrMsg m =>
-          Name -> Receiver -> St -> m (Res St)
-doRecv c pps (ps, waits, news) =
-  case lookup c waits of
-    Nothing ->
-      return . EffNoop $ (ps, (c, Receivers [pps]):waits, news)
-    Just (Receivers _) ->
-      return . EffNoop $ (ps, fMapUpdate c (addReceiver pps) waits, news)
-    Just (Senders ((v,q):qs)) ->
-       case matchClauses pps v of
-        Just (th, p) ->
-          return . EffNoop$ ( [q] ++ ps ++ [substPi th p]
-                 , popSender c qs waits, news)
-        Nothing -> throwError "pattern matching fails"
-  where addReceiver pps (Receivers qs) = Receivers (pps:qs)
-        addReceiver pps (Senders _) = error "shouldn't happen"
-        popSender c [] = rmEntry c
-        popSender c qs = fMapUpdate c (const (Senders qs))
-
-doNu :: MonadFresh m => Name -> Pi -> St -> m (Res St)
-doNu x p (ps, waits, news) =
-  fresh >>= \i ->
-  step (substPi [(x, N i)] p : ps, waits, i : news)
--}
