@@ -58,10 +58,10 @@ handleRequest :: Request -> InteractionM IO ()
 handleRequest (CursorMoveTo n)  = do
   choose n
   printFuture
-handleRequest CursorPrev          = withCursor $ \n -> try $ do
+handleRequest CursorPrev        = withCursor $ \n -> do
   choose (n - 1)
   printFuture
-handleRequest CursorNext        = withCursor $ \n -> try $ do
+handleRequest CursorNext        = withCursor $ \n -> do
   choose (n + 1)
   printFuture
 handleRequest CursorForth        = do
@@ -193,13 +193,13 @@ printFuture = do
     Success _ (EffCall caller result) -> do
       liftIO $ do
         yellow $ putStrLn $ "\nCall"
-      let targets = [(getPID caller, putStrLn $ show (pretty result))]
+      let targets = [(getPID caller, putStr $ show (pretty result))]
       printPools targets previousState
       printStatusBar
     Success _ (EffReplNu replNu result) -> do
       liftIO $ do
         yellow $ putStrLn $ "\nReplicate and create new channel"
-      let targets = [(getPID replNu, putStrLn $ abbreviate $ show (pretty result))]
+      let targets = [(getPID replNu, putStr $ abbreviate $ show (pretty result))]
       printPools targets previousState
       printStatusBar
     Success _ (EffIO task) -> do
@@ -210,8 +210,8 @@ printFuture = do
     Success _ (EffComm _ (sender, receiver) (sender', receiver')) -> do
       liftIO $ do
         yellow $ putStrLn $ "\nCommunicate"
-      let printSenderResult = putStrLn $ abbreviate $ show (pretty sender')
-      let printReceiverResult = putStrLn $ abbreviate $ show (pretty receiver')
+      let printSenderResult = putStr $ abbreviate $ show (pretty sender')
+      let printReceiverResult = putStr $ abbreviate $ show (pretty receiver')
       let targets = [(getPID sender, printSenderResult), (getPID receiver, printReceiverResult)]
       printPools targets previousState
       printStatusBar

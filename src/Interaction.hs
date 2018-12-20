@@ -98,8 +98,10 @@ withCursor f = do
 choose :: Monad m => Int -> InteractionM m ()
 choose n = do
   len <- length <$> gets stFuture
-  if (n >= len || n < 0) then
-    throwError $ InteractionError "out of bound"
+  if n >= len then
+    putCursor (Just 0)
+  else if n < 0 then
+    putCursor (Just (len - 1))
   else do
     putCursor (Just n)
 
