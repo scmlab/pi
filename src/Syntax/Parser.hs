@@ -1,6 +1,7 @@
 module Syntax.Parser
   ( parseByteString
   , parseByteString2
+  , parseByteStringOrRaise
   , ParseError(..)
   , printParseError
   )
@@ -20,7 +21,7 @@ import Data.Loc
 import PPrint
 import Language.Lexer.Applicative
 import System.Console.ANSI
-
+import Test.Tasty.HUnit (assertFailure)
 
 parseByteString :: FilePath -> ByteString -> Either ParseError Prog
 parseByteString filePath src = fromConcrete <$> runExcept (evalStateT piParser initState)
@@ -30,6 +31,16 @@ parseByteString filePath src = fromConcrete <$> runExcept (evalStateT piParser i
 parseByteString2 :: FilePath -> ByteString -> Either ParseError (Program Loc)
 parseByteString2 filePath src = runExcept (evalStateT piParser initState)
   where initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
+        startingLoc = Loc (startPos filePath) (startPos filePath)
+
+-- for testing purpose
+parseByteStringOrRaise :: ByteString -> IO Prog
+parseByteStringOrRaise src = do
+  case fromConcrete <$> runExcept (evalStateT piParser initState) of
+    Left err  -> assertFailure $ show err
+    Right val -> return val
+  where filePath = ""
+        initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
         startingLoc = Loc (startPos filePath) (startPos filePath)
 
 printParseError :: ParseError -> Maybe ByteString -> IO ()

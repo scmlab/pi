@@ -7,6 +7,7 @@ module Interpreter
   , PID(..), HasPID(..), invokedBy
   , PiMonad, runPiMonad
   , Effect(..), IOTask(..), St(..), Sender(..), Receiver(..), Caller(..), ReplNu(..)
+  , hasUnguardedRecursion, initialState
   , module Interpreter.Monad
   ) where
 
@@ -107,6 +108,9 @@ data St = St
   , stPIDCount  :: Int
   , stVarCount  :: Int
   } deriving (Show)
+
+initialState :: St
+initialState = St [] [] [] [] [] [] 0 0
 
 data Effect = EffNoop                                   -- nothing ever happened
             | EffCall Caller Pi                         -- calling some process
@@ -213,6 +217,29 @@ lineup []     = return ()
 lineup ((c, x):xs) = do
   addPi (PID False c) x
   lineup xs
+
+-- A process has unguarded recursions
+-- if the graph formed by unguarded calls has loops.
+hasUnguardedRecursion
+  :: [ProcName]     -- traversed unguarded calls
+  -> Pi             -- the process to check on
+  -> PiMonad Bool
+hasUnguardedRecursion t (Par p q) = liftM2 (||)
+  (hasUnguardedRecursion t p)
+  (hasUnguardedRecursion t q)
+hasUnguardedRecursion _ (Repl _)      = return True
+hasUnguardedRecursion t (Call callee) =
+  if callee `elem` t then
+    -- if "callee" has been called
+    return True
+  else do
+    -- expand the callee and keep searching
+    env <- ask
+    case Map.lookup (ND (Pos callee)) env of
+      Just p  -> do
+        hasUnguardedRecursion (callee:t) p
+      Nothing -> throwError $ "definition not found while checking unguarded recursions (looking for " ++ show (pretty callee) ++ ")"
+hasUnguardedRecursion _ _ = return False
 
 --------------------------------------------------------------------------------
 -- |

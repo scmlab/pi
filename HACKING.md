@@ -18,6 +18,11 @@ To enter the REPL:
 stack repl
 ```
 
+To enter the REPL of "test":
+
+```bash
+stack repl pi:test:pi-tests
+```
 ### Adding dependencies
 
 Append to `dependencies` at `package.yaml`.

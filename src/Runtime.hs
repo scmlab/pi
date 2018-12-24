@@ -143,7 +143,7 @@ load filePath = do
 
       env <- getEnv
       -- populate future, the next possible outcomes (there should be only 1)
-      updateFuture $ interpret env (St [] [] [] [] [] [] 0 0) $ do
+      updateFuture $ interpret env initialState $ do
         _ <- call (Caller (PID False "you" (-1)) "main")
         return EffNoop
       -- retrieve state from the recently populated outcome and store it
