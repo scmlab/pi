@@ -13,7 +13,8 @@ import Data.Text (Text)
 
 }
 
-%name piParser
+%name programParser Program
+%name processParser ProcessPar
 %tokentype { Token }
 %error { syntaticalError }
 

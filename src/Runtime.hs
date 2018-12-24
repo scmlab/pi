@@ -137,7 +137,7 @@ load filePath = do
     Right source -> do
       putSource (Just source)
       -- parse and store the AST
-      case Parser.parseByteString filePath source of
+      case Parser.parseProgram filePath source of
         Left err  -> throwError $ ParseError err
         Right ast -> (putEnv . Just . programToEnv) ast
 

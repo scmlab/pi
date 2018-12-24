@@ -7,6 +7,7 @@ maintainer:          "example@example.com"
 copyright:           "2018 Author name here"
 
 extra-source-files:
+- HACKING.md
 - README.md
 - ChangeLog.md
 

@@ -18,10 +18,18 @@ To enter the REPL:
 stack repl
 ```
 
-To enter the REPL of "test":
+### Testing
+
+Build:
 
 ```bash
-stack repl pi:test:pi-tests
+stack build pi:test:pi-tests
+```
+
+GHCi
+
+```bash
+stack build pi:test:pi-tests
 ```
 ### Adding dependencies
 
