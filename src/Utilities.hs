@@ -50,12 +50,13 @@ nodup :: Eq a => [a] -> Bool
 nodup [] = True
 nodup (x:xs) = not (x `elem` xs) && nodup xs
 
+nubcons :: Eq a => a -> [a] -> [a]
+nubcons x xs | x `elem` xs = xs
+             | otherwise   = x : xs
+
 nubapp :: Eq a => [a] -> [a] -> [a]
 nubapp [] ys = ys
-nubapp (x:xs) ys   -- x : filter (not . (x==)) (nubapp xs ys)
-  | x `elem` zs = zs
-  | otherwise   = x : zs
- where zs = nubapp xs ys
+nubapp (x:xs) ys = nubcons x (nubapp xs ys)
 
 nubconcat :: Eq a => [[a]] -> [a]
 nubconcat = foldr nubapp []

@@ -382,6 +382,8 @@ instance FromConcrete (C.Sort ann) BType where
   fromConcrete (C.SortBool _) = TBool
 
 instance FromConcrete (C.Type ann) SType where
+  fromConcrete = undefined
+{- To banacorn: please fixe this later. Thank you!
   fromConcrete (C.TypeEnd _             ) = TEnd
   fromConcrete (C.TypeSend (Left  s) t _) = TSend (Left (fromConcrete s)) (fromConcrete t)
   fromConcrete (C.TypeSend (Right s) t _) = TSend (Right (fromConcrete s)) (fromConcrete t)
@@ -391,4 +393,5 @@ instance FromConcrete (C.Type ann) SType where
     TSele (map (\(C.TypeOfLabel l t _) -> (fromConcrete l, fromConcrete t)) selections)
   fromConcrete (C.TypeChoi choices     _) =
     TChoi (map (\(C.TypeOfLabel l t _) -> (fromConcrete l, fromConcrete t)) choices)
-  fromConcrete (C.TypeCall call        _) = TCall (fromConcrete call)
+--  fromConcrete (C.TypeCall call        _) = TCall (fromConcrete call)
+-}

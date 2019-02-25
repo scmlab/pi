@@ -5,6 +5,7 @@ module Type.TypeCheck where
 import Control.Arrow ((***))
 import Control.Monad.Except
 import Data.Text (pack)
+import Data.Function ((&))
 
 import Syntax.Abstract
 import Type
@@ -23,7 +24,7 @@ liftLookup x env =
 
 inferV :: MonadError ErrMsg m => BEnv -> Val -> m BType
 inferV _ (N (NR _)) = throwError "StdOut/In in expression"
-inferV env (N c) = liftMaybe "variable not found"
+inferV env (N c) = liftMaybe ("variable " ++ show c ++ " not found")
                      (lookup (depolarCH c) env)
 inferV _ (VI _) = return TInt
 inferV _ (VB _) = return TBool
@@ -73,6 +74,107 @@ allClosed :: SEnv -> Bool
 allClosed = all (TEnd ==) . map snd
         -- = const True
 
+checkPi :: MonadError ErrMsg m =>
+   BEnv -> SEnv -> Pi -> m (SEnv, [PN RName])
+
+checkPi benv senv End = return (senv, [])
+
+checkPi benv senv (p1 `Par` p2) =
+  checkPi benv senv p1 >>= \(senv1, l1) ->
+  senv1 `sMinus` l1 >>= \senv2 ->
+  checkPi benv senv2 p2
+
+checkPi benv senv (Send (NR StdOut) e p) =
+  inferE benv e >>= \_ ->
+  checkPi benv senv p
+checkPi benv senv (Send (NR _) e p) =
+  throwError "cannot send to this channel"
+checkPi benv senv (Send (NG _) e p) =
+  throwError "generated name appears in type checking. a bug?"
+checkPi benv senv (Send (ND c) e p) =
+  lookupChType c senv >>=  -- c removed from senv
+  matchSend (checkPiSend benv (c,e,p)) (checkPiSel benv e p)
+
+checkPi _ _ (Recv (NR _) _) =
+  throwError "not knowing what to do yet"
+checkPi _ _ (Recv (NG _) _) =
+  throwError "generated name appears in type checking. a bug?"
+checkPi benv senv (Recv (ND c) ps) =
+  lookupChType c senv >>=
+  matchRecv (checkPiRecv benv (c,ps)) undefined
+
+checkPiSend :: MonadError ErrMsg m =>
+  BEnv -> (PN RName, Expr, Pi) ->
+  SType -> SType -> Bool -> SEnv -> m (SEnv, [PN RName])
+checkPiSend benv (c,e,p) (TBase s) t un senv =
+  checkE benv e s >>
+  (id *** addLin un c) <$> checkPi benv ((c,t):senv) p
+checkPiSend benv (c,e,p) s t un senv =
+  isChannel e >>= \d ->
+  lookupChType d senv >>= \(s', _, senv') ->
+  if eqType s s' then
+     addSEnv (c,t) senv' >>= \senv'' ->
+     (id *** addLin un c) <$> checkPi benv senv'' p
+   else throwError ("types of sent channel mismatch: " ++ show s ++ " and " ++ show s')
+
+addLin True  _ xs  = xs
+addLin False c xs = nubcons c xs
+
+isChannel :: MonadError ErrMsg m => Expr -> m (PN RName)
+isChannel (EV (N (ND c))) = return c
+isChannel _ = throwError "thrown value must be a channel"
+
+checkPiSel :: MonadError ErrMsg m =>
+  BEnv -> Expr -> Pi ->
+  [(Label, SType)] -> Bool -> SEnv -> m (SEnv, [PN RName])
+checkPiSel = undefined
+
+checkPiRecv :: MonadError ErrMsg m =>
+  BEnv -> (PN RName, [Clause]) ->
+  SType -> SType -> Bool -> SEnv -> m (SEnv, [PN RName])
+checkPiRecv benv (c,ps) s t un senv = undefined
+
+matchSend :: MonadError ErrMsg m =>
+   (SType -> SType -> Bool -> SEnv -> m a) ->
+   ([(Label, SType)] -> Bool -> SEnv -> m a) -> (SType, Bool, SEnv) -> m a
+matchSend fs _  (TSend s1 s2, b, senv) = fs s1 s2 b senv
+matchSend _  fl (TSele ts,    b, senv) = fl ts b senv
+matchSend _  _  _ = throwError "TSend expected"
+
+matchRecv :: MonadError ErrMsg m =>
+  (SType -> SType -> Bool -> SEnv -> m a) ->
+  ([(Label, SType)] -> Bool -> SEnv -> m a) -> (SType, Bool, SEnv) -> m a
+matchRecv fs _  (TRecv t s, b, senv) = fs t s b senv
+matchRecv _  fl (TChoi ts,  b, senv) = fl ts b senv
+matchRecv _  _  _ = throwError "TRecv expected"
+
+-- env related utilities
+
+sMinus :: MonadError ErrMsg m => SEnv -> [PN RName] -> m SEnv
+senv `sMinus` []     = return senv
+senv `sMinus` (x:xs) =
+  senv `sMinus` xs >>= \senv' ->
+  liftLookup x senv' >>= \t ->
+  if unrestricted t then return (rmEntry x senv)
+    else throwError ("channel " ++ show x ++ " not used up.")
+
+lookupChType :: MonadError ErrMsg m =>
+  PN RName -> SEnv -> m (SType, Bool, SEnv)
+lookupChType x senv =
+  liftLookup x senv >>= \t ->
+  stripUnrest t & \(t', unrest) ->
+  if unrest then return (t', unrest, senv)
+      else return (t', unrest, rmEntry x senv)
+
+addSEnv :: MonadError ErrMsg m =>
+  (PN RName, SType) -> SEnv -> m SEnv
+addSEnv (c,t) senv =
+  lookup c senv &
+   maybe (return ((c,t) : senv))
+     (\t' -> if eqType t t' then return senv
+              else throwError ("types of channels in env mismatch: " ++ show t ++ " and " ++ show t'))
+
+{-
 checkPi :: MonadError ErrMsg m => BEnv -> SEnv -> Pi -> m ()
 
 checkPi _ senv End
@@ -143,10 +245,6 @@ matchSend _  fs _   (TSend (Right s') s) = fs s' s
 matchSend _  _  fsl (TSele ts) = fsl ts
 matchSend _  _  _   _ = throwError "TSend expected"
 
-isChannel :: MonadError ErrMsg m => Expr -> m (PN RName)
-isChannel (EV (N (ND c))) = return c
-isChannel _ = throwError "must be a channel"
-
 isLabel :: MonadError ErrMsg m => Expr -> m Label
 isLabel (EV (VL l)) = return l
 isLabel _ = throwError "must be a label"
@@ -189,24 +287,20 @@ pairChoices ts (Clause (PL l) p : ps) =
 pairChoices _ (Clause _ _ : _) =
   throwError "not a label"
 
+-}
+
 --------------------------------------------------------------------------------
 -- Tests
 
 -- smart constructors for Types
 tsend :: BType -> SType -> SType
-tsend t s = TSend (Left t) s
-
-tSend :: SType -> SType -> SType
-tSend t s = TSend (Right t) s
+tsend t s = TSend (TBase t) s
 
 trecv :: BType -> SType -> SType
-trecv t s = TRecv (Left t) s
+trecv t s = TRecv (TBase t) s
 
-tRecv :: SType -> SType -> SType
-tRecv t s = TRecv (Right t) s
-
-tsele :: [(String, SType)] -> SType
-tsele = TSele . map (pack *** id)
+-- tsele :: [(String, SType)] -> SType
+-- tsele = TSele . map (pack *** id)
 
 -- smart constructors for Pi
 nu :: String -> SType -> Pi -> Pi
@@ -222,7 +316,17 @@ choices c ps =
 pn :: String -> Ptrn
 pn = PN . pack
 
+--
 
+type0 = tsend TInt (tsend TBool TEnd)
+pi0 = Send (cP "c") (eI 3) (Send (cP "c") (eB True) End)
+
+test0 :: Either String (SEnv, [PN RName])
+test0 = runExcept $ checkPi [] senv p
+  where senv = [(Pos . pack $ "c", type0),
+                (Pos . pack $ "d", TSend (tsend TBool TEnd) TEnd)]
+        p = Send (cP "c") (eI 3) $ Send (cP "d") (ePN "c") End
+{-
 test0 :: Either String ()
 test0 = runExcept $ checkPi [] [] p2
   where
@@ -261,3 +365,4 @@ test0 = runExcept $ checkPi [] [] p2
 -- try: runExcept $ checkPi [] [] p2
 -- try: run `stack test` for running these tests
 -- try: run `stack repl pi:test:pi-tests` to develop thoses tests
+-}
