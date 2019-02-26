@@ -3,6 +3,33 @@ module Utilities where
 import Control.Arrow ((***))
 import Control.Monad
 
+
+nodup :: Eq a => [a] -> Bool
+nodup [] = True
+nodup (x:xs) = not (x `elem` xs) && nodup xs
+
+nubcons :: Eq a => a -> [a] -> [a]
+nubcons x xs | x `elem` xs = xs
+             | otherwise   = x : xs
+
+nubapp :: Eq a => [a] -> [a] -> [a]
+nubapp [] ys = ys
+nubapp (x:xs) ys = nubcons x (nubapp xs ys)
+
+nubconcat :: Eq a => [[a]] -> [a]
+nubconcat = foldr nubapp []
+
+setminus :: Eq a => [a] -> [a] -> [a]
+setminus xs []     = xs
+setminus xs (y:ys) = setminus (filter (not . (y==)) xs) ys
+
+subsetEq :: Eq a => [a] -> [a] -> Bool
+[] `subsetEq` _ = True
+(x:xs) `subsetEq` ys = x `elem` ys && xs `subsetEq` ys
+
+setEq :: Eq a => [a] -> [a] -> Bool
+setEq xs ys = xs `subsetEq` ys && ys `subsetEq` xs
+
 -- finite map related stuffs
 
 type FMap a b = [(a,b)]
@@ -46,24 +73,24 @@ rmEntry _ [] = []
 rmEntry i ((j,x):xs) | i == j    = rmEntry i xs
                      | otherwise = (j,x) : rmEntry i xs
 
-nodup :: Eq a => [a] -> Bool
-nodup [] = True
-nodup (x:xs) = not (x `elem` xs) && nodup xs
+rmEntries [] xs = xs
+rmEntries (i:is) xs = rmEntries is (rmEntry i xs)
 
-nubcons :: Eq a => a -> [a] -> [a]
-nubcons x xs | x `elem` xs = xs
-             | otherwise   = x : xs
+fMapSubsetBy :: Eq a => (b -> b -> Bool) ->
+                [(a,b)] -> [(a,b)] -> Bool
+fMapSubsetBy f [] ys = True
+fMapSubsetBy f ((x,z):xs) ys =
+  case lookup x ys of
+    Nothing -> False
+    Just z' -> if f z z' then fMapSubsetBy f xs ys
+                         else False
 
-nubapp :: Eq a => [a] -> [a] -> [a]
-nubapp [] ys = ys
-nubapp (x:xs) ys = nubcons x (nubapp xs ys)
+fMapEqBy :: Eq a => (b -> b -> Bool) ->
+                [(a,b)] -> [(a,b)] -> Bool
+fMapEqBy f xs ys = fMapSubsetBy f xs ys &&
+                   fMapSubsetBy f ys xs
 
-nubconcat :: Eq a => [[a]] -> [a]
-nubconcat = foldr nubapp []
-
-setminus :: Eq a => [a] -> [a] -> [a]
-setminus xs []     = xs
-setminus xs (y:ys) = setminus (filter (not . (y==)) xs) ys
+-- misc.
 
 fork3 :: (x -> a) -> (y -> b) -> (z -> c) -> (x, y, z) -> (a, b, c)
 fork3 f g h (x,y,z) = (f x, g y, h z)

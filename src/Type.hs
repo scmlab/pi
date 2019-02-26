@@ -6,39 +6,46 @@ import Control.Arrow ((***))
 type TName = Text   -- names of declared types
 type Label = Text
 
-data BType = TInt | TBool | TTuple [BType]
+data BType = TInt | TBool
   deriving (Eq, Show)
 
-data SType = TEnd
+data Type = TEnd                    -- end
            | TBase BType
-           | TSend SType SType       -- send
-           | TRecv SType SType       -- recv
-           | TSele [(Label, SType)]  -- select
-           | TChoi [(Label, SType)]  -- choice
-           | TUn SType               -- unrestricted
+           | TTuple [Type]
+           | TSend Type Type       -- send
+           | TRecv Type Type       -- recv
+           | TSele [(Label, Type)]  -- select
+           | TChoi [(Label, Type)]  -- choice
+           | TUn Type               -- unrestricted
   deriving (Eq, Show)
 
+tInt  = TBase TInt
+tBool = TBase TBool
 
-dual :: SType -> SType
+dual :: Type -> Type
 dual TEnd = TEnd
 dual (TBase t) = TBase t
+dual (TTuple ts) = TTuple (map dual ts)
 dual (TSend t s) = TRecv t (dual s)
 dual (TRecv t s) = TSend t (dual s)
 dual (TChoi ss) = TSele (map (id *** dual) ss)
 dual (TSele ss) = TChoi (map (id *** dual) ss)
 dual (TUn t) = TUn (dual t)
 
-unrestricted :: SType -> Bool
-unrestricted TEnd      = True
-unrestricted (TBase _) = True
-unrestricted (TUn _)   = True
-unrestricted _         = False
+unrestricted :: Type -> Bool
+unrestricted TEnd        = True
+unrestricted (TBase _)   = True
+unrestricted (TUn _)     = True
+unrestricted (TTuple ts) = all unrestricted ts
+unrestricted _           = False
 
-stripUnrest :: SType -> (SType, Bool)
-stripUnrest TEnd      = (TEnd, True)
-stripUnrest (TBase t) = (TBase t, True)
-stripUnrest (TUn t)   = (t, True)  -- shouldn't be nested
-stripUnrest t         = (t, False)
+stripUnres :: Type -> (Type, Bool)
+stripUnres TEnd        = (TEnd, True)
+stripUnres (TBase t)   = (TBase t, True)
+stripUnres (TUn t)     = (t, True)  -- shouldn't be nested
+stripUnres (TTuple ts) = (TTuple (map fst tts), and (map snd tts))
+  where tts = map stripUnres ts
+stripUnres t           = (t, False)
 
-eqType :: SType -> SType -> Bool
+eqType :: Type -> Type -> Bool
 eqType = (==)  -- needs fixing!
