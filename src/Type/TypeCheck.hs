@@ -123,7 +123,10 @@ checkPi cxt (Recv (ND c) ps) =
   lookupChType c cxt >>= -- c removed if linear
   matchRecv (checkPiRecv (c,ps)) (checkPiChoi (c,ps))
 
-checkPi _ (Repl _) = throwError "panic: not implemented yet"
+checkPi cxt (Repl p) = -- throwError "panic: not implemented yet"
+  checkPi cxt p >>= \(cxt', l) ->
+  if null l then return (cxt', l)
+     else throwError ("linear variable used in repetition")
 
 checkPi _ (Nu _ Nothing _) =
   throwError "needing a type for new channels"
@@ -191,7 +194,8 @@ matchSend :: MonadError ErrMsg m =>
    ([(Label, Type)] -> Bool -> Cxt -> m a) -> (Type, Bool, Cxt) -> m a
 matchSend fs _  (TSend s1 s2, b, cxt) = fs s1 s2 b cxt
 matchSend _  fl (TSele ts,    b, cxt) = fl ts b cxt
-matchSend _  _  _ = throwError "TSend expected"
+matchSend _  _  t =
+  throwError ("TSend expected, got " ++ show t)
 
 matchRecv :: MonadError ErrMsg m =>
   (Type -> Type -> Bool -> Cxt -> m a) ->
@@ -244,7 +248,7 @@ lookupChType :: MonadError ErrMsg m =>
   SName -> Cxt -> m (Type, Bool, Cxt)
 lookupChType x cxt =
   liftLookup x cxt >>= \t ->
-  stripUnres t & \(t', unrest) ->
+  stripUnres (unfoldT t) & \(t', unrest) ->
   if unrest then return (t', unrest, cxt)
       else return (t', unrest, rmEntry x cxt)
 
@@ -325,11 +329,13 @@ pn = PN . pack
 
 --
 
+cp = Pos . pack
+cn = Neg . pack
+
 test0 :: Either String (Cxt, [SName])
 test0 = runExcept $ checkPi cxt p
-  where cxt = [(Pos . pack $ "c", tsend TInt (tsend TBool TEnd)),
-               (Pos . pack $ "d",
-                  TSend (TTuple [tInt, tsend TBool TEnd]) TEnd)]
+  where cxt = [(cp "c", tsend TInt (tsend TBool TEnd)),
+               (cp "d", TSend (TTuple [tInt, tsend TBool TEnd]) TEnd)]
         p = Send (cP "c") (eI 3) $
               Send (cP "d") (ETup [eI 4, ePN "c"]) End
         {- p = c[3].d[4,c].0
@@ -337,7 +343,7 @@ test0 = runExcept $ checkPi cxt p
 
 test1 :: Either String (Cxt, [SName])
 test1 = runExcept $ checkPi cxt p
-  where cxt = [(Neg . pack $ "c", trecv TInt (trecv TBool TEnd))]
+  where cxt = [(cn "c", trecv TInt (trecv TBool TEnd))]
         p = recv (cN "c") (pn "x")  $ recv (cN "c") (pn "y")  End
 
 test2 :: Either String (Cxt, [SName])
@@ -346,7 +352,7 @@ test2 = runExcept $ checkPi [] p
         p1 = Send (cP "c") (eI 3) $ Send (cP "c") (eB False) End
         p2 = recv (cN "c") (pn "x") $ recv (cN "c") (pn "y") End
         t = tsend TInt (tsend TBool TEnd)
-        cxt = [(Pos . pack $ "c", t), (Neg . pack $ "c", dual t)]
+        cxt = [(cp "c", t), (cn "c", dual t)]
         {-  p  = nu (c:t) (p1 | p2)
             p1 = c[3].c[False].0
             p2 = c~(x).c~(y).0
@@ -364,14 +370,14 @@ test3 = runExcept $ checkPi cxt0 p2
     t1 = TRecv t0 TEnd
 
     cxt0 :: Cxt
-    cxt0 = [ (Pos (pack "c"), t1)
-           , (Neg (pack "c"), dual t1)
-           , (Pos (pack "d"), t0)
-           , (Neg (pack "d"), dual t0)
+    cxt0 = [ (cp "c", t1)
+           , (cn "c", dual t1)
+           , (cp "d", t0)
+           , (cn "d", dual t0)
            ]
 
-    -- p0 = c[d].d>>{NEG -> d(x).d[-x].0 ;
-    --               ID -> d(x).d[x].0 }
+    -- p0 = c[d].d~>>{NEG -> d(x).d[-x].0 ;
+    --                ID -> d(x).d[x].0 }
     p0 :: Pi
     p0 = Send (cN "c") (ePN "d") $
           choices (cN "d")
@@ -389,6 +395,24 @@ test3 = runExcept $ checkPi cxt0 p2
     -- p2 = nu (c:t1) nu (d:t0) (p0 | p1)
     p2 :: Pi
     p2 = nu "c" t1 (nu "d" t0 p0 `Par` p1)
+
+test4 :: Either String (Cxt, [SName])
+test4 = runExcept $ checkPi cxt p
+  where cxt = [(cp "c", TMu $ TUn $ trecv TInt $ TVar 0)]
+        p = Repl (recv (cP "c") (pn "x") End)
+        -- p = *(c(x).0)
+        -- {c: mu(X)un(?Int.X)}
+
+test5 :: Either String (Cxt, [SName])
+test5 = runExcept $ checkPi cxt p
+  where t = tsend TInt $ trecv TBool TEnd
+        -- {c : mu(X)(un(?(!Int.?Bool.0).X))}
+        -- p = *(c(d). d[3].d(x).0)
+        cxt = [(cp "c", TMu $ TUn $ TRecv t $ TVar 0)]
+        p = Repl (recv (cP "c") (pn "d") $
+                   Send (cP "d") (eI 3) $
+                     recv (cP "d") (pn "x") End)
+
 
 -- try: runExcept $ checkPi [] [] p2
 -- try: run `stack test` for running these tests
