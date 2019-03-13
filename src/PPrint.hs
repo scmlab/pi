@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module PPrint where
 
 
@@ -29,17 +31,17 @@ infix  8 ? !
 -- Names
 instance Pretty Name where
   pretty (ND x) = pretty x
-  pretty (NG i) = pretty "x" <> pretty i
-  pretty (NR StdOut) = pretty "stdout"
-  pretty (NR StdIn) = pretty "stdin"
+  pretty (NG i) = "x" <> pretty i
+  pretty (NR StdOut) = "stdout"
+  pretty (NR StdIn) = "stdin"
 
 instance Pretty PName where
   pretty (PH x) = pretty x
-  pretty (PG i) = pretty "x" <> pretty i
+  pretty (PG i) = "x" <> pretty i
 
 instance Pretty a => Pretty (PN a) where
   pretty (Pos x) = pretty x
-  pretty (Neg x) = pretty "~" <> pretty x
+  pretty (Neg x) = "~" <> pretty x
 
 -- Values
 instance Pretty Val where
@@ -79,30 +81,30 @@ ppInfixL opp op pp1 pp2 p =
 ppExpr :: Expr -> Int -> Doc a
 ppExpr (EV v) _ = pretty v
 ppExpr (EAdd e1 e2) p =
-  ppInfixL 6 (pretty "+") (ppExpr e1) (ppExpr e2) p
+  ppInfixL 6 "+" (ppExpr e1) (ppExpr e2) p
 ppExpr (ESub e1 e2) p =
-  ppInfixL 6 (pretty "-") (ppExpr e1) (ppExpr e2) p
+  ppInfixL 6 "-" (ppExpr e1) (ppExpr e2) p
 ppExpr (EMul e1 e2) p =
-  ppInfixL 7 (pretty "*") (ppExpr e1) (ppExpr e2) p
+  ppInfixL 7 "*" (ppExpr e1) (ppExpr e2) p
 ppExpr (EDiv e1 e2) p =
-  ppInfixL 7 (pretty "/") (ppExpr e1) (ppExpr e2) p
+  ppInfixL 7 "/" (ppExpr e1) (ppExpr e2) p
 ppExpr (EEQ e1 e2) p =
-  ppInfixL 8 (pretty "==") (ppExpr e1) (ppExpr e2) p
+  ppInfixL 8 "==" (ppExpr e1) (ppExpr e2) p
 ppExpr (ENEQ e1 e2) p =
-  ppInfixL 8 (pretty "!=") (ppExpr e1) (ppExpr e2) p
+  ppInfixL 8 "!=" (ppExpr e1) (ppExpr e2) p
 ppExpr (EGT e1 e2) p =
-  ppInfixL 8 (pretty ">") (ppExpr e1) (ppExpr e2) p
+  ppInfixL 8 ">" (ppExpr e1) (ppExpr e2) p
 ppExpr (EGTE e1 e2) p =
-  ppInfixL 8 (pretty ">=") (ppExpr e1) (ppExpr e2) p
+  ppInfixL 8 ">=" (ppExpr e1) (ppExpr e2) p
 ppExpr (ELT e1 e2) p =
-  ppInfixL 8 (pretty "<") (ppExpr e1) (ppExpr e2) p
+  ppInfixL 8 "<" (ppExpr e1) (ppExpr e2) p
 ppExpr (ELTE e1 e2) p =
-  ppInfixL 8 (pretty "<=") (ppExpr e1) (ppExpr e2) p
+  ppInfixL 8 "<=" (ppExpr e1) (ppExpr e2) p
 ppExpr (EIf e0 e1 e2) p =
   shParen (p > 5)
-    (sep [pretty "if" <+> nest 2 (ppExpr e0 5),
-          pretty "then" <+> nest 2 (ppExpr e1 5),
-          pretty "else" <+> nest 2 (ppExpr e2 5)])
+    (sep ["if" <+> nest 2 (ppExpr e0 5),
+          "then" <+> nest 2 (ppExpr e1 5),
+          "else" <+> nest 2 (ppExpr e2 5)])
 ppExpr (ETup es) _ =
   encloseSep langle rangle comma
     (map (flip ppExpr 5) es)
@@ -110,41 +112,41 @@ ppExpr (EPrj _ _) _ = error "ppExpr EPrj not defined"
 
 
 ppPi :: Pi -> Int -> Doc a
-ppPi End _ = pretty "end"
+ppPi End _ = "end"
 ppPi (Send c e p) pr =
   shParen (pr > 4)
    (group . nest 4 . vsep $
-        [pretty c <> pretty "!" <>
-           ppExpr e 8 <+> pretty ".",
+        [pretty c <> "!" <>
+           ppExpr e 8 <+> ".",
          ppPi p 4])
 ppPi (Recv c [Clause xs p]) pr =
   shParen (pr > 4)
    (group . nest 4 . vsep $
-     [pretty c <> pretty "?" <> pretty xs <+> pretty ".",
+     [pretty c <> "?" <> pretty xs <+> ".",
       ppPi p 4])
 ppPi (Recv c clauses) pr =
   shParen (pr > 4)
-   (pretty c <> pretty "?{" <+>
-    align (encloseSep mempty (pretty " }") sepa (map clause clauses)))
- where sepa = flatAlt mempty (pretty "; ")
+   (pretty c <> "?{" <+>
+    align (encloseSep mempty " }" sepa (map clause clauses)))
+ where sepa = flatAlt mempty "; "
        clause (Clause xs p) =
-          pretty xs <+> pretty "->" <+>
+          pretty xs <+> "->" <+>
            ppPi p 4
 ppPi (Par p1 p2) pr =
-  ppInfixL 3 (pretty "|") (ppPi p1) (ppPi p2) pr
+  ppInfixL 3 "|" (ppPi p1) (ppPi p2) pr
 ppPi (Nu x Nothing p) pr =
   shParen (pr > 4) $
     group . nest 4 . vsep $
-      [ pretty "(nu " <> pretty x <> pretty ")"
+      [ "(nu " <> pretty x <> ")"
       , ppPi p 4
       ]
 ppPi (Nu x (Just t) p) pr =
   shParen (pr > 4) $
     group . nest 4 . vsep $
-      [ pretty "(nu " <> pretty x <> pretty " : " <> pretty t <> pretty ")"
+      [ "(nu " <> pretty x <> " : " <> pretty t <> ")"
       , ppPi p 4
       ]
-ppPi (Repl p) _ = pretty "*" <+> pretty p
+ppPi (Repl p) _ = "*" <+> pretty p
 ppPi (Call p) _ = pretty p
 
 -- ppClauses [(xs,p)] =
@@ -154,40 +156,36 @@ instance Pretty Pi where
   pretty p = ppPi p 0
 
 ppDef :: Name -> Pi -> Doc a
-ppDef x p = pretty x <+> pretty "=" <+>
+ppDef x p = pretty x <+> "=" <+>
             nest 4 (ppPi p 0)
 
 ppDefs :: [(Name, Pi)] -> Doc a
 ppDefs = vsep . map (uncurry ppDef)
 
-
 -- Types
-instance Pretty SType where
-  pretty TEnd = pretty "∅"
-  pretty (TSend (Left expr) t) = pretty "!" <> pretty expr <> pretty " . " <> pretty t
-  pretty (TSend (Right chan) t) = pretty "!" <> pretty chan <> pretty " . " <> pretty t
-  pretty (TRecv (Left expr) t) = pretty "?" <> pretty expr <> pretty " . " <> pretty t
-  pretty (TRecv (Right chan) t) = pretty "?" <> pretty chan <> pretty " . " <> pretty t
+instance Pretty Type where
+  pretty TEnd = "∅"
+  pretty (TBase t) = pretty t
+  pretty (TTuple elems) = encloseSep "(" ")" ", " $ map pretty elems
+  pretty (TSend t u) = "!" <> pretty t <> " . " <> pretty u
+  pretty (TRecv t u) = "?" <> pretty t <> " . " <> pretty u
   pretty (TSele selections) =
-    pretty "!" <+> align (encloseSep lbracket rbracket semi selections')
+    "!" <+> align (encloseSep lbracket rbracket semi selections')
     where selections' = map (\(label, t) ->
-              pretty label <> pretty " : " <> pretty t) selections
+              pretty label <> " : " <> pretty t) selections
   pretty (TChoi choices) =
-    pretty "?" <+> align (encloseSep lbracket rbracket semi choices')
+    "?" <+> align (encloseSep lbracket rbracket semi choices')
     where choices' = map (\(label, t) ->
-              pretty label <> pretty " : " <> pretty t) choices
-  pretty (TCall name) = pretty name
+              pretty label <> " : " <> pretty t) choices
+  pretty (TUn t) = "un(" <> pretty t <> ")"
+  pretty (TVar t) = "$" <> pretty t
+  pretty (TMu t) = "μ(" <> pretty t <> ")"
+
 
 instance Pretty BType where
-  pretty TInt = pretty "Int"
-  pretty TBool = pretty "Bool"
-  pretty (TTuple elems) = encloseSep
-                    (pretty "(")
-                    (pretty ")")
-                    (pretty ", ")
-                    (map pretty elems)
-
-
+  pretty TInt  = "Int"
+  pretty TBool = "Bool"
+  
 --------------------------------------------------------------------------------
 -- | Source Code Annotation
 
