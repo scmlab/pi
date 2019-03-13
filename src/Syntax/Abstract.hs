@@ -16,6 +16,7 @@ type ErrMsg = String
 type RName = Text   -- row name
 type ProcName = Text
 
+type SName = PN RName
 data Name = ND (PN RName)   -- user defined
           | NG (PN Int)     -- system generated
           | NR ResName      -- reserved name
@@ -25,12 +26,13 @@ data PName = PH RName        -- "pure" names, without polarization
            | PG Int
    deriving (Eq, Show)
 
-data PN a = Pos a | Neg a
+data PN a = Pos a | Neg a -- | Neu a
     deriving (Ord, Eq, Show)
 
 depolar :: PN a -> a
 depolar (Pos x) = x
 depolar (Neg x) = x
+-- depolar (Neu x) = x
 
 depolarCh :: Name -> PName
 depolarCh (ND c) = PH (depolar c)
@@ -56,7 +58,7 @@ data Pi = End
         | Send Name Expr Pi
         | Recv Name [Clause]
         | Par Pi Pi
-        | Nu RName (Maybe SType) Pi
+        | Nu RName (Maybe Type) Pi
         | Repl Pi
         | Call ProcName
    deriving (Eq, Show)
@@ -113,6 +115,9 @@ ePN = EV . N . ND . Pos . pack
 
 eNN :: String -> Expr
 eNN = EV . N . ND . Neg . pack
+
+-- eN :: String -> Expr
+-- eN  = EV . N . ND . Neu . pack
 
 eI :: Int -> Expr
 eI = EV . VI
@@ -381,7 +386,9 @@ instance FromConcrete (C.Sort ann) BType where
   fromConcrete (C.SortInt _)  = TInt
   fromConcrete (C.SortBool _) = TBool
 
-instance FromConcrete (C.Type ann) SType where
+instance FromConcrete (C.Type ann) Type where
+  fromConcrete = undefined
+{- To banacorn: please fixe this later. Thank you!
   fromConcrete (C.TypeEnd _             ) = TEnd
   fromConcrete (C.TypeSend (Left  s) t _) = TSend (Left (fromConcrete s)) (fromConcrete t)
   fromConcrete (C.TypeSend (Right s) t _) = TSend (Right (fromConcrete s)) (fromConcrete t)
@@ -391,4 +398,5 @@ instance FromConcrete (C.Type ann) SType where
     TSele (map (\(C.TypeOfLabel l t _) -> (fromConcrete l, fromConcrete t)) selections)
   fromConcrete (C.TypeChoi choices     _) =
     TChoi (map (\(C.TypeOfLabel l t _) -> (fromConcrete l, fromConcrete t)) choices)
-  fromConcrete (C.TypeCall call        _) = TCall (fromConcrete call)
+--  fromConcrete (C.TypeCall call        _) = TCall (fromConcrete call)
+-}
