@@ -31,6 +31,7 @@ data Token
   | TokenSortBool
   | TokenDoubleQuote
   | TokenParenStart | TokenParenEnd
+  | TokenBracketStart | TokenBracketEnd
   | TokenAdd | TokenSub | TokenDiv
   | TokenComma
   | TokenBraceStart | TokenBraceEnd | TokenSemi | TokenArrow

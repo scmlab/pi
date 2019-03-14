@@ -32,6 +32,8 @@ tokenRE =
   <|> TokenSortBool     <$ "Bool"
   <|> TokenParenStart   <$ "("
   <|> TokenParenEnd     <$ ")"
+  <|> TokenBracketStart <$ "["
+  <|> TokenBracketEnd   <$ "]"
   <|> TokenAdd          <$ "+"
   <|> TokenSub          <$ "-"
   <|> TokenStar         <$ "*"

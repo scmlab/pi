@@ -43,6 +43,8 @@ import Data.Text (Text)
         '/'             { TokenDiv }
         '{'             { TokenBraceStart }
         '}'             { TokenBraceEnd }
+        '['             { TokenBracketStart }
+        ']'             { TokenBracketEnd }
         ','             { TokenComma }
         ';'             { TokenSemi }
         '->'            { TokenArrow }
@@ -92,7 +94,7 @@ ProcessPar :: {Process Loc}
     | Process                               { $1 }
 
 Process :: {Process Loc}
-    : Name '!' Expr '.' Process               {% locate $ Send $1 $3 $5  }
+    : Name '[' Expr ']' '.' Process           {% locate $ Send $1 $3 $6  }
     | Name '?' '{' Clauses '}'                {% locate $ Recv $1 (reverse $4)  }
     | Name '?' ClauseDot                      {% locate $ Recv $1 [$3]  }
     | 'end'                                   {% locate $ End }

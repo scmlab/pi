@@ -1,9 +1,9 @@
-p0 = x?v . stdout!v+1 . end
-p1 = x?v . stdout!v+2 . end
+p0 = x?v . stdout[v+1] . end
+p1 = x?v . stdout[v+2] . end
 -- asdfd
-p2 = x!100 . end
-p3 = x!200 . end
+p2 = x[100] . end
+p3 = x[200] . end
 -- p2 = stdin?v . x!v . end
 -- p4 = x?v . x!v . end
 
-main = stdout!3 . end | stdout!4 . end
+main = stdout[3] . end | stdout[4] . end
