@@ -10,13 +10,13 @@ import Runtime.Util
 import Interpreter
 import Syntax.Abstract
 
-execute :: RuntimeM IO ()
+execute :: RuntimeM ()
 execute = do
   run handleInput handleOutput
   skipSilent
   execute
 
-handleInput :: RuntimeM IO Val
+handleInput :: RuntimeM Val
 handleInput = do
   raw <- liftIO $ do
     -- requesting for input
@@ -32,11 +32,11 @@ handleInput = do
       liftIO $ putStrLn $ "cannot parse the input"
       handleInput
 
-handleOutput :: Val -> RuntimeM IO ()
+handleOutput :: Val -> RuntimeM ()
 handleOutput val = liftIO $ do
   putStrLn $ show $ pretty val
 
-skipSilent :: RuntimeM IO ()
+skipSilent :: RuntimeM ()
 skipSilent = do
   next <- selectedFuture
   case next of

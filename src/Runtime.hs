@@ -46,36 +46,36 @@ data Error = ParseError Parser.ParseError
            | RuntimeError String
            deriving (Show)
 
-type RuntimeM m = ExceptT Error (StateT RuntimeState m)
+type RuntimeM = ExceptT Error (StateT RuntimeState IO)
 
 --------------------------------------------------------------------------------
 
-putFilePath :: Monad m => Maybe FilePath -> RuntimeM m ()
+putFilePath :: Maybe FilePath -> RuntimeM ()
 putFilePath x = modify $ \ st -> st { stFilePath = x }
 
-putSource :: Monad m => Maybe ByteString -> RuntimeM m ()
+putSource :: Maybe ByteString -> RuntimeM ()
 putSource x = modify $ \ st -> st { stSource = x }
 
-putEnv :: Monad m => Maybe Env -> RuntimeM m ()
+putEnv :: Maybe Env -> RuntimeM ()
 putEnv x = modify $ \ st -> st { stEnv = x }
 
-pushHistory :: Monad m => Outcome -> RuntimeM m ()
+pushHistory :: Outcome -> RuntimeM ()
 pushHistory x = do
   xs <- gets stHistory
   modify $ \st -> st { stHistory = x:xs }
 
-updateFuture :: Monad m => [Outcome] -> RuntimeM m ()
+updateFuture :: [Outcome] -> RuntimeM ()
 updateFuture outcomes = modify $ \ st -> st
   { stFuture = outcomes
   , stCursor = if null outcomes then Nothing else Just 0
   }
 
-putCursor :: Monad m => Maybe Int -> RuntimeM m ()
+putCursor :: Maybe Int -> RuntimeM ()
 putCursor x = modify $ \ st -> st { stCursor = x }
 
 --------------------------------------------------------------------------------
 
-runRuntimeM :: Monad m => RuntimeM m a -> m (Either Error a, RuntimeState)
+runRuntimeM :: RuntimeM a -> IO (Either Error a, RuntimeState)
 runRuntimeM handler =
   runStateT (runExceptT handler) (State Nothing Nothing Nothing [] initialOutcomes Nothing)
   where initialOutcomes = [Failure "please load first"]
@@ -91,15 +91,15 @@ interpret env st program = map toOutcome (runPiMonad env st program)
 --------------------------------------------------------------------------------
 -- | Cursor related operations
 
-withCursor :: Monad m => (Int -> RuntimeM m a) -> RuntimeM m a
--- withCursor :: Monad m => (Int -> RuntimeM m a) -> RuntimeM m a
+withCursor :: (Int -> RuntimeM a) -> RuntimeM a
+-- withCursor :: (Int -> RuntimeM a) -> RuntimeM a
 withCursor f = do
   cursor <- gets stCursor
   case cursor of
     Nothing -> throwError $ RuntimeError "cannot go any further"
     Just n -> f n
 
-choose :: Monad m => Int -> RuntimeM m ()
+choose :: Int -> RuntimeM ()
 choose n = do
   len <- length <$> gets stFuture
   if n >= len then
@@ -110,18 +110,18 @@ choose n = do
     putCursor (Just n)
 
 -- retrieve the next appointed outcome
-selectedFuture :: Monad m => RuntimeM m Outcome
+selectedFuture :: RuntimeM Outcome
 selectedFuture = do
   withCursor $ \n -> (!! n) <$> gets stFuture
 
-latestHistory :: Monad m => RuntimeM m Outcome
+latestHistory :: RuntimeM Outcome
 latestHistory = do
   history <- gets stHistory
   if null history
     then throwError $ RuntimeError "no history to retrieve from"
     else return (head history)
 
-latestState :: Monad m => RuntimeM m St
+latestState :: RuntimeM St
 latestState = do
   outcome <- latestHistory
   case outcome of
@@ -131,7 +131,7 @@ latestState = do
 --------------------------------------------------------------------------------
 -- | Commands
 
-load :: (MonadIO m, Monad m) => FilePath -> RuntimeM m ()
+load :: FilePath -> RuntimeM ()
 load filePath = do
   -- storing the filepath
   putFilePath (Just filePath)
@@ -151,7 +151,7 @@ load filePath = do
       env' <- gets stEnv
       case env' of
         Just defns -> do
-          result <- runTCM checkAll defns
+          let result = runTCM checkAll defns
           case result of
             Left err -> throwError $ TypeError err
             Right _ -> return ()
@@ -171,7 +171,7 @@ load filePath = do
           updateFuture $ interpret env state step
         Failure _ -> throwError $ RuntimeError "cannot retrieve outcome"
 
-test :: (MonadIO m, Monad m) => RuntimeM m ()
+test :: RuntimeM ()
 test = do
   filePath <- getFilePath
   rawFile <- liftIO $ BS.readFile filePath
@@ -182,16 +182,15 @@ test = do
 
 
 -- read and parse and store program from the stored filepath
-reload :: (MonadIO m, Monad m) => RuntimeM m ()
+reload :: RuntimeM ()
 reload = do
   filePath <- getFilePath
   load filePath
 
 -- run the appointed outcome
-run :: Monad m
-  => RuntimeM m Val   -- input handler
-  -> (Val -> RuntimeM m ())   -- output handler
-  -> RuntimeM m ()
+run :: RuntimeM Val   -- input handler
+  -> (Val -> RuntimeM ())   -- output handler
+  -> RuntimeM ()
 run inputHandler outputHandler = do
   outcome <- selectedFuture
   pushHistory outcome
@@ -229,14 +228,14 @@ run inputHandler outputHandler = do
 -- | Helpers
 
 -- get existing filepath from the state
-getFilePath :: Monad m => RuntimeM m FilePath
+getFilePath :: RuntimeM FilePath
 getFilePath = do
   result <- gets stFilePath
   case result of
     Nothing       -> throwError $ RuntimeError "please load the program first"
     Just filePath -> return filePath
 
-getEnv :: Monad m => RuntimeM m Env
+getEnv :: RuntimeM Env
 getEnv = do
   result <- gets stEnv
   case result of
@@ -260,7 +259,7 @@ data Request
 --------------------------------------------------------------------------------
 -- | Converting parsed program
 
-programToEnv :: Monad m => Program -> RuntimeM m Env
+programToEnv :: Program -> RuntimeM Env
 programToEnv (Program declarations) = do
   -- throw if there is any type signature without a corresponding process definition
   unless (Map.null onlyTypes) $

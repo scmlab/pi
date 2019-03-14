@@ -36,21 +36,21 @@ humanREPL False (filePath:_) = void $ runRuntimeM $ do
     load filePath
     execute
 
-loop :: RuntimeM IO ()
+loop :: RuntimeM ()
 loop = do
   liftIO getKey >>= handleError . handleRequest . parseRequest
   loop
 
-handleError :: RuntimeM IO () -> RuntimeM IO ()
+handleError :: RuntimeM () -> RuntimeM ()
 handleError program = program `catchError` \ err -> case err of
   ParseError parseError -> gets stSource >>= liftIO . printParseError parseError
   TypeError msg -> liftIO (putStrLn (show msg))
   RuntimeError msg -> liftIO (putStrLn (show msg))
 
-try :: RuntimeM IO () -> RuntimeM IO ()
+try :: RuntimeM () -> RuntimeM ()
 try program = program `catchError` \_ -> return ()
 
-handleRequest :: Request -> RuntimeM IO ()
+handleRequest :: Request -> RuntimeM ()
 handleRequest (CursorMoveTo n)  = do
   choose n
   printFuture
@@ -65,7 +65,7 @@ handleRequest CursorForth        = do
   skipSilent
   printFuture
   where
-    handleInput :: RuntimeM IO Val
+    handleInput :: RuntimeM Val
     handleInput = do
       raw <- liftIO $ do
         yellow $ putStrLn $ "\nInput:"
@@ -83,12 +83,12 @@ handleRequest CursorForth        = do
           liftIO $ red $ putStrLn $ "cannot parse the input"
           handleInput
 
-    handleOutput :: Val -> RuntimeM IO ()
+    handleOutput :: Val -> RuntimeM ()
     handleOutput val = liftIO $ do
       yellow $ putStrLn $ "\nOutput:"
       green $ putStrLn $ show $ pretty val
 
-    skipSilent :: RuntimeM IO ()
+    skipSilent :: RuntimeM ()
     skipSilent = do
       next <- selectedFuture
       case next of
@@ -164,7 +164,7 @@ getKey = do
 --------------------------------------------------------------------------------
 -- | Printing stuff
 
-displayHelp :: RuntimeM IO ()
+displayHelp :: RuntimeM ()
 displayHelp = liftIO $ do
   putStrLn "========================================"
   putStrLn "  ** Pi Tracer **   "
@@ -175,7 +175,7 @@ displayHelp = liftIO $ do
   putStrLn "  :exec                 for execution           (:x)"
   putStrLn "========================================"
 
-printFuture :: RuntimeM IO ()
+printFuture :: RuntimeM ()
 printFuture = do
   previousState <- latestState
   next <- selectedFuture
@@ -246,7 +246,7 @@ printPool name selected processes = do
           printProcess
           putStrLn ""
 
-printPools :: [(PID, IO ())] -> St -> RuntimeM IO ()
+printPools :: [(PID, IO ())] -> St -> RuntimeM ()
 printPools targets (St senders receivers callers replNus io _ _ _) = liftIO $ do
   printPool "senders"         targets (map snd senders)
   printPool "receivers"       targets (map snd receivers)
@@ -255,7 +255,7 @@ printPools targets (St senders receivers callers replNus io _ _ _) = liftIO $ do
   printPool "I/O tasks"       targets io
 
 
-printStatusBar :: RuntimeM IO ()
+printStatusBar :: RuntimeM ()
 printStatusBar = do
   outcomes <- gets stFuture
   cursor <- gets stCursor

@@ -32,10 +32,10 @@ data TypeError = MissingProcDefn (Map ProcName Type)
 --------------------------------------------------------------------------------
 -- | Type Checking Monad
 
-type TCM m = ExceptT TypeError (ReaderT Env m)
+type TCM = ExceptT TypeError (Reader Env)
 
-runTCM :: Monad m => TCM m a -> Env -> m (Either TypeError a)
-runTCM = runReaderT . runExceptT
+runTCM :: TCM a -> Env -> Either TypeError a
+runTCM = runReader . runExceptT
 
 --------------------------------------------------------------------------------
 -- | Some checkings
@@ -43,7 +43,7 @@ runTCM = runReaderT . runExceptT
 --------------------------------------------------------------------------------
 -- | Checkings
 
-checkAll :: Monad m => TCM m ()
+checkAll :: TCM ()
 checkAll = do
 
   env <- ask
@@ -53,7 +53,7 @@ checkAll = do
   return ()
 
   where
-    checkType :: Monad m => ProcName -> (Pi, Type) -> TCM m ()
+    checkType :: ProcName -> (Pi, Type) -> TCM ()
     checkType name (process, t) = undefined
 
 --------------------------------------------------------------------------------
