@@ -15,6 +15,7 @@ import Data.Maybe (mapMaybe)
 
 import Syntax.Abstract
 import Type
+import Type.TypeCheck
 -- import Syntax.Concrete (restore)
 import qualified Syntax.Parser as Parser
 import Interpreter
@@ -149,7 +150,11 @@ load filePath = do
       -- do some checkings
       env' <- gets stEnv
       case env' of
-        Just defns -> checkAll defns
+        Just defns -> do
+          result <- runTCM checkAll defns
+          case result of
+            Left err -> throwError $ TypeError err
+            Right _ -> return ()
         Nothing -> return ()
 
 
@@ -253,32 +258,7 @@ data Request
   deriving (Show)
 
 --------------------------------------------------------------------------------
--- | Checkings
-
-data TypeError = MissingProcDefn (Map ProcName Type)
-  deriving (Show)
-
-checkAll :: Monad m => Env -> RuntimeM m ()
-checkAll env = do
-
-  undefined
-
-  -- -- type check those typed definitions
-  -- env' <- gets stEnv
-  -- error $ show env'
-  --
-  -- case env' of
-  --   Just defns -> do
-  --     defns' <- Map.traverseMaybeWithKey (const (return . withType)) defns
-  --     error $ show defns'
-  --     undefined
-  --
-  --   Nothing -> return ()
-
-
-
---------------------------------------------------------------------------------
--- | Checkings
+-- | Converting parsed program
 
 programToEnv :: Monad m => Program -> RuntimeM m Env
 programToEnv (Program declarations) = do
@@ -305,7 +285,3 @@ programToEnv (Program declarations) = do
 
     onlyTypes :: Map ProcName Type
     onlyTypes =  Map.difference typeSigns procDefns
-
-withType :: DefnPair -> Maybe (Pi, Type)
-withType (WithType p t) = Just (p, t)
-withType (WithoutType p) = Nothing

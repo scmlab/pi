@@ -8,7 +8,7 @@ import Test.Tasty.HUnit
 import Control.Monad.IO.Class
 
 import Interpreter (PiMonad, hasUnguardedRecursion, initialState, runPiMonad)
-import Interpreter.Monad (programToEnv)
+import Base (programToEnv)
 import Syntax.Parser
 import Syntax.Abstract
 

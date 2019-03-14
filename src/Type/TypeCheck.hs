@@ -6,10 +6,58 @@ import Control.Arrow ((***))
 import Control.Monad.Except
 import Data.Text (pack)
 import Data.Function ((&))
+import qualified Data.Map as Map
+import Data.Map (Map)
 
 import Syntax.Abstract
 import Type
 import Utilities
+import Base
+
+import Control.Monad.Reader
+import Control.Monad.Except
+
+
+--------------------------------------------------------------------------------
+-- | State
+
+-- data TCState = TCState {}
+
+--------------------------------------------------------------------------------
+-- | Error
+
+data TypeError = MissingProcDefn (Map ProcName Type)
+  deriving (Show)
+
+--------------------------------------------------------------------------------
+-- | Type Checking Monad
+
+type TCM m = ExceptT TypeError (ReaderT Env m)
+
+runTCM :: Monad m => TCM m a -> Env -> m (Either TypeError a)
+runTCM = runReaderT . runExceptT
+
+--------------------------------------------------------------------------------
+-- | Some checkings
+
+--------------------------------------------------------------------------------
+-- | Checkings
+
+checkAll :: Monad m => TCM m ()
+checkAll = do
+
+  env <- ask
+  withTypes <- Map.traverseMaybeWithKey (const (return . withType)) env
+  Map.traverseWithKey checkType withTypes
+
+  return ()
+
+  where
+    checkType :: Monad m => ProcName -> (Pi, Type) -> TCM m ()
+    checkType name (process, t) = undefined
+
+--------------------------------------------------------------------------------
+-- | Code
 
 type Cxt = FMap SName Type
 

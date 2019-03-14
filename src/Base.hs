@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances, MultiParamTypeClasses #-}
 
-module Interpreter.Monad where
+module Base where
 
 import Control.Applicative
 import Control.Monad.Except
@@ -8,9 +8,14 @@ import Data.Map (Map)
 import Syntax.Abstract
 import Type
 
+--------------------------------------------------------------------------------
+-- | Env
+
 type Env = Map ProcName DefnPair
 
-
+withType :: DefnPair -> Maybe (Pi, Type)
+withType (WithType p t) = Just (p, t)
+withType (WithoutType p) = Nothing
 
 --------------------------------------------------------------------------------
 -- | The EitherT monad transformer, from https://hackage.haskell.org/package/either-4.4.1/

@@ -8,7 +8,7 @@ module Interpreter
   , PiMonad, runPiMonad
   , Effect(..), IOTask(..), St(..), Sender(..), Receiver(..), Caller(..), ReplNu(..)
   , initialState
-  , module Interpreter.Monad
+  , module Base
   ) where
 
 import Control.Monad.State
@@ -22,7 +22,7 @@ import Data.Function (on)
 import Data.Text.Prettyprint.Doc
 import PPrint ()
 
-import Interpreter.Monad
+import Base
 import Syntax.Abstract
 import Utilities
 
