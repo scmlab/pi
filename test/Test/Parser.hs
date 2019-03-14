@@ -47,13 +47,13 @@ source = "\
 \f = a | e\n\
 \"
 
-unguardedRecursion1 :: TestTree
-unguardedRecursion1 = testCase "unguarded call" $ do
-  p <- parseProc "b"
-  actual <- testWith source $ do
-    hasUnguardedRecursion ["b"] p
-  let expected = [True]
-  actual @?= expected
+-- unguardedRecursion1 :: TestTree
+-- unguardedRecursion1 = testCase "unguarded call" $ do
+--   p <- parseProc "b"
+--   actual <- testWith source $ do
+--     hasUnguardedRecursion ["b"] p
+--   let expected = [True]
+--   actual @?= expected
 
 
 --

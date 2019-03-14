@@ -14,8 +14,6 @@ import Language.Lexer.Applicative
 data Token
   = TokenDefn
   | TokenEnd
-  | TokenSend
-  | TokenRecv
   | TokenChoice
   | TokenSelect
   | TokenNu
@@ -37,7 +35,13 @@ data Token
   | TokenAdd | TokenSub | TokenDiv
   | TokenComma
   | TokenBraceStart | TokenBraceEnd | TokenSemi | TokenArrow
+
+  -- typing stuff
   | TokenTypeOf
+  | TokenTypeSend
+  | TokenTypeRecv
+  | TokenTypeEnd
+
   -- boolean stuff
   | TokenTrue
   | TokenFalse

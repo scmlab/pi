@@ -1,4 +1,4 @@
-chioce : Int
+chioce : !Int . 0
 choice = x >>
   { HI    -> y["hi"] . end
   ; HELLO -> y["hello"] . end

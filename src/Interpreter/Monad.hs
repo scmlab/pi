@@ -4,16 +4,34 @@ module Interpreter.Monad where
 
 import Control.Applicative
 import Control.Monad.Except
+import Data.Maybe (mapMaybe)
 import Data.Map (Map)
 import qualified Data.Map as Map
 
 import Syntax.Abstract
+import Type
 
-type Env = Map Name Pi
+type Env = Map ProcName DefnPair
 
 programToEnv :: Program -> Env
-programToEnv (Program declrations) =
-  Map.fromList $ map (\(ProcDefn name p) -> (ND (Pos name), p)) declrations
+programToEnv (Program declarations) = Map.union withTypes withoutTypes
+  where
+    toTypeSignPair (TypeSign n t) = Just (n, t)
+    toTypeSignPair _              = Nothing
+
+    toProcDefnPair (ProcDefn n t) = Just (n, t)
+    toProcDefnPair _              = Nothing
+
+    typeSigns = Map.fromList $ mapMaybe toTypeSignPair declarations
+    procDefns = Map.fromList $ mapMaybe toProcDefnPair declarations
+
+    withTypes :: Map ProcName DefnPair
+    withTypes = fmap (uncurry WithType) $ Map.intersectionWith (,) procDefns typeSigns
+
+    withoutTypes :: Map ProcName DefnPair
+    withoutTypes =  fmap WithoutType $ Map.difference procDefns typeSigns
+
+
 
 --------------------------------------------------------------------------------
 -- | The EitherT monad transformer, from https://hackage.haskell.org/package/either-4.4.1/

@@ -31,8 +31,6 @@ import Data.Text (Text)
         'end'           { TokenEnd }
         'nu'            { TokenNu }
         '='             { TokenDefn      }
-        '!'             { TokenSend      }
-        '?'             { TokenRecv      }
         '>>'            { TokenChoice      }
         '<<'            { TokenSelect      }
         '.'             { TokenSeq       }
@@ -53,6 +51,10 @@ import Data.Text (Text)
         ':'             { TokenTypeOf }
         'Int'           { TokenSortInt }
         string          { TokenString $$ }
+        -- typing stuff
+        '!'             { TokenTypeSend      }
+        '?'             { TokenTypeRecv      }
+        '0'             { TokenTypeEnd      }
         -- boolean stuff
         'Bool'          { TokenSortBool }
         'True'          { TokenTrue }
@@ -89,6 +91,7 @@ Definitions :: {[Definition Loc]}
 
 Definition :: {Definition Loc}
     : SimpName '=' ProcessPar                   {% locate $ ProcDefn $1 $3 }
+    | SimpName ':' Type                         {% locate $ TypeSign $1 $3 }
 
 -- left recursive
 ProcessPar :: {Process Loc}
@@ -170,16 +173,21 @@ SelectLabel :: {Expr Loc}
 Label :: {Label Loc}
     : label                                 {% locate $ Label $1 }
 
-Base :: {Base Loc}
+BaseType :: {BaseType Loc}
     : 'Int'                                 {% locate $ BaseInt }
     | 'Bool'                                {% locate $ BaseBool }
 
+TypeBase :: {Type Loc}
+    : BaseType                              {% locate $ TypeBase $1  }
+
 Type :: {Type Loc}
-    : '!' Type '.' Type                     {% locate $ TypeSend $2 $4 }
+    : '0'                                   {% locate $ TypeEnd }
+    | '!' TypeBase '.' Type                 {% locate $ TypeSend $2 $4 }
+    | '!' Type '.' Type                     {% locate $ TypeSend $2 $4 }
+    | '?' TypeBase '.' Type                 {% locate $ TypeRecv $2 $4 }
     | '?' Type '.' Type                     {% locate $ TypeRecv $2 $4 }
-    | '!' '{' TypeOfLabels '}'              {% locate $ TypeSele (reverse $3)  }
-    | '?' '{' TypeOfLabels '}'              {% locate $ TypeChoi (reverse $3)  }
-    | 'end'                                 {% locate $ TypeEnd                }
+    | '>>' '{' TypeOfLabels '}'             {% locate $ TypeSele (reverse $3)  }
+    | '<<' '{' TypeOfLabels '}'             {% locate $ TypeChoi (reverse $3)  }
 
 TypeOfLabel :: {TypeOfLabel Loc}
     : Label ':' Type                        {% locate $ TypeOfLabel $1 $3  }

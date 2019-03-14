@@ -70,11 +70,12 @@ data Expr     ann = ExprTuple [Expr ann]                                ann
                   deriving (Show, Functor)
 
 -- Session Types
-data Base ann = BaseInt                                                 ann
+data BaseType ann
+              = BaseInt                                                 ann
               | BaseBool                                                ann
               deriving (Show, Functor)
 data Type ann = TypeEnd                                                 ann
-              | TypeBase      (Base ann)                                ann
+              | TypeBase      (BaseType ann)                            ann
               | TypeTuple     [Type ann]                                ann
               | TypeSend      (Type ann) (Type ann)                     ann
               | TypeRecv      (Type ann) (Type ann)                     ann
@@ -155,7 +156,7 @@ instance Located (Expr Loc) where
   locOf (ExprLabel _ loc) = loc
   locOf (ExprString _ loc) = loc
 
-instance Located (Base Loc) where
+instance Located (BaseType Loc) where
   locOf (BaseInt loc) = loc
   locOf (BaseBool loc) = loc
 
@@ -246,7 +247,7 @@ instance ToAbstract (Expr ann) A.Expr where
   toAbstract (ExprLabel x _) = A.EV (A.VL (toAbstract x))
   toAbstract (ExprString x _) = A.EV (A.VS x)
 
-instance ToAbstract (Base ann) A.BType where
+instance ToAbstract (BaseType ann) A.BType where
   toAbstract (BaseInt _)  = A.TInt
   toAbstract (BaseBool _) = A.TBool
 

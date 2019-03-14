@@ -21,8 +21,6 @@ tokenRE :: RE Char Token
 tokenRE =
       TokenDefn         <$ "="
   <|> TokenEnd          <$ "end"
-  <|> TokenSend         <$ "!"
-  <|> TokenRecv         <$ "?"
   <|> TokenChoice       <$ ">>"
   <|> TokenSelect       <$ "<<"
   <|> TokenNu           <$ "nu"
@@ -47,6 +45,11 @@ tokenRE =
   <|> TokenSemi         <$ ";"
   <|> TokenArrow        <$ "->"
   <|> TokenTypeOf       <$ ":"
+
+  -- Typing stuff
+  <|> TokenTypeSend     <$ "!"
+  <|> TokenTypeRecv     <$ "?"
+  <|> TokenTypeEnd      <$ "0"
   -- Boolean stuff
   <|> TokenTrue         <$ "True"
   <|> TokenFalse        <$ "False"

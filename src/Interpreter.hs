@@ -7,7 +7,7 @@ module Interpreter
   , PID(..), HasPID(..), invokedBy
   , PiMonad, runPiMonad
   , Effect(..), IOTask(..), St(..), Sender(..), Receiver(..), Caller(..), ReplNu(..)
-  , hasUnguardedRecursion, initialState
+  , initialState
   , module Interpreter.Monad
   ) where
 
@@ -31,7 +31,6 @@ import Utilities
 
 data PID = PID
   { pReplicable   :: Bool       -- can be infinitely replicated
-  -- , pRestrictive  :: Bool       -- should create a new name
   , pInvokedBy    :: ProcName   -- the process that invoked this
   , pID           :: Int        -- unique ID
   }
@@ -218,29 +217,6 @@ lineup ((c, x):xs) = do
   addPi (PID False c) x
   lineup xs
 
--- A process has unguarded recursions
--- if the graph formed by unguarded calls has loops.
-hasUnguardedRecursion
-  :: [ProcName]     -- traversed unguarded calls
-  -> Pi             -- the process to check on
-  -> PiMonad Bool
-hasUnguardedRecursion t (Par p q) = liftM2 (||)
-  (hasUnguardedRecursion t p)
-  (hasUnguardedRecursion t q)
-hasUnguardedRecursion _ (Repl _)      = return True
-hasUnguardedRecursion t (Call callee) =
-  if callee `elem` t then
-    -- if "callee" has been called
-    return True
-  else do
-    -- expand the callee and keep searching
-    env <- ask
-    case Map.lookup (ND (Pos callee)) env of
-      Just p  -> do
-        hasUnguardedRecursion (callee:t) p
-      Nothing -> throwError $ "definition not found while checking unguarded recursions (looking for " ++ show (pretty callee) ++ ")"
-hasUnguardedRecursion _ _ = return False
-
 --------------------------------------------------------------------------------
 -- |
 
@@ -297,16 +273,12 @@ restict (ReplNu _ x p) = do
 
 call :: Caller -> PiMonad Pi
 call (Caller _ callee) = do
-  env <- ask
-  case Map.lookup (ND (Pos callee)) env of
+  procs <- Map.map toProcess <$> ask
+  case Map.lookup callee procs of
     Just p  -> do
       addPi (PID False callee) p
       return p
     Nothing -> throwError $ "definition not found (looking for " ++ show (pretty callee) ++ ")"
--- call (Replicator (PID _ _ name) p) = do
---   addPi name p
---   addPi name (Repl p)
---   return (Par (Repl p) p)
 
 input :: Val -> IOTask -> PiMonad ()
 input val (Input pid pps) =

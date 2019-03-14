@@ -51,6 +51,12 @@ data Program = Program [Definition]
   deriving (Eq, Show)
 data Definition = ProcDefn ProcName Pi | TypeSign ProcName Type
   deriving (Eq, Show)
+data DefnPair = WithoutType Pi | WithType Pi Type
+  deriving (Eq, Show)
+
+toProcess :: DefnPair -> Pi
+toProcess (WithoutType p) = p
+toProcess (WithType p t) = p
 
 data Pi = End
         | Send Name Expr Pi
