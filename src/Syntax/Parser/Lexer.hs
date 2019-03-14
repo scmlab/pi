@@ -23,6 +23,8 @@ tokenRE =
   <|> TokenEnd          <$ "end"
   <|> TokenSend         <$ "!"
   <|> TokenRecv         <$ "?"
+  <|> TokenChoice       <$ ">>"
+  <|> TokenSelect       <$ "<<"
   <|> TokenNu           <$ "nu"
   <|> TokenSeq          <$ "."
   <|> TokenPar          <$ "|"

@@ -6,4 +6,9 @@ p3 = x[200] . end
 -- p2 = stdin?v . x!v . end
 -- p4 = x?v . x!v . end
 
+choice = x >>
+  { HI    -> x["hi"] . end
+  ; HELLO -> x["hello"] . end
+  }
+
 main = stdout[3] . end | stdout[4] . end

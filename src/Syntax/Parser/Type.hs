@@ -16,6 +16,8 @@ data Token
   | TokenEnd
   | TokenSend
   | TokenRecv
+  | TokenChoice
+  | TokenSelect
   | TokenNu
   | TokenSeq
   | TokenPar

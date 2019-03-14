@@ -1,0 +1,9 @@
+
+choice = x >>
+  { HI    -> y["hi"] . end
+  ; HELLO -> y["hello"] . end
+  }
+
+select = x << HI . y(message) . stdout[message] . end
+
+main = choice | select

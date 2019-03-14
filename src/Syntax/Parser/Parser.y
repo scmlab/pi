@@ -33,6 +33,8 @@ import Data.Text (Text)
         '='             { TokenDefn      }
         '!'             { TokenSend      }
         '?'             { TokenRecv      }
+        '>>'            { TokenChoice      }
+        '<<'            { TokenSelect      }
         '.'             { TokenSeq       }
         '*'             { TokenStar      }
         '|'             { TokenPar       }
@@ -95,8 +97,9 @@ ProcessPar :: {Process Loc}
 
 Process :: {Process Loc}
     : Name '[' Expr ']' '.' Process           {% locate $ Send $1 $3 $6  }
-    | Name '?' '{' Clauses '}'                {% locate $ Recv $1 (reverse $4)  }
-    | Name '?' ClauseDot                      {% locate $ Recv $1 [$3]  }
+    | Name RecvClause                         {% locate $ Recv $1 [$2]  }
+    | Name '>>' '{' ChoiceClauses '}'         {% locate $ Recv $1 (reverse $4)  }
+    | Name '<<' SelectLabel '.' Process       {% locate $ Send $1 $3 $5 }
     | 'end'                                   {% locate $ End }
     | '(' 'nu' SimpName ')' Process           {% locate $ Nu $3 Nothing $5 }
     | '(' 'nu' SimpName ':' Type ')' Process  {% locate $ Nu $3 (Just $5) $7 }
@@ -112,13 +115,13 @@ Patterns :: {[Pattern Loc]}
     : Patterns ',' Pattern                  { $3 : $1 }
     | Pattern  ',' Pattern                  { [ $3, $1 ]  }
 
-ClauseDot :: {Clause Loc}
-        : Pattern '.' ProcessPar            {% locate $  Clause $1 $3 }
-ClauseArr :: {Clause Loc}
+RecvClause :: {Clause Loc}
+        : '(' Pattern ')' '.' ProcessPar    {% locate $  Clause $2 $5 }
+ChoiceClause :: {Clause Loc}
         : Pattern '->' ProcessPar           {% locate $  Clause $1 $3 }
-Clauses :: {[Clause Loc]}
-        : Clauses ';' ClauseArr             { $3 : $1 }
-        | ClauseArr                         { [ $1 ]  }
+ChoiceClauses :: {[Clause Loc]}
+        : ChoiceClauses ';' ChoiceClause    { $3 : $1 }
+        | ChoiceClause                      { [ $1 ]  }
 
 SimpName :: {SimpName Loc}
       : namePos                             {% locate $ SimpName $1 }
@@ -148,7 +151,6 @@ Term :: {Expr Loc}
     : '(' Expr ')'                        { $2 }
     | Name                                {% locate $ ExprName $1 }
     | int                                 {% locate $ ExprDigit $1 }
-    | Label                               {% locate $ ExprLabel $1 }
     | string                              {% locate $ ExprString $1 }
     | Expr '==' Expr                      {% locate $ EQ  $1 $3 }
     | Expr '!=' Expr                      {% locate $ NEQ $1 $3 }
@@ -161,6 +163,10 @@ Term :: {Expr Loc}
 Boolean :: {Expr Loc}
     : 'True'                              {% locate $ ExprBool True }
     | 'False'                             {% locate $ ExprBool False }
+
+SelectLabel :: {Expr Loc}
+    : Label                               {% locate $ ExprLabel $1 }
+
 Label :: {Label Loc}
     : label                                 {% locate $ Label $1 }
 
