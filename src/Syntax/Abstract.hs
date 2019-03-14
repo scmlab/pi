@@ -1,13 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
+
 module Syntax.Abstract where
 
 import Control.Monad.Except
 import Data.Text (Text, pack)
 
-import qualified Syntax.Concrete as C
 import Type
 import Utilities
 
@@ -51,7 +49,7 @@ data ResName = StdOut | StdIn
 
 data Program = Program [Definition]
   deriving (Eq, Show)
-data Definition = ProcDefn ProcName Pi
+data Definition = ProcDefn ProcName Pi | TypeSign ProcName Type
   deriving (Eq, Show)
 
 data Pi = End
@@ -310,93 +308,3 @@ freePtrn :: Ptrn -> [PN RName]
 freePtrn (PN x)  = [Pos x]
 freePtrn (PT xs) = concat (map freePtrn xs)  -- linearity check?
 freePtrn _       = []
-
---------------------------------------------------------------------------------
--- | Converting from Concrete Syntax Tree
-
-class FromConcrete a b | a -> b where
-  fromConcrete :: a -> b
-
-instance FromConcrete (C.Program ann) Program where
-  fromConcrete (C.Program  definitions _) = Program (map fromConcrete definitions)
-
-instance FromConcrete (C.Definition ann) Definition where
-  fromConcrete (C.ProcDefn name process _) = ProcDefn (fromConcrete name) (fromConcrete process)
-
-instance FromConcrete (C.Label ann) Label where
-  fromConcrete (C.Label    label _)     = label
-
-instance FromConcrete (C.SimpName ann) RName where
-  fromConcrete (C.SimpName name    _) = name
-
-instance FromConcrete (C.Name ann) Name where
-  fromConcrete (C.Positive name     _) = ND (Pos name)
-  fromConcrete (C.Negative name     _) = ND (Neg name)
-  fromConcrete (C.Reserved "stdin"  _) = NR StdIn
-  fromConcrete (C.Reserved "stdout" _) = NR StdOut
-  fromConcrete (C.Reserved _        _) = NR StdOut
-
-instance FromConcrete (C.Pattern ann) Ptrn where
-  fromConcrete (C.PtrnName name _)   = PN (fromConcrete name)
-  fromConcrete (C.PtrnTuple patterns _) = PT (map fromConcrete patterns)
-  fromConcrete (C.PtrnLabel label _) = PL (fromConcrete label)
-
-instance FromConcrete (C.Clause ann) Clause where
-  fromConcrete (C.Clause pattern process _) =
-    Clause (fromConcrete pattern) (fromConcrete process)
-
-instance FromConcrete (C.Process ann) Pi where
-  fromConcrete (C.Nu name Nothing process _) =
-    Nu (fromConcrete name) Nothing (fromConcrete process)
-  fromConcrete (C.Nu name (Just t) process _) =
-    Nu (fromConcrete name) (Just (fromConcrete t)) (fromConcrete process)
-  fromConcrete (C.Send name expr process _) =
-    Send (fromConcrete name) (fromConcrete expr) (fromConcrete process)
-  fromConcrete (C.Recv name clauses _) =
-    Recv (fromConcrete name) (map fromConcrete clauses)
-  fromConcrete (C.Par procA procB _) =
-    Par (fromConcrete procA) (fromConcrete procB)
-  fromConcrete (C.Repl process _) =
-    Repl (fromConcrete process)
-  fromConcrete (C.Call name _) =
-    Call (fromConcrete name)
-  fromConcrete (C.End _) =
-    End
-
-instance FromConcrete (C.Expr ann) Expr where
-  fromConcrete (C.Add x y _) = EAdd (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.Sub x y _) = ESub (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.Mul x y _) = EMul (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.Div x y _) = EDiv (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.EQ  x y _) = EEQ  (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.NEQ x y _) = ENEQ (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.GT  x y _) = EGT  (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.GTE x y _) = EGTE (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.LT  x y _) = ELT  (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.LTE x y _) = ELTE (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.IfThenElse p x y _) = EIf (fromConcrete p) (fromConcrete x) (fromConcrete y)
-  fromConcrete (C.ExprBool b _) = EV (VB b)
-  fromConcrete (C.ExprTuple xs _) = ETup (map fromConcrete xs)
-  fromConcrete (C.ExprDigit x _) = EV (VI x)
-  fromConcrete (C.ExprName  x _) = EV (N (fromConcrete x))
-  fromConcrete (C.ExprLabel x _) = EV (VL (fromConcrete x))
-  fromConcrete (C.ExprString x _) = EV (VS x)
-
-instance FromConcrete (C.Sort ann) BType where
-  fromConcrete (C.SortInt _)  = TInt
-  fromConcrete (C.SortBool _) = TBool
-
-instance FromConcrete (C.Type ann) Type where
-  fromConcrete = undefined
-{- To banacorn: please fixe this later. Thank you!
-  fromConcrete (C.TypeEnd _             ) = TEnd
-  fromConcrete (C.TypeSend (Left  s) t _) = TSend (Left (fromConcrete s)) (fromConcrete t)
-  fromConcrete (C.TypeSend (Right s) t _) = TSend (Right (fromConcrete s)) (fromConcrete t)
-  fromConcrete (C.TypeRecv (Left  s) t _) = TRecv (Left (fromConcrete s)) (fromConcrete t)
-  fromConcrete (C.TypeRecv (Right s) t _) = TRecv (Right (fromConcrete s)) (fromConcrete t)
-  fromConcrete (C.TypeSele selections  _) =
-    TSele (map (\(C.TypeOfLabel l t _) -> (fromConcrete l, fromConcrete t)) selections)
-  fromConcrete (C.TypeChoi choices     _) =
-    TChoi (map (\(C.TypeOfLabel l t _) -> (fromConcrete l, fromConcrete t)) choices)
---  fromConcrete (C.TypeCall call        _) = TCall (fromConcrete call)
--}

@@ -62,7 +62,7 @@ unrestricted (TMu ivy)   = unrestricted ivy
 unrestricted _           = False
 
 unfoldT :: Type -> Type
-unfoldT (TMu t) = substT 0 (TMu t) t 
+unfoldT (TMu t) = substT 0 (TMu t) t
 unfoldT t = t
 
 stripUnres :: Type -> (Type, Bool)

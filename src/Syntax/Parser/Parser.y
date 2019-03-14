@@ -170,17 +170,15 @@ SelectLabel :: {Expr Loc}
 Label :: {Label Loc}
     : label                                 {% locate $ Label $1 }
 
-Sort :: {Sort Loc}
-    : 'Int'                                 {% locate $ SortInt }
-    | 'Bool'                                {% locate $ SortBool }
+Base :: {Base Loc}
+    : 'Int'                                 {% locate $ BaseInt }
+    | 'Bool'                                {% locate $ BaseBool }
+
 Type :: {Type Loc}
-    : '!' Sort '.' Type                     {% locate $ TypeSend (Left  $2) $4 }
-    | '!' Type '.' Type                     {% locate $ TypeSend (Right $2) $4 }
-    | '?' Sort '.' Type                     {% locate $ TypeRecv (Left  $2) $4 }
-    | '?' Type '.' Type                     {% locate $ TypeRecv (Right $2) $4 }
+    : '!' Type '.' Type                     {% locate $ TypeSend $2 $4 }
+    | '?' Type '.' Type                     {% locate $ TypeRecv $2 $4 }
     | '!' '{' TypeOfLabels '}'              {% locate $ TypeSele (reverse $3)  }
     | '?' '{' TypeOfLabels '}'              {% locate $ TypeChoi (reverse $3)  }
-    | SimpName                              {% locate $ TypeCall $1            }
     | 'end'                                 {% locate $ TypeEnd                }
 
 TypeOfLabel :: {TypeOfLabel Loc}
