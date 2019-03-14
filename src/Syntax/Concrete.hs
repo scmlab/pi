@@ -247,13 +247,28 @@ instance ToAbstract (Expr ann) A.Expr where
   toAbstract (ExprLabel x _) = A.EV (A.VL (toAbstract x))
   toAbstract (ExprString x _) = A.EV (A.VS x)
 
+instance ToAbstract (TypeName ann) Int where
+  toAbstract (TypeName name    _) = name
+
 instance ToAbstract (BaseType ann) A.BType where
   toAbstract (BaseInt _)  = A.TInt
   toAbstract (BaseBool _) = A.TBool
 
 instance ToAbstract (Type ann) A.Type where
-  toAbstract = undefined
+  toAbstract (TypeEnd _) = A.TEnd
+  toAbstract (TypeBase t _) = A.TBase (toAbstract t)
+  toAbstract (TypeTuple ts _) = A.TTuple (map toAbstract ts)
+  toAbstract (TypeSend t u _) = A.TSend (toAbstract t) (toAbstract u)
+  toAbstract (TypeRecv t u _) = A.TRecv (toAbstract t) (toAbstract u)
+  toAbstract (TypeSele ts _) = A.TSele (map toAbstract ts)
+  toAbstract (TypeChoi ts _) = A.TChoi (map toAbstract ts)
+  toAbstract (TypeUn t _) = A.TUn (toAbstract t)
+  toAbstract (TypeVar t _) = A.TVar (toAbstract t)
+  toAbstract (TypeMu t _) = A.TMu (toAbstract t)
 
+instance ToAbstract (TypeOfLabel ann) (A.Label, A.Type) where
+  toAbstract (TypeOfLabel t u _)  = (toAbstract t, toAbstract u)
+  
 {- To banacorn: please fixe this later. Thank you!
   toAbstract (TypeEnd _             ) = TEnd
   toAbstract (TypeSend (Left  s) t _) = TSend (Left (toAbstract s)) (toAbstract t)
@@ -266,3 +281,15 @@ instance ToAbstract (Type ann) A.Type where
     TChoi (map (\(TypeOfLabel l t _) -> (toAbstract l, toAbstract t)) choices)
 --  toAbstract (TypeCall call        _) = TCall (toAbstract call)
 -}
+ -- TEnd                    -- end
+ --           | TBase BType
+ --           | TTuple [Type]
+ --           | TSend Type Type       -- send
+ --           | TRecv Type Type       -- recv
+ --           | TSele [(Label, Type)]  -- select
+ --           | TChoi [(Label, Type)]  -- choice
+ --           | TUn Type               -- unrestricted
+ --
+ --           | TVar Int    -- de Bruin index?
+ --           | TMu Type
+ --  deriving (Eq, Show)

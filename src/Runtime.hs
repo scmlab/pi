@@ -5,12 +5,16 @@ module Runtime where
 import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import qualified Control.Exception as Exception
+import qualified Data.Map as Map
+import Data.Map (Map)
 import Control.Exception (IOException)
 import Data.Text.Prettyprint.Doc
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
+import Data.Maybe (mapMaybe)
 
 import Syntax.Abstract
+import Type
 -- import Syntax.Concrete (restore)
 import qualified Syntax.Parser as Parser
 import Interpreter
@@ -37,7 +41,7 @@ data RuntimeState = State
   } deriving (Show)
 
 data Error = ParseError Parser.ParseError
-           | TypeError String
+           | TypeError TypeError
            | RuntimeError String
            deriving (Show)
 
@@ -139,7 +143,15 @@ load filePath = do
       -- parse and store the AST
       case Parser.parseProgram filePath source of
         Left err  -> throwError $ ParseError err
-        Right ast -> (putEnv . Just . programToEnv) ast
+        Right ast -> programToEnv ast >>= putEnv . Just
+
+
+      -- do some checkings
+      env' <- gets stEnv
+      case env' of
+        Just defns -> checkAll defns
+        Nothing -> return ()
+
 
       env <- getEnv
       -- populate future, the next possible outcomes (there should be only 1)
@@ -239,3 +251,61 @@ data Request
   | Reload
   | Execute
   deriving (Show)
+
+--------------------------------------------------------------------------------
+-- | Checkings
+
+data TypeError = MissingProcDefn (Map ProcName Type)
+  deriving (Show)
+
+checkAll :: Monad m => Env -> RuntimeM m ()
+checkAll env = do
+
+  undefined
+
+  -- -- type check those typed definitions
+  -- env' <- gets stEnv
+  -- error $ show env'
+  --
+  -- case env' of
+  --   Just defns -> do
+  --     defns' <- Map.traverseMaybeWithKey (const (return . withType)) defns
+  --     error $ show defns'
+  --     undefined
+  --
+  --   Nothing -> return ()
+
+
+
+--------------------------------------------------------------------------------
+-- | Checkings
+
+programToEnv :: Monad m => Program -> RuntimeM m Env
+programToEnv (Program declarations) = do
+  -- throw if there is any type signature without a corresponding process definition
+  unless (Map.null onlyTypes) $
+    throwError $ TypeError $ MissingProcDefn onlyTypes
+
+  return (Map.union withTypes withoutTypes)
+  where
+    toTypeSignPair (TypeSign n t) = Just (n, t)
+    toTypeSignPair _              = Nothing
+
+    toProcDefnPair (ProcDefn n t) = Just (n, t)
+    toProcDefnPair _              = Nothing
+
+    typeSigns = Map.fromList $ mapMaybe toTypeSignPair declarations
+    procDefns = Map.fromList $ mapMaybe toProcDefnPair declarations
+
+    withTypes :: Map ProcName DefnPair
+    withTypes = fmap (uncurry WithType) $ Map.intersectionWith (,) procDefns typeSigns
+
+    withoutTypes :: Map ProcName DefnPair
+    withoutTypes =  fmap WithoutType $ Map.difference procDefns typeSigns
+
+    onlyTypes :: Map ProcName Type
+    onlyTypes =  Map.difference typeSigns procDefns
+
+withType :: DefnPair -> Maybe (Pi, Type)
+withType (WithType p t) = Just (p, t)
+withType (WithoutType p) = Nothing
