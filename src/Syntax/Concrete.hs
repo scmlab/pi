@@ -16,12 +16,12 @@ data Name     ann = Positive  Text                                      ann
                   | Reserved  Text                                      ann
                   deriving (Show, Functor)
 
-data Program  ann = Program   [ProcDecl ann]                            ann
+data Program  ann = Program   [Definition ann]                            ann
                   deriving (Show, Functor)
 
 data SimpName ann = SimpName  Text                                      ann
                   deriving (Show, Functor)
-data ProcDecl ann = ProcDecl  (SimpName ann)  (Process ann)             ann
+data Definition ann = ProcDefn  (SimpName ann)  (Process ann)             ann
                   deriving (Show, Functor)
 
 data Process  ann = Send      (Name ann)     (Expr ann)         (Process ann) ann
@@ -102,8 +102,8 @@ instance Located (Label Loc) where
 instance Located (Program Loc) where
   locOf (Program _ loc) = loc
 
-instance Located (ProcDecl Loc) where
-  locOf (ProcDecl _ _ loc) = loc
+instance Located (Definition Loc) where
+  locOf (ProcDefn _ _ loc) = loc
 
 instance Located (Process Loc) where
   locOf (Send _ _ _ loc) = loc

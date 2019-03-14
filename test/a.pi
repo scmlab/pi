@@ -1,14 +1,9 @@
-p0 = x?v . stdout[v+1] . end
-p1 = x?v . stdout[v+2] . end
--- asdfd
-p2 = x[100] . end
-p3 = x[200] . end
--- p2 = stdin?v . x!v . end
--- p4 = x?v . x!v . end
-
+chioce : Int
 choice = x >>
-  { HI    -> x["hi"] . end
-  ; HELLO -> x["hello"] . end
+  { HI    -> y["hi"] . end
+  ; HELLO -> y["hello"] . end
   }
 
-main = stdout[3] . end | stdout[4] . end
+select = x << HI . y(message) . stdout[message] . end
+
+main = choice | select

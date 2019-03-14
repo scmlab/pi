@@ -80,20 +80,20 @@ import Data.Text (Text)
 %%
 
 Program :: {Program Loc}
-    : ProcDecls                             {% locate $ Program (reverse $1) }
+    : Definitions                              {% locate $ Program (reverse $1) }
 
 -- left recursive
-ProcDecls :: {[ProcDecl Loc]}
-    : ProcDecl                              { [$1] }
-    | ProcDecls ProcDecl                    { $2:$1 }
+Definitions :: {[Definition Loc]}
+    : Definition                                { [$1] }
+    | Definitions Definition                    { $2:$1 }
 
-ProcDecl :: {ProcDecl Loc}
-    : SimpName '=' ProcessPar               {% locate $ ProcDecl $1 $3 }
+Definition :: {Definition Loc}
+    : SimpName '=' ProcessPar                   {% locate $ ProcDefn $1 $3 }
 
 -- left recursive
 ProcessPar :: {Process Loc}
-    : ProcessPar '|' Process                {% locate $ Par $1 $3 }
-    | Process                               { $1 }
+    : ProcessPar '|' Process                    {% locate $ Par $1 $3 }
+    | Process                                   { $1 }
 
 Process :: {Process Loc}
     : Name '[' Expr ']' '.' Process           {% locate $ Send $1 $3 $6  }

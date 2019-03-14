@@ -7,8 +7,9 @@ module Syntax.Parser
   )
   where
 
-import Syntax.Abstract (Prog, Pi, fromConcrete)
-import Syntax.Concrete (Program)
+import qualified Syntax.Abstract as A
+import Syntax.Abstract (Pi, fromConcrete)
+import qualified Syntax.Concrete as C
 import Syntax.Parser.Parser (programParser, processParser)
 import Syntax.Parser.Lexer (lexer)
 import Syntax.Parser.Type
@@ -22,7 +23,7 @@ import PPrint
 import Language.Lexer.Applicative
 import System.Console.ANSI
 
-parseProgram :: FilePath -> ByteString -> Either ParseError Prog
+parseProgram :: FilePath -> ByteString -> Either ParseError A.Program
 parseProgram filePath src = fromConcrete <$> runExcept (evalStateT programParser initState)
   where initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
         startingLoc = Loc (startPos filePath) (startPos filePath)
@@ -33,7 +34,7 @@ parseProcess src = fromConcrete <$> runExcept (evalStateT processParser initStat
         initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
         startingLoc = Loc (startPos filePath) (startPos filePath)
 
-parseByteString2 :: FilePath -> ByteString -> Either ParseError (Program Loc)
+parseByteString2 :: FilePath -> ByteString -> Either ParseError (C.Program Loc)
 parseByteString2 filePath src = runExcept (evalStateT programParser initState)
   where initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
         startingLoc = Loc (startPos filePath) (startPos filePath)

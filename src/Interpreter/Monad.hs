@@ -11,9 +11,9 @@ import Syntax.Abstract
 
 type Env = Map Name Pi
 
-programToEnv :: Prog -> Env
-programToEnv (Prog declrations) =
-  Map.fromList $ map (\(PiDecl name p) -> (ND (Pos name), p)) declrations
+programToEnv :: Program -> Env
+programToEnv (Program declrations) =
+  Map.fromList $ map (\(ProcDefn name p) -> (ND (Pos name), p)) declrations
 
 --------------------------------------------------------------------------------
 -- | The EitherT monad transformer, from https://hackage.haskell.org/package/either-4.4.1/

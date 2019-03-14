@@ -49,9 +49,9 @@ unND _ = undefined
 data ResName = StdOut | StdIn
   deriving (Ord, Eq, Show)
 
-data Prog = Prog [PiDecl]
+data Program = Program [Definition]
   deriving (Eq, Show)
-data PiDecl = PiDecl ProcName Pi
+data Definition = ProcDefn ProcName Pi
   deriving (Eq, Show)
 
 data Pi = End
@@ -317,11 +317,11 @@ freePtrn _       = []
 class FromConcrete a b | a -> b where
   fromConcrete :: a -> b
 
-instance FromConcrete (C.Program ann) Prog where
-  fromConcrete (C.Program  declarations _) = Prog (map fromConcrete declarations)
+instance FromConcrete (C.Program ann) Program where
+  fromConcrete (C.Program  definitions _) = Program (map fromConcrete definitions)
 
-instance FromConcrete (C.ProcDecl ann) PiDecl where
-  fromConcrete (C.ProcDecl name process _) = PiDecl (fromConcrete name) (fromConcrete process)
+instance FromConcrete (C.Definition ann) Definition where
+  fromConcrete (C.ProcDefn name process _) = ProcDefn (fromConcrete name) (fromConcrete process)
 
 instance FromConcrete (C.Label ann) Label where
   fromConcrete (C.Label    label _)     = label
