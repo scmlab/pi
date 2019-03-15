@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module Type.TypeCheck where
@@ -5,19 +6,17 @@ module Type.TypeCheck where
 import Control.Arrow ((***))
 import Control.Monad.Except
 import Data.Text (pack)
-import Data.Function ((&))
 import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
-import qualified Data.List as List
 
 import Syntax.Abstract
 import Type
 import Base
+import Debug.Trace
 
 import Control.Monad.Reader
-import Control.Monad.Except
 
 
 --------------------------------------------------------------------------------
@@ -31,6 +30,11 @@ import Control.Monad.Except
 data TypeError
   = MissingProcDefn (Map ProcName Type)
   | VariableNotFound SName
+  | LabelNotFound Label
+  | ProcessNotFound SName
+  | PatternMismatched Type Ptrn
+  | TypeOfNewChannelMissing RName
+  | RecvExpected
   | Others String
   deriving (Show)
 
@@ -52,14 +56,22 @@ checkAll :: TCM ()
 checkAll = do
 
   env <- ask
-  withTypes <- Map.traverseMaybeWithKey (const (return . withType)) env
-  Map.traverseWithKey checkType withTypes
+  -- withTypes <- Map.traverseMaybeWithKey (const (return . withType)) env
+  -- _ <- Map.traverseWithKey checkType withTypes
+  -- error "???"
+  case Map.lookup "main" env of
+    Nothing -> return ()
+    Just p -> checkType (toProcess p)
+
 
   return ()
 
   where
-    checkType :: ProcName -> (Pi, Type) -> TCM ()
-    checkType name (process, t) = undefined
+    checkType :: Pi -> TCM ()
+    checkType process = do
+      (ctx, names) <- checkPi Map.empty process
+      error $ show (ctx, names)
+      return ()
 
 --------------------------------------------------------------------------------
 -- | Code
@@ -75,10 +87,15 @@ liftMaybe err = maybe (throwError err) return
 
 type TMonad a = Except ErrMsg a
 
-lookupVar :: (Eq a, Ord a, Show a) => Map a Type -> a -> TCM Type
+lookupVar :: Map SName Type -> SName -> TCM Type
 lookupVar env x = case Map.lookup x env of
   Just v -> return v
-  Nothing -> throwError $ Others (show x)
+  Nothing -> throwError $ VariableNotFound x
+
+lookupLabel :: Map Label Type -> Label -> TCM Type
+lookupLabel env x = case Map.lookup x env of
+  Just v -> return v
+  Nothing -> throwError $ LabelNotFound x
 
 inferV :: Ctx -> Val -> TCM (Type, Ctx)
 inferV _ (N (NR _)) =
@@ -89,18 +106,23 @@ inferV ctx (N (ND c)) = do
     Just t -> if unrestricted t
                 then return (t, ctx)
                 else return (t, Map.delete c ctx)
+inferV _ (N (NG _)) =
+  throwError $ Others "Unable to infer system generated variables"
 inferV ctx (VI _) = return (tInt, ctx)
 inferV ctx (VB _) = return (tBool, ctx)
 inferV ctx (VT vs) =
   (TTuple *** id) <$> inferVs ctx vs
 -- inferV env (VL l) = liftMaybe "label not found" (lookup l env)
 inferV _ (VS _) = throwError $ Others "panic: not implemented yet"
+inferV _ (VL _) = throwError $ Others "panic: not implemented yet"
 -- inferV _ (VS _) = return TString
 
+inferVs :: Ctx -> [Val] -> TCM ([Type], Ctx)
+inferVs _   [] = throwError $ Others "panic: no values to infer"
 inferVs ctx [v] = ((\t -> [t]) *** id) <$> inferV ctx v
-inferVs ctx (v:vs) =
-   inferV  ctx v  >>= \(t,  ctx')  ->
-   inferVs ctx vs >>= \(ts, ctx'') ->
+inferVs ctx (v:vs) = do
+   (t,  _) <- inferV ctx v
+   (ts, ctx'') <- inferVs ctx vs
    return (t:ts, ctx'')
 
 inferE :: Ctx -> Expr -> TCM (Type, Ctx)
@@ -124,11 +146,13 @@ inferE ctx (ETup es) =
   (TTuple *** id) <$> inferEs ctx es
 inferE _ _ = throwError $ Others "panic: not implemented yet"
 
+inferEs :: Ctx -> [Expr] -> TCM ([Type], Ctx)
+inferEs _   [] = throwError $ Others "panic: no expressions to infer"
 inferEs ctx [e] = ((\t -> [t]) *** id) <$> inferE ctx e
-inferEs ctx (e:es) =
-   inferE  ctx e  >>= \(t,  ctx') ->
-   inferEs ctx es >>= \(ts, ctx'') ->
-   return (t:ts, ctx'')
+inferEs ctx (e:es) = do
+  (t,  _) <- inferE  ctx e
+  (ts, ctx'') <- inferEs ctx es
+  return (t:ts, ctx'')
 
 checkE :: Ctx -> Expr -> Type -> TCM Ctx
 checkE env e t =
@@ -141,7 +165,7 @@ tcheck t1 t2
    | otherwise = throwError $ Others ("expected: " ++ show t1 ++
                              ", found " ++ show t2)
 
-checkCh :: Ctx -> PN RName -> Type -> TCM ()
+checkCh :: Ctx -> SName -> Type -> TCM ()
 checkCh senv c t = do
   t' <- lookupVar senv c
   if t == t'
@@ -163,9 +187,9 @@ checkPi ctx (p1 `Par` p2) = do
 checkPi ctx (Send (NR StdOut) e p) = do
   (_, ctx') <- inferE ctx e
   checkPi ctx' p
-checkPi ctx (Send (NR _) e p) =
+checkPi _   (Send (NR _) _ _) =
   throwError $ Others "cannot send to this channel"
-checkPi ctx (Send (NG _) e p) =
+checkPi _   (Send (NG _) _ _) =
   throwError $ Others "generated name appears in type checking. a bug?"
 checkPi ctx (Send (ND c) e p) =
   lookupChType c ctx >>=  -- c removed if linear
@@ -184,12 +208,19 @@ checkPi ctx (Repl p) = -- throwError $ Others "panic: not implemented yet"
   if null l then return (ctx', l)
      else throwError $ Others ("linear variable used in repetition")
 
-checkPi _ (Nu _ Nothing _) =
-  throwError $ Others "needing a type for new channels"
+checkPi _ (Nu x Nothing _) =
+  throwError $ TypeOfNewChannelMissing x
 checkPi ctx (Nu x (Just t) p) = do
   (ctx', l) <- checkPi (Map.insert (Pos x) t $ Map.insert (Neg x) (dual t) ctx) p
   ctx'' <- ctx' `removeChannels` Set.fromList [Pos x, Neg x]
   return (ctx'', Set.difference l (Set.fromList [Pos x, Neg x]))
+
+checkPi ctx (Call name) = do
+  env <- ask
+  case Map.lookup name env of
+    Just p -> checkPi ctx (toProcess p)
+    Nothing -> throwError $ ProcessNotFound (Pos name)
+
 
 checkPiSend :: (SName, Expr, Pi) -> Type -> Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
 checkPiSend (c,e,p) s t un ctx = do
@@ -201,7 +232,7 @@ checkPiSend (c,e,p) s t un ctx = do
 checkPiSel :: (SName, Expr, Pi) -> Map Label Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
 checkPiSel (c,e,p) ts un ctx = do
   l <- isLabel e
-  s <- lookupVar ts l
+  s <- lookupLabel ts l
   ctx' <- addCtx (c,s) ctx
   (id *** addLin un c) <$> checkPi ctx' p
 
@@ -249,7 +280,7 @@ matchRecv ::
   (Type -> Type -> Bool -> Ctx -> TCM a) -> (Map Label Type -> Bool -> Ctx -> TCM a) -> (Type, Bool, Ctx) -> TCM a
 matchRecv fs _  (TRecv t s, b, ctx) = fs t s b ctx
 matchRecv _  fl (TChoi ts,  b, ctx) = fl (Map.fromList ts) b ctx
-matchRecv _  _  _ = throwError $ Others "TRecv expected"
+matchRecv _  _  _ = throwError $ RecvExpected
 
 -- pattern related stuffs
 
@@ -270,8 +301,9 @@ matchPtn (TChoi ts) (PN x) ctx = addUni (Pos x, TChoi ts) ctx
 matchPtn (TUn t) (PN x) ctx = addUni (Pos x, TUn t) ctx
 matchPtn (TUn (TTuple ts)) (PT xs) ctx =
   matchPtns (map TUn ts) xs ctx
-matchPtn _ _ _ = throwError $ Others "pattern mismatch"
+matchPtn t p _ = throwError $ PatternMismatched t p
 
+matchPtns :: [Type] -> [Ptrn] -> Ctx -> TCM Ctx
 matchPtns []     []     ctx = return ctx
 matchPtns (t:ts) (x:xs) ctx =
   matchPtn t x ctx >>=
@@ -308,6 +340,7 @@ addUni (x,t) ctx = case Map.lookup x ctx of
   Nothing -> return $ Map.insert x t ctx
 
 eqAll :: [(Ctx, Set SName)] -> TCM (Ctx, Set SName)
+eqAll [] = throwError $ Others "no branches to unify with"
 eqAll [x] = return x
 eqAll ((s1,l1):(s2,l2):xs) =
   if (mapEqBy eqType s1 s2) && (l1 == l2)
@@ -329,14 +362,14 @@ pairChoices ts [] = if Map.null ts
   then return Map.empty
   else throwError $ Others "choices not fully covered"
 pairChoices ts (Clause (PL l) p : ps) = do
-  s <- lookupVar ts l
+  s <- lookupLabel ts l
   Map.insert s p <$> pairChoices (Map.delete l ts) ps
 pairChoices _ (Clause _ _ : _) =
   throwError $ Others "not a label"
 
 {-
 splitSEnv ::
-  [PN RName] -> [PN RName] -> SEnv -> TCM (SEnv, SEnv)
+  [SName] -> [SName] -> SEnv -> TCM (SEnv, SEnv)
 splitSEnv _ _ [] = return ([],[])
 splitSEnv fl fr ((x,t):xs)
    | bl && br  = throwError ("channel " ++ show x ++ " not linear")
@@ -374,10 +407,9 @@ choices c ps =
 
 pn :: String -> Ptrn
 pn = PN . pack
-
---
-
+cp :: String -> SName
 cp = Pos . pack
+cn :: String -> SName
 cn = Neg . pack
 
 test0 :: Either TypeError (Ctx, Set SName)
@@ -435,14 +467,14 @@ test3 = runTCM (checkPi ctx0 p0) Map.empty
                         Send (cN "d") (ePN "x") End)]
 
     -- p1 = c(z).z<<NEG.z[3].z(w).0
-    p1 :: Pi
-    p1 = recv (cP "c") (pn "z") $
+    _p1 :: Pi
+    _p1 = recv (cP "c") (pn "z") $
           Send (cP "z") (eL "NEG") $
            Send (cP "z") (eI 3) $
                recv (cP "z") (pn "w") End
     -- p2 = nu (c:t1) nu (d:t0) (p0 | p1)
-    p2 :: Pi
-    p2 = nu "c" t1 (nu "d" t0 p0 `Par` p1)
+    _p2 :: Pi
+    _p2 = nu "c" t1 (nu "d" t0 p0 `Par` _p1)
 
 test4 :: Either TypeError (Ctx, Set SName)
 test4 = runTCM (checkPi ctx p) Map.empty
