@@ -15,7 +15,7 @@ type Env = Map ProcName DefnPair
 
 withType :: DefnPair -> Maybe (Pi, Type)
 withType (WithType p t) = Just (p, t)
-withType (WithoutType p) = Nothing
+withType (WithoutType _) = Nothing
 
 --------------------------------------------------------------------------------
 -- | The EitherT monad transformer, from https://hackage.haskell.org/package/either-4.4.1/

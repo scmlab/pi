@@ -14,7 +14,7 @@ import Data.Set (Set)
 import Syntax.Abstract
 import Type
 import Base
-import Debug.Trace
+-- import Debug.Trace
 
 import Control.Monad.Reader
 
@@ -34,7 +34,8 @@ data TypeError
   | ProcessNotFound SName
   | PatternMismatched Type Ptrn
   | TypeOfNewChannelMissing RName
-  | RecvExpected
+  | RecvExpected Type
+  | SendExpected
   | Others String
   deriving (Show)
 
@@ -63,14 +64,12 @@ checkAll = do
     Nothing -> return ()
     Just p -> checkType (toProcess p)
 
-
   return ()
 
   where
     checkType :: Pi -> TCM ()
     checkType process = do
-      (ctx, names) <- checkPi Map.empty process
-      error $ show (ctx, names)
+      _ <- checkPi Map.empty process
       return ()
 
 --------------------------------------------------------------------------------
@@ -191,17 +190,23 @@ checkPi _   (Send (NR _) _ _) =
   throwError $ Others "cannot send to this channel"
 checkPi _   (Send (NG _) _ _) =
   throwError $ Others "generated name appears in type checking. a bug?"
-checkPi ctx (Send (ND c) e p) =
-  lookupChType c ctx >>=  -- c removed if linear
-  matchSend (checkPiSend (c,e,p)) (checkPiSel (c,e,p))
+checkPi ctx (Send (ND c) e p) = do
+  (channelType, un, ctx') <- lookupChType c ctx
+  case channelType of
+    TSend s1 s2 -> checkPiSend (c, e, p) s1 s2 un ctx'
+    TChoi ts    -> checkPiSel  (c, e, p) (Map.fromList ts) un ctx'
+    _           -> throwError $ SendExpected
 
 checkPi _ (Recv (NR _) _) =
   throwError $ Others "not knowing what to do yet"
 checkPi _ (Recv (NG _) _) =
   throwError $ Others "generated name appears in type checking. a bug?"
-checkPi ctx (Recv (ND c) ps) =
-  lookupChType c ctx >>= -- c removed if linear
-  matchRecv (checkPiRecv (c,ps)) (checkPiChoi (c,ps))
+checkPi ctx (Recv (ND c) ps) = do
+  (channelType, un, ctx') <- lookupChType c ctx
+  case channelType of
+    TRecv t s -> checkPiRecv (c,ps) t s un ctx'
+    TChoi ts  -> checkPiChoi (c,ps) (Map.fromList ts) un ctx'
+    others    -> throwError $ RecvExpected others
 
 checkPi ctx (Repl p) = -- throwError $ Others "panic: not implemented yet"
   checkPi ctx p >>= \(ctx', l) ->
@@ -241,13 +246,14 @@ checkPiRecv (c, ps) s t un ctx =
   mapM (checkRecvClause c s t un ctx) ps >>= eqAll
 
 checkRecvClause :: SName -> Type -> Type -> Bool -> Ctx -> Clause -> TCM (Ctx, Set SName)
-checkRecvClause c s t un ctx (Clause ptn p) = do
-  ctx' <- matchPtn s ptn ctx
-  ctx'' <- addCtx (c,t) ctx'
+checkRecvClause name s t un ctx (Clause ptn p) = do
+  ctx'' <- matchPtn s ptn ctx >>= addCtx (name, t)
   (ctx''', l) <- checkPi ctx'' p
   return (Map.withoutKeys ctx''' xs,
           let l' = Set.difference l xs
-          in if un then l' else (Set.insert c l'))
+          in if un
+              then l'
+              else (Set.insert name l'))
   where xs = ptnVars ptn
 
 checkPiChoi :: (SName, [Clause]) -> Map Label Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
@@ -266,42 +272,32 @@ isLabel ::  Expr -> TCM Label
 isLabel (EV (VL l)) = return l
 isLabel _ = throwError $ Others "must be a label"
 
--- generic dispatcher
-
-matchSend ::
-   (Type -> Type -> Bool -> Ctx -> TCM a) ->
-   (Map Label Type -> Bool -> Ctx -> TCM a) -> (Type, Bool, Ctx) -> TCM a
-matchSend fs _  (TSend s1 s2, b, ctx) = fs s1 s2 b ctx
-matchSend _  fl (TSele ts,    b, ctx) = fl (Map.fromList ts) b ctx
-matchSend _  _  t =
-  throwError $ Others ("TSend expected, got " ++ show t)
-
-matchRecv ::
-  (Type -> Type -> Bool -> Ctx -> TCM a) -> (Map Label Type -> Bool -> Ctx -> TCM a) -> (Type, Bool, Ctx) -> TCM a
-matchRecv fs _  (TRecv t s, b, ctx) = fs t s b ctx
-matchRecv _  fl (TChoi ts,  b, ctx) = fl (Map.fromList ts) b ctx
-matchRecv _  _  _ = throwError $ RecvExpected
-
 -- pattern related stuffs
 
+-- free variables of a pattern
 ptnVars :: Ptrn -> Set SName
-ptnVars (PN x) = Set.singleton (Pos x)  -- right?
+ptnVars (PN x)  = Set.singleton (Pos x)
 ptnVars (PT xs) = Set.unions (map ptnVars xs)
-ptnVars (PL _) = Set.empty
+ptnVars (PL _)  = Set.empty
+
 
 matchPtn :: Type -> Ptrn -> Ctx -> TCM Ctx
-matchPtn TEnd (PN x) ctx = addUni (Pos x,TEnd) ctx
-matchPtn (TBase t) (PN x) ctx = addUni (Pos x,TBase t) ctx
-matchPtn (TTuple ts) (PN x) ctx = addUni (Pos x, TTuple ts) ctx
-matchPtn (TTuple ts) (PT xs) ctx = matchPtns ts xs ctx
-matchPtn (TSend s t) (PN x) ctx = addUni (Pos x, TSend s t) ctx
-matchPtn (TRecv s t) (PN x) ctx = addUni (Pos x, TRecv s t) ctx
-matchPtn (TSele ts) (PN x) ctx = addUni (Pos x, TSele ts) ctx
-matchPtn (TChoi ts) (PN x) ctx = addUni (Pos x, TChoi ts) ctx
-matchPtn (TUn t) (PN x) ctx = addUni (Pos x, TUn t) ctx
-matchPtn (TUn (TTuple ts)) (PT xs) ctx =
-  matchPtns (map TUn ts) xs ctx
+matchPtn TEnd         (PN x) ctx = addUni (Pos x, TEnd) ctx
+matchPtn (TBase t)    (PN x) ctx = addUni (Pos x, TBase t) ctx
+matchPtn (TTuple ts)  (PN x) ctx = addUni (Pos x, TTuple ts) ctx
+matchPtn (TTuple ts)  (PT xs) ctx = matchPtns ts xs ctx
+matchPtn (TSend s t)  (PN x) ctx = addUni (Pos x, TSend s t) ctx
+matchPtn (TRecv s t)  (PN x) ctx = addUni (Pos x, TRecv s t) ctx
+matchPtn (TSele ts)   (PN x) ctx = addUni (Pos x, TSele ts) ctx
+matchPtn (TChoi ts)   (PN x) ctx = addUni (Pos x, TChoi ts) ctx
+matchPtn (TUn t)      (PN x) ctx = addUni (Pos x, TUn t) ctx
+matchPtn (TUn (TTuple ts)) (PT xs) ctx = matchPtns (map TUn ts) xs ctx
 matchPtn t p _ = throwError $ PatternMismatched t p
+
+addUni :: (SName, Type) -> Ctx -> TCM Ctx
+addUni (x,t) ctx = case Map.lookup x ctx of
+  Just _ -> throwError $ Others (show x ++ " exists in context")
+  Nothing -> return $ Map.insert x t ctx
 
 matchPtns :: [Type] -> [Ptrn] -> Ctx -> TCM Ctx
 matchPtns []     []     ctx = return ctx
@@ -328,16 +324,11 @@ lookupChType x ctx = do
     else return (t', unrest, Map.delete x ctx)
 
 addCtx :: (SName, Type) -> Ctx -> TCM Ctx
-addCtx (c,t) ctx = case Map.lookup c ctx of
+addCtx (c, t) ctx = case Map.lookup c ctx of
   Just t' -> if eqType t t'
     then return ctx
     else throwError $ Others ("types of channels in env mismatch: " ++ show t ++ " and " ++ show t')
   Nothing -> return $ Map.insert c t ctx
-
-addUni :: (SName, Type) -> Ctx -> TCM Ctx
-addUni (x,t) ctx = case Map.lookup x ctx of
-  Just _ -> throwError $ Others (show x ++ " exists in context")
-  Nothing -> return $ Map.insert x t ctx
 
 eqAll :: [(Ctx, Set SName)] -> TCM (Ctx, Set SName)
 eqAll [] = throwError $ Others "no branches to unify with"

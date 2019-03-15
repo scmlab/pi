@@ -188,6 +188,7 @@ Type :: {Type Loc}
     | '?' Type '.' Type                     {% locate $ TypeRecv $2 $4 }
     | '>>' '{' TypeOfLabels '}'             {% locate $ TypeSele (reverse $3)  }
     | '<<' '{' TypeOfLabels '}'             {% locate $ TypeChoi (reverse $3)  }
+    | '(' Type ')'                          { $2  }
 
 TypeOfLabel :: {TypeOfLabel Loc}
     : Label ':' Type                        {% locate $ TypeOfLabel $1 $3  }

@@ -5,4 +5,4 @@ choice = x >>
 
 select = x << HI . y(message) . stdout[message] . end
 
-main = (nu x : >> { HI : 0 ; HELLO : 0 }) choice | select
+main = (nu x : ?(>> { HI : 0 }) . 0) choice | select
