@@ -10,11 +10,12 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
+import Data.Text (Text)
 
 import Syntax.Abstract
 import Type
 import Base
--- import Debug.Trace
+import Debug.Trace
 
 import Control.Monad.Reader
 
@@ -33,7 +34,7 @@ data TypeError
   | LabelNotFound Label
   | ProcessNotFound SName
   | PatternMismatched Type Ptrn
-  | TypeOfNewChannelMissing RName
+  | TypeOfNewChannelMissing Text
   | RecvExpected Type
   | SendExpected
   | Others String
@@ -56,10 +57,8 @@ runTCM = runReader . runExceptT
 checkAll :: TCM ()
 checkAll = do
 
+  -- checking only "main"
   env <- ask
-  -- withTypes <- Map.traverseMaybeWithKey (const (return . withType)) env
-  -- _ <- Map.traverseWithKey checkType withTypes
-  -- error "???"
   case Map.lookup "main" env of
     Nothing -> return ()
     Just p -> checkType (toProcess p)

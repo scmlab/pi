@@ -18,6 +18,7 @@ import Control.Arrow ((***))
 
 import qualified Data.Map as Map
 import Data.Function (on)
+import Data.Text (Text)
 
 import Data.Text.Prettyprint.Doc
 import PPrint ()
@@ -76,7 +77,7 @@ instance HasPID IOTask where
 data Sender   = Sender   PID Name Val Pi            deriving (Show)
 data Receiver = Receiver PID Name [Clause]          deriving (Show)
 data Caller   = Caller   PID ProcName               deriving (Show)
-data ReplNu   = ReplNu   PID RName Pi               deriving (Show)
+data ReplNu   = ReplNu   PID Text Pi               deriving (Show)
 data IOTask   = Input    PID      [Clause]
               | Output   PID      Val Pi
               deriving (Show)

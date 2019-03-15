@@ -191,7 +191,7 @@ instance ToAbstract (Definition ann) A.Definition where
 instance ToAbstract (Label ann) A.Label where
   toAbstract (Label    label _)     = label
 
-instance ToAbstract (ProcName ann) A.RName where
+instance ToAbstract (ProcName ann) Text where
   toAbstract (ProcName name    _) = name
 
 instance ToAbstract (Name ann) A.Name where

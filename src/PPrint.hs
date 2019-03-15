@@ -39,7 +39,7 @@ instance Pretty PName where
   pretty (PH x) = pretty x
   pretty (PG i) = "x" <> pretty i
 
-instance Pretty a => Pretty (PN a) where
+instance Pretty a => Pretty (Polarised a) where
   pretty (Pos x) = pretty x
   pretty (Neg x) = "~" <> pretty x
 
@@ -185,7 +185,7 @@ instance Pretty Type where
 instance Pretty BType where
   pretty TInt  = "Int"
   pretty TBool = "Bool"
-  
+
 --------------------------------------------------------------------------------
 -- | Source Code Annotation
 

@@ -15,23 +15,22 @@ import Type
 
 -- type Label = Text  -- moved to Type
 type ErrMsg = String
-type RName = Text   -- row name
 type ProcName = Text
 
-type SName = PN RName
-data Name = ND (PN RName)   -- user defined
-          | NG (PN Int)     -- system generated
+type SName = Polarised Text
+data Name = ND (Polarised Text)   -- user defined
+          | NG (Polarised Int)     -- system generated
           | NR ResName      -- reserved name
     deriving (Ord, Eq, Show)
 
-data PName = PH RName        -- "pure" names, without polarization
+data PName = PH Text        -- "pure" names, without polarization
            | PG Int
    deriving (Eq, Show, Ord)
 
-data PN a = Pos a | Neg a -- | Neu a
+data Polarised a = Pos a | Neg a -- | Neu a
     deriving (Ord, Eq, Show)
 
-depolar :: PN a -> a
+depolar :: Polarised a -> a
 depolar (Pos x) = x
 depolar (Neg x) = x
 -- depolar (Neu x) = x
@@ -41,10 +40,10 @@ depolarCh (ND c) = PH (depolar c)
 depolarCh (NG c) = PG (depolar c)
 depolarCh (NR _) = error "bug: shouldn't call depolar without checking"
 
-depolarCH :: Name -> RName
+depolarCH :: Name -> Text
 depolarCH = depolar . unND
 
-unND :: Name -> PN RName
+unND :: Name -> Polarised Text
 unND (ND n) = n
 unND _ = undefined
 
@@ -66,7 +65,7 @@ data Pi = End
         | Send Name Expr Pi
         | Recv Name [Clause]
         | Par Pi Pi
-        | Nu RName (Maybe Type) Pi
+        | Nu Text (Maybe Type) Pi
         | Repl Pi
         | Call ProcName
    deriving (Eq, Show)
@@ -101,7 +100,7 @@ data Val = N Name
          | VS Text
    deriving (Eq, Show)
 
-data Ptrn = PN RName         -- patterns
+data Ptrn = PN Text         -- patterns
           | PT [Ptrn]
           | PL Label
    deriving (Eq, Show)
@@ -275,16 +274,16 @@ mask (PL _)      = id
 -- since it is used in type checking, we return only user defined names.
 -- system generated names are supposed to exist only during execution.
 
-freeVal :: Val -> Set (PN RName)
+freeVal :: Val -> Set (Polarised Text)
 freeVal (N (ND x)) = Set.singleton x
 freeVal (VT vs) = Set.unions . map freeVal $ vs
 freeVal _ = Set.empty
 
-freeN :: Name -> Set (PN RName)
+freeN :: Name -> Set (Polarised Text)
 freeN (ND x) = Set.singleton x
 freeN _ = Set.empty
 
-freeExpr :: Expr -> Set (PN RName)
+freeExpr :: Expr -> Set (Polarised Text)
 freeExpr (EV v) = freeVal v
 freeExpr (EAdd e1 e2) = freeExpr e1 `Set.union` freeExpr e2
 freeExpr (ESub e1 e2) = freeExpr e1 `Set.union` freeExpr e2
@@ -300,7 +299,7 @@ freeExpr (EIf e0 e1 e2) = freeExpr e0 `Set.union` freeExpr e1 `Set.union` freeEx
 freeExpr (ETup es) = Set.unions (map freeExpr es)
 freeExpr (EPrj _ e) = freeExpr e
 
-freePi :: Pi -> Set (PN RName)
+freePi :: Pi -> Set (Polarised Text)
 freePi End = Set.empty
 freePi (Send c e p) =
   freeN c `Set.union` freeExpr e `Set.union` freePi p
@@ -311,10 +310,10 @@ freePi (Nu x _ p) = freePi p `Set.difference` Set.fromList [Pos x, Neg x]
 freePi (Repl p) = freePi p -- is that right?
 freePi (Call _) = undefined -- what to do here?
 
-freeClause :: Clause -> Set (PN RName)
+freeClause :: Clause -> Set (Polarised Text)
 freeClause (Clause ptn p) = Set.difference (freePi p) (freePtrn ptn)
 
-freePtrn :: Ptrn -> Set (PN RName)
+freePtrn :: Ptrn -> Set (Polarised Text)
 freePtrn (PN x)  = Set.singleton (Pos x)
 freePtrn (PT xs) = Set.unions (map freePtrn xs)  -- linearity check?
 freePtrn _       = Set.empty
