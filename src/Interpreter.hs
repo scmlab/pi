@@ -269,7 +269,7 @@ restict :: ReplNu -> PiMonad Pi
 restict (ReplNu _ x p) = do
   var <- freshVar
   addFreshVar var
-  return $ substPi [(PH x, N var)] p
+  return $ substPi (Map.fromList [(PH x, N var)]) p
 
 call :: Caller -> PiMonad Pi
 call (Caller _ callee) = do

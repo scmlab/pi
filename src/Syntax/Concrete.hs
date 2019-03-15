@@ -24,25 +24,25 @@ data Name     ann = Positive  Text                                      ann
 data Program  ann = Program   [Definition ann]                            ann
                   deriving (Show, Functor)
 
-data SimpName ann = SimpName  Text                                      ann
+data ProcName ann = ProcName  Text                                      ann
                   deriving (Show, Functor)
 data TypeName ann = TypeName  Int                                           ann
                   deriving (Show, Functor)
 
-data Definition ann = ProcDefn  (SimpName ann)  (Process ann)             ann
-                    | TypeSign  (SimpName ann)  (Type ann)             ann
+data Definition ann = ProcDefn  (ProcName ann)  (Process ann)             ann
+                    | TypeSign  (ProcName ann)  (Type ann)             ann
                   deriving (Show, Functor)
 
 data Process  ann = Send      (Name ann)     (Expr ann)         (Process ann) ann
                   | Recv      (Name ann)     [Clause ann]                     ann
-                  | Nu        (SimpName ann) (Maybe (Type ann)) (Process ann) ann
+                  | Nu        (ProcName ann) (Maybe (Type ann)) (Process ann) ann
                   | Par       (Process ann)  (Process ann)                    ann
-                  | Call      (SimpName ann)                                  ann
+                  | Call      (ProcName ann)                                  ann
                   | Repl      (Process ann)                                   ann
                   | End                                                       ann
                   deriving (Show, Functor)
 
-data Pattern  ann = PtrnName  (SimpName ann)                            ann
+data Pattern  ann = PtrnName  (ProcName ann)                            ann
                   | PtrnTuple [Pattern ann]                             ann
                   | PtrnLabel (Label ann)                               ann
                   deriving (Show, Functor)
@@ -108,8 +108,8 @@ instance Located (Name Loc) where
   locOf (Negative _ loc) = loc
   locOf (Reserved _ loc) = loc
 
-instance Located (SimpName Loc) where
-  locOf (SimpName _ loc) = loc
+instance Located (ProcName Loc) where
+  locOf (ProcName _ loc) = loc
 
 instance Located (Label Loc) where
   locOf (Label _ loc) = loc
@@ -191,8 +191,8 @@ instance ToAbstract (Definition ann) A.Definition where
 instance ToAbstract (Label ann) A.Label where
   toAbstract (Label    label _)     = label
 
-instance ToAbstract (SimpName ann) A.RName where
-  toAbstract (SimpName name    _) = name
+instance ToAbstract (ProcName ann) A.RName where
+  toAbstract (ProcName name    _) = name
 
 instance ToAbstract (Name ann) A.Name where
   toAbstract (Positive name     _) = A.ND (A.Pos name)
@@ -268,7 +268,7 @@ instance ToAbstract (Type ann) A.Type where
 
 instance ToAbstract (TypeOfLabel ann) (A.Label, A.Type) where
   toAbstract (TypeOfLabel t u _)  = (toAbstract t, toAbstract u)
-  
+
 {- To banacorn: please fixe this later. Thank you!
   toAbstract (TypeEnd _             ) = TEnd
   toAbstract (TypeSend (Left  s) t _) = TSend (Left (toAbstract s)) (toAbstract t)

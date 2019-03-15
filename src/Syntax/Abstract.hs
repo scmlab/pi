@@ -6,8 +6,12 @@ module Syntax.Abstract where
 import Control.Monad.Except
 import Data.Text (Text, pack)
 
+import qualified Data.Map as Map
+import Data.Map (Map)
+import qualified Data.Set as Set
+import Data.Set (Set)
+
 import Type
-import Utilities
 
 -- type Label = Text  -- moved to Type
 type ErrMsg = String
@@ -22,7 +26,7 @@ data Name = ND (PN RName)   -- user defined
 
 data PName = PH RName        -- "pure" names, without polarization
            | PG Int
-   deriving (Eq, Show)
+   deriving (Eq, Show, Ord)
 
 data PN a = Pos a | Neg a -- | Neu a
     deriving (Ord, Eq, Show)
@@ -146,20 +150,20 @@ End `par` p = p
 p `par` End = p
 p `par` q = Par p q
 
-type Subst = FMap PName Val
+type Subst = Map PName Val
 
 substName :: Subst -> Name -> Name
 substName _ (NR r) = NR r
-substName th c =
-  case lookup (depolarCh c) th of
-    Just (N y) -> y
-    Just _ -> error "not a name"
-    Nothing -> c
+substName th c =  case Map.lookup (depolarCh c) th of
+  Just (N y) -> y
+  Just _ -> error "not a name"
+  Nothing -> c
 
 substVal :: Subst -> Val -> Val
 substVal _ (N (NR r)) = N (NR r)
-substVal th (N c) | Just v <- lookup (depolarCh c) th = v
-                  | otherwise                       = N c
+substVal th (N c) = case Map.lookup (depolarCh c) th of
+  Just v  -> v
+  Nothing -> N c
 substVal th (VT vs) = VT (map (substVal th) vs)
 substVal _ u = u
 
@@ -189,14 +193,14 @@ substPi _ End = End
 substPi th (Send c u p) =
    Send (substName th c) (substExpr th u) (substPi th p)
 substPi th (Recv c clauses) =
-    if isEmpty th' then Recv c clauses
+    if Map.null th' then Recv c clauses
         else Recv (substName th' c)
                   (map (\(Clause ptrn p) -> Clause ptrn (substPi th' p)) clauses)
   where th' = foldr mask th (map (\(Clause ptrn _) -> ptrn) clauses)
 substPi th (Par p q) = Par (substPi th p) (substPi th q)
-substPi th (Nu y t p)
-   | PH y `inDom` th = Nu y t p       -- is this right?
-   | otherwise = Nu y t (substPi th p)
+substPi th (Nu y t p) = if Map.member (PH y) th
+   then Nu y t p       -- is this right?
+   else Nu y t (substPi th p)
 substPi th (Repl p) = Repl (substPi th p)   -- is this right?
 substPi _  (Call p) = Call p  -- perhaps this shouldn't be substituted?
 
@@ -242,16 +246,16 @@ evalExpr (EPrj i e) =
 -- substitution related stuffs
 
 match :: Ptrn -> Val -> Maybe Subst
-match (PN x) v = Just [(PH x,v)]
-match (PL x) (VL y) | x == y = Just []
+match (PN x) v = Just $ Map.fromList [(PH x,v)]
+match (PL x) (VL y) | x == y = Just Map.empty
 match (PT xs) (VT vs) | length xs == length vs =
-  joinSubs <$> mapM (uncurry match) (zip xs vs)
+  Map.unions <$> mapM (uncurry match) (zip xs vs)
 match _ _ = Nothing
-
-joinSubs :: [Subst] -> Subst
-joinSubs ss | nodup (map fst s) = s
-            | otherwise = error "non-linear pattern"
-  where s = concat ss
+--
+-- joinSubs :: [Subst] -> Subst
+-- joinSubs ss | nodup (map fst s) = s
+--             | otherwise = error "non-linear pattern"
+--   where s = Map.unions ss
 
 matchClauses :: [Clause] -> Val -> Maybe (Subst, Pi)
 matchClauses [] _ = Nothing
@@ -260,7 +264,7 @@ matchClauses ((Clause pt e):_) v
 matchClauses (_:pps) v = matchClauses pps v
 
 mask :: Ptrn -> Subst -> Subst
-mask (PN x)      = rmEntry (PH x)
+mask (PN x)      = Map.delete (PH x)
 mask (PT [])     = id
 mask (PT (p:ps)) = mask (PT ps) . mask p
 mask (PL _)      = id
@@ -271,46 +275,46 @@ mask (PL _)      = id
 -- since it is used in type checking, we return only user defined names.
 -- system generated names are supposed to exist only during execution.
 
-freeVal :: Val -> [PN RName]
-freeVal (N (ND x)) = [x]
-freeVal (VT vs) = nubconcat . map freeVal $ vs
-freeVal _ = []
+freeVal :: Val -> Set (PN RName)
+freeVal (N (ND x)) = Set.singleton x
+freeVal (VT vs) = Set.unions . map freeVal $ vs
+freeVal _ = Set.empty
 
-freeN :: Name -> [PN RName]
-freeN (ND x) = [x]
-freeN _ = []
+freeN :: Name -> Set (PN RName)
+freeN (ND x) = Set.singleton x
+freeN _ = Set.empty
 
-freeExpr :: Expr -> [PN RName]
+freeExpr :: Expr -> Set (PN RName)
 freeExpr (EV v) = freeVal v
-freeExpr (EAdd e1 e2) = freeExpr e1 `nubapp` freeExpr e2
-freeExpr (ESub e1 e2) = freeExpr e1 `nubapp` freeExpr e2
-freeExpr (EMul e1 e2) = freeExpr e1 `nubapp` freeExpr e2
-freeExpr (EDiv e1 e2) = freeExpr e1 `nubapp` freeExpr e2
-freeExpr (EEQ e1 e2) = freeExpr e1 `nubapp` freeExpr e2
-freeExpr (ENEQ e1 e2) = freeExpr e1 `nubapp` freeExpr e2
-freeExpr (EGT e1 e2) = freeExpr e1 `nubapp` freeExpr e2
-freeExpr (EGTE e1 e2) = freeExpr e1 `nubapp` freeExpr e2
-freeExpr (ELT e1 e2) = freeExpr e1 `nubapp` freeExpr e2
-freeExpr (ELTE e1 e2) = freeExpr e1 `nubapp` freeExpr e2
-freeExpr (EIf e0 e1 e2) = freeExpr e0 `nubapp` freeExpr e1 `nubapp` freeExpr e2
-freeExpr (ETup es) = nubconcat (map freeExpr es)
+freeExpr (EAdd e1 e2) = freeExpr e1 `Set.union` freeExpr e2
+freeExpr (ESub e1 e2) = freeExpr e1 `Set.union` freeExpr e2
+freeExpr (EMul e1 e2) = freeExpr e1 `Set.union` freeExpr e2
+freeExpr (EDiv e1 e2) = freeExpr e1 `Set.union` freeExpr e2
+freeExpr (EEQ e1 e2) = freeExpr e1 `Set.union` freeExpr e2
+freeExpr (ENEQ e1 e2) = freeExpr e1 `Set.union` freeExpr e2
+freeExpr (EGT e1 e2) = freeExpr e1 `Set.union` freeExpr e2
+freeExpr (EGTE e1 e2) = freeExpr e1 `Set.union` freeExpr e2
+freeExpr (ELT e1 e2) = freeExpr e1 `Set.union` freeExpr e2
+freeExpr (ELTE e1 e2) = freeExpr e1 `Set.union` freeExpr e2
+freeExpr (EIf e0 e1 e2) = freeExpr e0 `Set.union` freeExpr e1 `Set.union` freeExpr e2
+freeExpr (ETup es) = Set.unions (map freeExpr es)
 freeExpr (EPrj _ e) = freeExpr e
 
-freePi :: Pi -> [PN RName]
-freePi End = []
+freePi :: Pi -> Set (PN RName)
+freePi End = Set.empty
 freePi (Send c e p) =
-  freeN c `nubapp` freeExpr e `nubapp` freePi p
+  freeN c `Set.union` freeExpr e `Set.union` freePi p
 freePi (Recv c ps) =
-  freeN c `nubapp` nubconcat (map freeClause ps)
-freePi (Par p1 p2) = freePi p1 `nubapp` freePi p2
-freePi (Nu x _ p) = freePi p `setminus` [Pos x, Neg x]
+  freeN c `Set.union` Set.unions (map freeClause ps)
+freePi (Par p1 p2) = freePi p1 `Set.union` freePi p2
+freePi (Nu x _ p) = freePi p `Set.difference` Set.fromList [Pos x, Neg x]
 freePi (Repl p) = freePi p -- is that right?
 freePi (Call _) = undefined -- what to do here?
 
-freeClause :: Clause -> [PN RName]
-freeClause (Clause ptn p) = freePi p `setminus` freePtrn ptn
+freeClause :: Clause -> Set (PN RName)
+freeClause (Clause ptn p) = Set.difference (freePi p) (freePtrn ptn)
 
-freePtrn :: Ptrn -> [PN RName]
-freePtrn (PN x)  = [Pos x]
-freePtrn (PT xs) = concat (map freePtrn xs)  -- linearity check?
-freePtrn _       = []
+freePtrn :: Ptrn -> Set (PN RName)
+freePtrn (PN x)  = Set.singleton (Pos x)
+freePtrn (PT xs) = Set.unions (map freePtrn xs)  -- linearity check?
+freePtrn _       = Set.empty

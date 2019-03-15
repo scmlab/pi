@@ -90,8 +90,8 @@ Definitions :: {[Definition Loc]}
     | Definitions Definition                    { $2:$1 }
 
 Definition :: {Definition Loc}
-    : SimpName '=' ProcessPar                   {% locate $ ProcDefn $1 $3 }
-    | SimpName ':' Type                         {% locate $ TypeSign $1 $3 }
+    : ProcName '=' ProcessPar                   {% locate $ ProcDefn $1 $3 }
+    | ProcName ':' Type                         {% locate $ TypeSign $1 $3 }
 
 -- left recursive
 ProcessPar :: {Process Loc}
@@ -104,14 +104,14 @@ Process :: {Process Loc}
     | Name '>>' '{' ChoiceClauses '}'         {% locate $ Recv $1 (reverse $4)  }
     | Name '<<' SelectLabel '.' Process       {% locate $ Send $1 $3 $5 }
     | 'end'                                   {% locate $ End }
-    | '(' 'nu' SimpName ')' Process           {% locate $ Nu $3 Nothing $5 }
-    | '(' 'nu' SimpName ':' Type ')' Process  {% locate $ Nu $3 (Just $5) $7 }
+    | '(' 'nu' ProcName ')' Process           {% locate $ Nu $3 Nothing $5 }
+    | '(' 'nu' ProcName ':' Type ')' Process  {% locate $ Nu $3 (Just $5) $7 }
     | '*' Process                             {% locate $ Repl $2 }
-    | SimpName                                {% locate $ Call $1 }
+    | ProcName                                {% locate $ Call $1 }
     | '(' ProcessPar ')'                      { $2 }
 
 Pattern :: {Pattern Loc}
-         : SimpName                         {% locate $ PtrnName $1 }
+         : ProcName                         {% locate $ PtrnName $1 }
          | '(' Patterns ')'                 {% locate $ PtrnTuple (reverse $2) }
          | Label                            {% locate $ PtrnLabel $1 }
 Patterns :: {[Pattern Loc]}
@@ -126,8 +126,8 @@ ChoiceClauses :: {[Clause Loc]}
         : ChoiceClauses ';' ChoiceClause    { $3 : $1 }
         | ChoiceClause                      { [ $1 ]  }
 
-SimpName :: {SimpName Loc}
-      : namePos                             {% locate $ SimpName $1 }
+ProcName :: {ProcName Loc}
+      : namePos                             {% locate $ ProcName $1 }
 
 Name :: {Name Loc}
       : namePos                             {% locate $ Positive $1 }
