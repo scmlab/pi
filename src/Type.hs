@@ -7,7 +7,7 @@ type TName = String   -- names of declared types
 type Label = Text
 
 data BType = TInt | TBool
-  deriving (Eq, Show)
+  deriving (Eq, Show, Ord)
 
 data Type = TEnd                    -- end
            | TBase BType
@@ -20,7 +20,7 @@ data Type = TEnd                    -- end
 
            | TVar Int    -- de Bruin index?
            | TMu Type
-  deriving (Eq, Show)
+  deriving (Eq, Show, Ord)
 
 tInt  = TBase TInt
 tBool = TBase TBool
