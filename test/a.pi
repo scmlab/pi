@@ -1,8 +1,1 @@
-choice = x >>
-  { HI    -> y["hi"] . end
-  ; HELLO -> y["hello"] . end
-  }
-
-select = x << HI . y(message) . stdout[message] . end
-
-main = (nu x : << { HI : ?Int . 0 ; HELLO : ?Int . 0 }) (nu y : !Int . 0) choice | select
+main = (nu x : ?Int . 0) ((~x[3] . end) | (x(v) . end))

@@ -76,7 +76,7 @@ namePosRE :: RE Char Text
 namePosRE = fmap pack $ (:) <$> psym isLower <*> many (psym (\c -> isAlphaNum c || c == '_' || c == '\''))
 
 nameNegRE :: RE Char Text
-nameNegRE = cons <$> psym (== '~') <*> namePosRE
+nameNegRE = (\_ x -> x) <$> psym (== '~') <*> namePosRE
 
 labelRE :: RE Char Text
 labelRE = fmap pack $ (:) <$> psym isUpper <*> many (psym (\c -> isUpper c || isDigit c || c == '_' || c == '\''))
