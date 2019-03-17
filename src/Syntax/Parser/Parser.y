@@ -74,6 +74,7 @@ import Data.Text (Text)
 %right '|'
 %right 'else'
 %right '.'
+%left ','
 %left '+' '-'
 %left '*' '/'
 %left '==' '!='
@@ -113,7 +114,7 @@ Process :: {Process Loc}
 
 Pattern :: {Pattern Loc}
          : ProcName                         {% locate $ PtrnName $1 }
-         | '(' Patterns ')'                 {% locate $ PtrnTuple (reverse $2) }
+         | Patterns                         {% locate $ PtrnTuple (reverse $1) }
          | Label                            {% locate $ PtrnLabel $1 }
 Patterns :: {[Pattern Loc]}
     : Patterns ',' Pattern                  { $3 : $1 }
@@ -145,7 +146,7 @@ Expr :: {Expr Loc}
     | Expr '*' Expr                       {% locate $ Mul $1 $3 }
     | Expr '/' Expr                       {% locate $ Div $1 $3 }
     | 'if' Expr 'then' Expr 'else' Expr   {% locate $ IfThenElse $2 $4 $6 }
-    | '(' Exprs ')'                       {% locate $ ExprTuple (reverse $2) }
+    | Exprs                               {% locate $ ExprTuple (reverse $1) }
     | Term                                { $1 }
 Exprs :: {[Expr Loc]}
     : Exprs ',' Expr                        { $3 : $1 }
