@@ -159,9 +159,15 @@ load filePath = do
 
       env <- getEnv
       -- populate future, the next possible outcomes (there should be only 1)
+
+      -- run "test" or else run "main"
+      let procToRun = if Map.member "test" (envProcDefns env)
+                        then "test" else "main"
       updateFuture $ interpret env initialState $ do
-        _ <- call (Caller (PID False "you" (-1)) "main")
+        _ <- call (Caller (PID False "you" (-1)) procToRun)
         return EffNoop
+
+
       -- retrieve state from the recently populated outcome and store it
       outcome <- selectedFuture
       case outcome of

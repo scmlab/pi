@@ -60,13 +60,16 @@ runTCM = runReader . runExceptT
 checkAll :: TCM ()
 checkAll = do
 
-  -- checking only "main"
   chanTypes <- asks envChanTypes
   procDefns <- asks envProcDefns
 
-  case Map.lookup "main" procDefns of
-    Nothing -> return ()
-    Just p -> void $ checkPi chanTypes p
+  -- not checking if some process named "test" exists
+  case Map.lookup "test" procDefns of
+    Nothing -> do
+      case Map.lookup "main" procDefns of
+        Nothing -> return ()
+        Just p -> void $ checkPi chanTypes p
+    Just _ -> return ()
 
   return ()
 
