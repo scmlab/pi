@@ -1,11 +1,18 @@
-c : mu($0)(un(?(!Int.?Int.0) . $0))
+type T = Int
+-- &{ADD -> ?(Int,Int).!Int.0;
+           -- NEG -> ?Int.!Int.0}
+ms : mu($0)(un(?T . $0))
 
-squarer = * ((nu d : ?Int . !Int . 0)
-               ~c[~d] . d(x) . d[x * x]. end)
-p1 = c(z) . z[3] . z(y) . end
-p2 = c(z) . z[4] . z(w) . end
+mathSrv =
+  *((nu c : t) ~ms[~c] .
+     c>>{ ADD -> (c(x,y) . c[x+y] . end) ;
+          NEG -> (c(x)   . c[0-x] . end)
+        })
 
-main = squarer | p1 | p2
+usr0 = ms(c) . c<<ADD . c[3,4] . c(r) . end
+usr1 = ms(c) . c<<NEG . c[5] . c?r . end
+
+main = mathSrv | usr0 | usr1
 
 
 

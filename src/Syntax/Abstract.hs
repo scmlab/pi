@@ -16,6 +16,7 @@ import Type
 -- type Label = Text  -- moved to Type
 type ErrMsg = String
 type ProcName = Text
+type TypeName = Text
 
 type SName = Polarised Text
 data Name = ND (Polarised Text)   -- user defined
@@ -52,7 +53,9 @@ data ResName = StdOut | StdIn
 
 data Program = Program [Definition]
   deriving (Eq, Show)
-data Definition = ProcDefn ProcName Pi | ChanType Name Type
+data Definition = ProcDefn ProcName Pi
+                | ChanType Name Type
+                | TypeDefn TypeName Type
   deriving (Eq, Show)
 
 data Pi = End

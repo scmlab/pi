@@ -52,6 +52,7 @@ import Data.Text (Text)
         'Int'           { TokenSortInt }
         string          { TokenString $$ }
         -- typing stuff
+        'type'          { TokenType      }
         '!'             { TokenTypeSend      }
         '?'             { TokenTypeRecv      }
         '0'             { TokenTypeEnd      }
@@ -59,6 +60,8 @@ import Data.Text (Text)
         'mu'            { TokenTypeMu      }
         '$'             { TokenTypeVar      }
         '$0'            { TokenTypeVar0      }
+        typeName        { TokenTypeName $$ }
+
         -- boolean stuff
         'Bool'          { TokenSortBool }
         'True'          { TokenTrue }
@@ -97,6 +100,7 @@ Definitions :: {[Definition Loc]}
 Definition :: {Definition Loc}
     : ProcName '=' ProcessPar                   {% locate $ ProcDefn $1 $3 }
     | Name ':' Type                             {% locate $ ChanType $1 $3 }
+    | 'type' TypeName '=' Type                  {% locate $ TypeDefn $2 $4 }
 
 -- left recursive
 ProcessPar :: {Process Loc}
@@ -131,11 +135,13 @@ ChoiceClauses :: {[Clause Loc]}
         : ChoiceClauses ';' ChoiceClause    { $3 : $1 }
         | ChoiceClause                      { [ $1 ]  }
 
+TypeName :: {TypeName Loc}
+    : typeName                              {% locate $ TypeName $1 }
 ProcName :: {ProcName Loc}
       : namePos                             {% locate $ ProcName $1 }
-TypeName :: {TypeName Loc}
-    : '$0'                                  {% locate $ TypeName 0 }
-    | '$' int                               {% locate $ TypeName $2 }
+TypeVar :: {TypeVar Loc}
+    : '$0'                                  {% locate $ TypeVarIndex 0 }
+    | '$' int                               {% locate $ TypeVarIndex $2 }
 
 Name :: {Name Loc}
       : namePos                             {% locate $ Positive $1 }
@@ -190,14 +196,14 @@ TypeBase :: {Type Loc}
 
 Type :: {Type Loc}
     : '0'                                   {% locate $ TypeEnd }
-    | TypeName                               {% locate $ TypeVar $1 }
+    | TypeVar                               {% locate $ TypeVar $1 }
     | BaseType                              {% locate $ TypeBase $1 }
     | '!' Type '.' Type                     {% locate $ TypeSend $2 $4 }
     | '?' Type '.' Type                     {% locate $ TypeRecv $2 $4 }
     | '>>' '{' TypeOfLabels '}'             {% locate $ TypeSele (reverse $3)  }
     | '<<' '{' TypeOfLabels '}'             {% locate $ TypeChoi (reverse $3)  }
     | 'un' '(' Type ')'                     {% locate $ TypeUn $3 }
-    | 'mu' '(' TypeName ')' '(' Type ')'                     {% locate $ TypeMu $6 }
+    | 'mu' '(' TypeVar ')' '(' Type ')'     {% locate $ TypeMu $6 }
     | '(' TypeOfTuples ')'                  {% locate $ TypeTuple (reverse $2) }
     | '(' Type ')'                          { $2 }
 

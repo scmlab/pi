@@ -24,13 +24,16 @@ data Name     ann = Positive  Text                                      ann
 data Program  ann = Program   [Definition ann]                            ann
                   deriving (Show, Functor)
 
+data TypeVar ann  = TypeVarIndex  Int                                           ann
+                  deriving (Show, Functor)
 data ProcName ann = ProcName  Text                                      ann
                   deriving (Show, Functor)
-data TypeName ann = TypeName  Int                                           ann
+data TypeName ann = TypeName  Text                                           ann
                   deriving (Show, Functor)
 
 data Definition ann = ProcDefn  (ProcName ann)  (Process ann)             ann
                     | ChanType  (Name     ann)  (Type ann)             ann
+                    | TypeDefn  (TypeName ann)  (Type ann)             ann
                   deriving (Show, Functor)
 
 data Process  ann = Send      (Name ann)     (Expr ann)         (Process ann) ann
@@ -82,7 +85,7 @@ data Type ann = TypeEnd                                                 ann
               | TypeSele      [TypeOfLabel ann]                         ann
               | TypeChoi      [TypeOfLabel ann]                         ann
               | TypeUn        (Type ann)                                ann
-              | TypeVar       (TypeName ann)                            ann
+              | TypeVar       (TypeVar ann)                            ann
               | TypeMu        (Type ann)                                ann
               deriving (Show)
 data TypeOfLabel ann = TypeOfLabel (Label ann) (Type ann)               ann
@@ -247,7 +250,10 @@ instance ToAbstract (Expr ann) A.Expr where
   toAbstract (ExprLabel x _) = A.EV (A.VL (toAbstract x))
   toAbstract (ExprString x _) = A.EV (A.VS x)
 
-instance ToAbstract (TypeName ann) Int where
+instance ToAbstract (TypeVar ann) Int where
+  toAbstract (TypeVarIndex name    _) = name
+
+instance ToAbstract (TypeName ann) A.TypeName where
   toAbstract (TypeName name    _) = name
 
 instance ToAbstract (BaseType ann) A.BType where

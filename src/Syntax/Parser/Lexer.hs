@@ -44,9 +44,10 @@ tokenRE =
   <|> TokenBraceEnd     <$ "}"
   <|> TokenSemi         <$ ";"
   <|> TokenArrow        <$ "->"
-  <|> TokenTypeOf       <$ ":"
 
   -- Typing stuff
+  <|> TokenTypeOf       <$ ":"
+  <|> TokenType         <$ "type"
   <|> TokenTypeSend     <$ "!"
   <|> TokenTypeRecv     <$ "?"
   <|> TokenTypeEnd      <$ "0"
@@ -54,6 +55,7 @@ tokenRE =
   <|> TokenTypeMu       <$ "mu"
   <|> TokenTypeVar0     <$ "$0"
   <|> TokenTypeVar      <$ "$"
+  <|> TokenTypeName     <$> typeNameRE
 
   -- Boolean stuff
   <|> TokenTrue         <$ "True"
@@ -82,6 +84,10 @@ namePosRE = fmap pack $ (:) <$> psym isLower <*> many (psym (\c -> isAlphaNum c 
 
 nameNegRE :: RE Char Text
 nameNegRE = (\_ x -> x) <$> psym (== '~') <*> namePosRE
+
+-- starts with uppercase alphabets
+typeNameRE :: RE Char Text
+typeNameRE = fmap pack $ (:) <$> psym isUpper <*> many (psym (\c -> isAlphaNum c || c == '_' || c == '\''))
 
 labelRE :: RE Char Text
 labelRE = fmap pack $ (:) <$> psym isUpper <*> many (psym (\c -> isUpper c || isDigit c || c == '_' || c == '\''))

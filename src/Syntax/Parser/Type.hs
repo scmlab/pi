@@ -38,6 +38,7 @@ data Token
 
   -- typing stuff
   | TokenTypeOf
+  | TokenType
   | TokenTypeSend
   | TokenTypeRecv
   | TokenTypeEnd
@@ -45,6 +46,7 @@ data Token
   | TokenTypeMu
   | TokenTypeVar0
   | TokenTypeVar
+  | TokenTypeName Text
 
   -- boolean stuff
   | TokenTrue

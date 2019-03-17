@@ -270,7 +270,7 @@ programToEnv (Program declarations) = do
   -- unless (Map.null onlyTypes) $
   --   throwError $ TypeError $ MissingProcDefn onlyTypes
   chanTypes' <- Map.fromList <$> forM chanTypes (\(n, t) -> toSName n >>= \n' -> return (n', t) )
-  return $ Env chanTypes' procDefns
+  return $ Env chanTypes' procDefns typeDefns
   where
     toChanTypePair (ChanType n t) = Just (n, t)
     toChanTypePair _              = Nothing
@@ -278,8 +278,12 @@ programToEnv (Program declarations) = do
     toProcDefnPair (ProcDefn n t) = Just (n, t)
     toProcDefnPair _              = Nothing
 
+    toTypeDefnPair (TypeDefn n t) = Just (n, t)
+    toTypeDefnPair _              = Nothing
+
     chanTypes = mapMaybe toChanTypePair declarations
     procDefns = Map.fromList $ mapMaybe toProcDefnPair declarations
+    typeDefns = Map.fromList $ mapMaybe toTypeDefnPair declarations
 
 toSName :: Name -> RuntimeM SName
 toSName (ND c) = return c

@@ -15,11 +15,12 @@ import Type
 data Env = Env
   { envChanTypes :: Map SName Type
   , envProcDefns :: Map ProcName Pi
+  , envTypeDefns :: Map TypeName Type
   }
   deriving (Show)
 
 initEnv :: Env
-initEnv = Env Map.empty Map.empty
+initEnv = Env Map.empty Map.empty Map.empty
 
 --------------------------------------------------------------------------------
 -- | The EitherT monad transformer, from https://hackage.haskell.org/package/either-4.4.1/
