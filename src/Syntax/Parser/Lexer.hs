@@ -50,12 +50,13 @@ tokenRE =
   <|> TokenType         <$ "type"
   <|> TokenTypeSend     <$ "!"
   <|> TokenTypeRecv     <$ "?"
+  <|> TokenTypeChoi     <$ "&"
+  <|> TokenTypeSele     <$ "#"
   <|> TokenTypeEnd      <$ "0"
   <|> TokenTypeUn       <$ "un"
   <|> TokenTypeMu       <$ "mu"
   <|> TokenTypeVar0     <$ "$0"
   <|> TokenTypeVar      <$ "$"
-  <|> TokenTypeName     <$> typeNameRE
 
   -- Boolean stuff
   <|> TokenTrue         <$ "True"
@@ -70,6 +71,8 @@ tokenRE =
   <|> TokenThen         <$ "then"
   <|> TokenElse         <$ "else"
   <|> TokenLabel        <$> labelRE
+  <|> TokenTypeName     <$> typeNameRE
+
   <|> TokenString       <$> stringRE
   <|> TokenNamePos      <$> namePosRE
   <|> TokenNameNeg      <$> nameNegRE

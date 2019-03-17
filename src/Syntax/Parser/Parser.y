@@ -55,6 +55,8 @@ import Data.Text (Text)
         'type'          { TokenType      }
         '!'             { TokenTypeSend      }
         '?'             { TokenTypeRecv      }
+        '&'             { TokenTypeChoi      }
+        '#'             { TokenTypeSele      }
         '0'             { TokenTypeEnd      }
         'un'            { TokenTypeUn      }
         'mu'            { TokenTypeMu      }
@@ -167,6 +169,7 @@ Exprs :: {[Expr Loc]}
 Term :: {Expr Loc}
     : '(' Expr ')'                        { $2 }
     | Name                                {% locate $ ExprName $1 }
+    | '0'                                 {% locate $ ExprDigit 0 }
     | int                                 {% locate $ ExprDigit $1 }
     | string                              {% locate $ ExprString $1 }
     | Expr '==' Expr                      {% locate $ EQ  $1 $3 }
@@ -200,8 +203,8 @@ Type :: {Type Loc}
     | BaseType                              {% locate $ TypeBase $1 }
     | '!' Type '.' Type                     {% locate $ TypeSend $2 $4 }
     | '?' Type '.' Type                     {% locate $ TypeRecv $2 $4 }
-    | '>>' '{' TypeOfLabels '}'             {% locate $ TypeSele (reverse $3)  }
-    | '<<' '{' TypeOfLabels '}'             {% locate $ TypeChoi (reverse $3)  }
+    | '&' '{' TypeOfLabels '}'             {% locate $ TypeSele (reverse $3)  }
+    | '#' '{' TypeOfLabels '}'             {% locate $ TypeChoi (reverse $3)  }
     | 'un' '(' Type ')'                     {% locate $ TypeUn $3 }
     | 'mu' '(' TypeVar ')' '(' Type ')'     {% locate $ TypeMu $6 }
     | '(' TypeOfTuples ')'                  {% locate $ TypeTuple (reverse $2) }
@@ -212,7 +215,7 @@ TypeOfTuples :: {[Type Loc]}
     | Type ',' Type                         { [$3, $1] }
 
 TypeOfLabel :: {TypeOfLabel Loc}
-    : Label ':' Type                        {% locate $ TypeOfLabel $1 $3  }
+    : Label '->' Type                        {% locate $ TypeOfLabel $1 $3  }
 
 TypeOfLabels :: {[TypeOfLabel Loc]}
     : TypeOfLabels ';' TypeOfLabel          { $3 : $1 }

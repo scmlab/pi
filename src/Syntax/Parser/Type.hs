@@ -41,6 +41,8 @@ data Token
   | TokenType
   | TokenTypeSend
   | TokenTypeRecv
+  | TokenTypeChoi
+  | TokenTypeSele
   | TokenTypeEnd
   | TokenTypeUn
   | TokenTypeMu
