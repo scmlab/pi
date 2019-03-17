@@ -9,8 +9,8 @@ mathSrv = *((nu c : t) ~ms[c] . ~mw[~c] . end)
 
 mathWork =
   *(mw(c) .
-     (c?{ADD -> (c(x,y) . c[x+y] . mw[c] . end) ;
-         NEG -> (c(x)   . c[0-x] . mw[c] . end) ;
+     (c?{ADD -> (c(x,y) . c[x+y] . ~mw[c] . end) ;
+         NEG -> (c(x)   . c[0-x] . ~mw[c] . end) ;
          END -> end }))
 
 usr1 = ms(c) .
