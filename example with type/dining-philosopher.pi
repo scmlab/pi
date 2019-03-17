@@ -1,9 +1,12 @@
-phil0 = fork0?x . fork1?y . stdout!0 .
-         (fork1!True . end | fork0!True . end |
-           stdout!"phil0 thinking" . phil0)
+fork0 : mu(X)(un(?Bool . X))
+fork1 : mu(X)(un(?Bool . X))
 
-phil1 = fork1?x . fork0?y . stdout!1 .
-         (fork1!True . end | fork0!True . end |
-           stdout!"phil1 thinking" . phil1)
+phil0 = * (fork0(x) . fork1(y) . stdout!0 .
+           (~fork1[True] . end | ~fork0[True] . end |
+            stdout!"phil0 thinking"))
 
-main = phil0 | phil1 | fork1!True . end | fork0!True . end
+phil1 = * (fork1(x) . fork0(y) . stdout!1 .
+           (~fork1[True] . end | ~fork0[True] . end |
+            stdout!"phil1 thinking"))
+
+main = phil0 | phil1 | ~fork1[True] . end | ~fork0[True] . end
