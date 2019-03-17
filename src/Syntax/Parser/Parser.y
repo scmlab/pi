@@ -93,7 +93,7 @@ Definitions :: {[Definition Loc]}
 
 Definition :: {Definition Loc}
     : ProcName '=' ProcessPar                   {% locate $ ProcDefn $1 $3 }
-    | ProcName ':' Type                         {% locate $ TypeSign $1 $3 }
+    | Name ':' Type                             {% locate $ ChanType $1 $3 }
 
 -- left recursive
 ProcessPar :: {Process Loc}

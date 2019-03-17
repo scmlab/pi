@@ -30,7 +30,7 @@ data TypeName ann = TypeName  Int                                           ann
                   deriving (Show, Functor)
 
 data Definition ann = ProcDefn  (ProcName ann)  (Process ann)             ann
-                    | TypeSign  (ProcName ann)  (Type ann)             ann
+                    | ChanType  (Name     ann)  (Type ann)             ann
                   deriving (Show, Functor)
 
 data Process  ann = Send      (Name ann)     (Expr ann)         (Process ann) ann
@@ -186,7 +186,7 @@ instance ToAbstract (Program ann) A.Program where
 
 instance ToAbstract (Definition ann) A.Definition where
   toAbstract (ProcDefn name process _) = A.ProcDefn (toAbstract name) (toAbstract process)
-  toAbstract (TypeSign name t _) = A.TypeSign (toAbstract name) (toAbstract t)
+  toAbstract (ChanType name t _) = A.ChanType (toAbstract name) (toAbstract t)
 
 instance ToAbstract (Label ann) A.Label where
   toAbstract (Label    label _)     = label

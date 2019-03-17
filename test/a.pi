@@ -1,3 +1,4 @@
+c : ?(Int, Int) . 0
 adder = (c(x,y) . c[x+y] . end)
 p1 = c[3,4] . c(y) . end
 p2 = c[5,6] . c(z) . end

@@ -6,7 +6,7 @@ import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import qualified Control.Exception as Exception
 import qualified Data.Map as Map
-import Data.Map (Map)
+-- import Data.Map (Map)
 import Control.Exception (IOException)
 import Data.Text.Prettyprint.Doc
 import Data.ByteString.Lazy (ByteString)
@@ -14,7 +14,6 @@ import qualified Data.ByteString.Lazy as BS
 import Data.Maybe (mapMaybe)
 
 import Syntax.Abstract
-import Type
 import Type.TypeCheck
 -- import Syntax.Concrete (restore)
 import qualified Syntax.Parser as Parser
@@ -261,26 +260,22 @@ data Request
 
 programToEnv :: Program -> RuntimeM Env
 programToEnv (Program declarations) = do
-  -- throw if there is any type signature without a corresponding process definition
-  unless (Map.null onlyTypes) $
-    throwError $ TypeError $ MissingProcDefn onlyTypes
-
-  return (Map.union withTypes withoutTypes)
+  -- -- throw if there is any type signature without a corresponding process definition
+  -- unless (Map.null onlyTypes) $
+  --   throwError $ TypeError $ MissingProcDefn onlyTypes
+  chanTypes' <- Map.fromList <$> forM chanTypes (\(n, t) -> toSName n >>= \n' -> return (n', t) )
+  return $ Env chanTypes' procDefns
   where
-    toTypeSignPair (TypeSign n t) = Just (n, t)
-    toTypeSignPair _              = Nothing
+    toChanTypePair (ChanType n t) = Just (n, t)
+    toChanTypePair _              = Nothing
 
     toProcDefnPair (ProcDefn n t) = Just (n, t)
     toProcDefnPair _              = Nothing
 
-    typeSigns = Map.fromList $ mapMaybe toTypeSignPair declarations
+    chanTypes = mapMaybe toChanTypePair declarations
     procDefns = Map.fromList $ mapMaybe toProcDefnPair declarations
 
-    withTypes :: Map ProcName DefnPair
-    withTypes = fmap (uncurry WithType) $ Map.intersectionWith (,) procDefns typeSigns
-
-    withoutTypes :: Map ProcName DefnPair
-    withoutTypes =  fmap WithoutType $ Map.difference procDefns typeSigns
-
-    onlyTypes :: Map ProcName Type
-    onlyTypes =  Map.difference typeSigns procDefns
+toSName :: Name -> RuntimeM SName
+toSName (ND c) = return c
+toSName n@(NG _) = throwError $ TypeError $ SNameExpected n
+toSName n@(NR _) = throwError $ TypeError $ SNameExpected n

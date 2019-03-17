@@ -274,7 +274,7 @@ restict (ReplNu _ x p) = do
 
 call :: Caller -> PiMonad Pi
 call (Caller _ callee) = do
-  procs <- Map.map toProcess <$> ask
+  procs <- asks envProcDefns
   case Map.lookup callee procs of
     Just p  -> do
       addPi (PID False callee) p

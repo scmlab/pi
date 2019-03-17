@@ -36,6 +36,7 @@ data TypeError
   | PatternMismatched Type Ptrn
   | TypeOfNewChannelMissing Text
   | RecvExpected Type
+  | SNameExpected Name
   | SendExpected
   | Others String
   deriving (Show)
@@ -54,22 +55,21 @@ runTCM = runReader . runExceptT
 --------------------------------------------------------------------------------
 -- | Checkings
 
+
+
 checkAll :: TCM ()
 checkAll = do
 
   -- checking only "main"
-  env <- ask
-  case Map.lookup "main" env of
+  chanTypes <- asks envChanTypes
+  procDefns <- asks envProcDefns
+
+  case Map.lookup "main" procDefns of
     Nothing -> return ()
-    Just p -> checkType (toProcess p)
+    Just p -> void $ checkPi chanTypes p
 
   return ()
 
-  where
-    checkType :: Pi -> TCM ()
-    checkType process = do
-      _ <- checkPi Map.empty process
-      return ()
 
 --------------------------------------------------------------------------------
 -- | Code
@@ -220,9 +220,9 @@ checkPi ctx (Nu x (Just t) p) = do
   return (ctx'', Set.difference l (Set.fromList [Pos x, Neg x]))
 
 checkPi ctx (Call name) = do
-  env <- ask
+  env <- asks envProcDefns
   case Map.lookup name env of
-    Just p -> checkPi ctx (toProcess p)
+    Just p -> checkPi ctx p
     Nothing -> throwError $ ProcessNotFound (Pos name)
 
 
@@ -403,7 +403,7 @@ cn :: String -> SName
 cn = Neg . pack
 
 test0 :: Either TypeError (Ctx, Set SName)
-test0 = runTCM (checkPi ctx p) Map.empty
+test0 = runTCM (checkPi ctx p) initEnv
   where ctx = Map.fromList [(cp "c", tsend TInt (tsend TBool TEnd)),
                (cp "d", TSend (TTuple [tInt, tsend TBool TEnd]) TEnd)]
         p = Send (cP "c") (eI 3) $
@@ -412,12 +412,12 @@ test0 = runTCM (checkPi ctx p) Map.empty
         -}
 
 test1 :: Either TypeError (Ctx, Set SName)
-test1 = runTCM (checkPi ctx p) Map.empty
+test1 = runTCM (checkPi ctx p) initEnv
   where ctx = Map.fromList [(cn "c", trecv TInt (trecv TBool TEnd))]
         p = recv (cN "c") (pn "x")  $ recv (cN "c") (pn "y")  End
 
 test2 :: Either TypeError (Ctx, Set SName)
-test2 = runTCM (checkPi ctx p) Map.empty
+test2 = runTCM (checkPi ctx p) initEnv
   where p = nu "c" t (Par p1 p2)
         p1 = Send (cP "c") (eI 3) $ Send (cP "c") (eB False) End
         p2 = recv (cN "c") (pn "x") $ recv (cN "c") (pn "y") End
@@ -430,7 +430,7 @@ test2 = runTCM (checkPi ctx p) Map.empty
         -}
 
 test3 :: Either TypeError (Ctx, Set SName)
-test3 = runTCM (checkPi ctx0 p0) Map.empty
+test3 = runTCM (checkPi ctx0 p0) initEnv
   where
     t0 :: Type
     t0 = tsele [("NEG", tsend TInt  $ trecv TInt  $ TEnd),
@@ -467,14 +467,14 @@ test3 = runTCM (checkPi ctx0 p0) Map.empty
     _p2 = nu "c" t1 (nu "d" t0 p0 `Par` _p1)
 
 test4 :: Either TypeError (Ctx, Set SName)
-test4 = runTCM (checkPi ctx p) Map.empty
+test4 = runTCM (checkPi ctx p) initEnv
   where ctx = Map.fromList [(cp "c", TMu $ TUn $ trecv TInt $ TVar 0)]
         p = Repl (recv (cP "c") (pn "x") End)
         -- p = *(c(x).0)
         -- {c: mu(X)un(?Int.X)}
 
 test5 :: Either TypeError (Ctx, Set SName)
-test5 = runTCM (checkPi ctx p) Map.empty
+test5 = runTCM (checkPi ctx p) initEnv
   where t = tsend TInt $ trecv TBool TEnd
         -- {c : mu(X)(un(?(!Int.?Bool.0).X))}
         -- p = *(c(d). d[3].d(x).0)
