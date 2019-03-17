@@ -1,0 +1,8 @@
+c : mu(X)(un(?(!Int.?Int.0).X))
+
+squarer = * ((nu d : ?Int . !Int . 0)
+               ~c[~d] . d(x) . d[x * x]. end)
+p1 = c(z) . z[3] . z(y) . end
+p2 = c(z) . z[4] . z(w) . end
+
+main = squarer | p1 | p2

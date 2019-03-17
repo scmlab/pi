@@ -1,0 +1,24 @@
+type t = mu(X) . &{ADD -> ?(Int,Int) . !Int . X ;
+                   NEG -> ?Int.!Int . X;
+                   END -> 0}
+
+ms : mu(X)(un(?(~t) . X))
+mw : mu(X)(un(?t . X))
+
+mathSrv = *((nu c : t) ~ms[c] . ~mw[~c] . end)
+
+mathWork =
+  *(mw(c) .
+     (c?{ADD -> (c(x,y) . c[x+y] . mw[c] . end) ;
+         NEG -> (c(x)   . c[0-x] . mw[c] . end) ;
+         END -> end }))
+
+usr1 = ms(c) .
+         c<<ADD . c[3,4] . c(r) .
+         c<<NEG . c[6]   . c(r) .
+         c<<END . end
+usr2 = ms(c) .
+         c<<NEG . c[5] . c(r) .
+         c<<END . end
+
+main = mathSrv | mathWork | usr1 | usr2

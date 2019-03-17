@@ -3,3 +3,7 @@ pi.cabal
 *~
 
 \.DS_Store
+
+*.o
+
+*.hi
