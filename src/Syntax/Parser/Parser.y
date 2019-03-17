@@ -56,6 +56,9 @@ import Data.Text (Text)
         '?'             { TokenTypeRecv      }
         '0'             { TokenTypeEnd      }
         'un'            { TokenTypeUn      }
+        'mu'            { TokenTypeMu      }
+        '$'             { TokenTypeVar      }
+        '$0'            { TokenTypeVar0      }
         -- boolean stuff
         'Bool'          { TokenSortBool }
         'True'          { TokenTrue }
@@ -130,6 +133,9 @@ ChoiceClauses :: {[Clause Loc]}
 
 ProcName :: {ProcName Loc}
       : namePos                             {% locate $ ProcName $1 }
+TypeName :: {TypeName Loc}
+    : '$0'                                  {% locate $ TypeName 0 }
+    | '$' int                               {% locate $ TypeName $2 }
 
 Name :: {Name Loc}
       : namePos                             {% locate $ Positive $1 }
@@ -184,13 +190,14 @@ TypeBase :: {Type Loc}
 
 Type :: {Type Loc}
     : '0'                                   {% locate $ TypeEnd }
+    | TypeName                               {% locate $ TypeVar $1 }
     | BaseType                              {% locate $ TypeBase $1 }
     | '!' Type '.' Type                     {% locate $ TypeSend $2 $4 }
     | '?' Type '.' Type                     {% locate $ TypeRecv $2 $4 }
     | '>>' '{' TypeOfLabels '}'             {% locate $ TypeSele (reverse $3)  }
     | '<<' '{' TypeOfLabels '}'             {% locate $ TypeChoi (reverse $3)  }
     | 'un' '(' Type ')'                     {% locate $ TypeUn $3 }
-    | '*' '(' Type ')'                      {% locate $ TypeMu $3 }
+    | 'mu' '(' TypeName ')' '(' Type ')'                     {% locate $ TypeMu $6 }
     | '(' TypeOfTuples ')'                  {% locate $ TypeTuple (reverse $2) }
     | '(' Type ')'                          { $2 }
 

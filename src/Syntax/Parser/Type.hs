@@ -42,6 +42,9 @@ data Token
   | TokenTypeRecv
   | TokenTypeEnd
   | TokenTypeUn
+  | TokenTypeMu
+  | TokenTypeVar0
+  | TokenTypeVar
 
   -- boolean stuff
   | TokenTrue

@@ -1,10 +1,22 @@
-c : ?(Int, Int) . !Int . 0
+c : mu($0)(un(?(!Int.?Int.0) . $0))
 
-adder = (c(x,y) . c[x+y] . end)
-p1 = c[3,4] . c(y) . end
-p2 = c[5,6] . c(z) . end
+squarer = * ((nu d : ?Int . !Int . 0)
+               ~c[~d] . d(x) . d[x * x]. end)
+p1 = c(z) . z[3] . z(y) . end
+p2 = c(z) . z[4] . z(w) . end
 
-main = adder | p1 | p2
+main = squarer | p1 | p2
+
+
+
+
+-- c : ?(Int, Int) . !Int . 0
+--
+-- adder = (c(x,y) . c[x+y] . end)
+-- p1 = c[3,4] . c(y) . end
+-- p2 = c[5,6] . c(z) . end
+--
+-- main = adder | p1 | p2
 
 
 --  main = (nu a : *(un(!Int . 0))) *(a[3] . end)
