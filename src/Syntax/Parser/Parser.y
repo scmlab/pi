@@ -55,6 +55,7 @@ import Data.Text (Text)
         '!'             { TokenTypeSend      }
         '?'             { TokenTypeRecv      }
         '0'             { TokenTypeEnd      }
+        'un'            { TokenTypeUn      }
         -- boolean stuff
         'Bool'          { TokenSortBool }
         'True'          { TokenTrue }
@@ -188,7 +189,9 @@ Type :: {Type Loc}
     | '?' Type '.' Type                     {% locate $ TypeRecv $2 $4 }
     | '>>' '{' TypeOfLabels '}'             {% locate $ TypeSele (reverse $3)  }
     | '<<' '{' TypeOfLabels '}'             {% locate $ TypeChoi (reverse $3)  }
-    | '(' Type ')'                          { $2  }
+    | 'un' '(' Type ')'                     {% locate $ TypeUn $3 }
+    | '*' '(' Type ')'                      {% locate $ TypeMu $3 }
+    | '(' Type ')'                          { $2 }
 
 TypeOfLabel :: {TypeOfLabel Loc}
     : Label ':' Type                        {% locate $ TypeOfLabel $1 $3  }

@@ -50,6 +50,8 @@ tokenRE =
   <|> TokenTypeSend     <$ "!"
   <|> TokenTypeRecv     <$ "?"
   <|> TokenTypeEnd      <$ "0"
+  <|> TokenTypeUn       <$ "un"
+
   -- Boolean stuff
   <|> TokenTrue         <$ "True"
   <|> TokenFalse        <$ "False"

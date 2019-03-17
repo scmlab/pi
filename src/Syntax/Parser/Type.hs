@@ -41,6 +41,7 @@ data Token
   | TokenTypeSend
   | TokenTypeRecv
   | TokenTypeEnd
+  | TokenTypeUn
 
   -- boolean stuff
   | TokenTrue

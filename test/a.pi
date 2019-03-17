@@ -1,1 +1,5 @@
-main = (nu x : ?Int . 0) ((~x[3] . end) | (x(v) . end))
+
+
+main = (nu a : *(un(!Int . 0))) *(a[3] . end)
+
+-- main = (nu x : ?Int . 0) ((~x[3] . end) | (x(v) . stdout[v] . end))
