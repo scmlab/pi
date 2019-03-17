@@ -184,15 +184,19 @@ TypeBase :: {Type Loc}
 
 Type :: {Type Loc}
     : '0'                                   {% locate $ TypeEnd }
-    | '!' TypeBase '.' Type                 {% locate $ TypeSend $2 $4 }
+    | BaseType                              {% locate $ TypeBase $1 }
     | '!' Type '.' Type                     {% locate $ TypeSend $2 $4 }
-    | '?' TypeBase '.' Type                 {% locate $ TypeRecv $2 $4 }
     | '?' Type '.' Type                     {% locate $ TypeRecv $2 $4 }
     | '>>' '{' TypeOfLabels '}'             {% locate $ TypeSele (reverse $3)  }
     | '<<' '{' TypeOfLabels '}'             {% locate $ TypeChoi (reverse $3)  }
     | 'un' '(' Type ')'                     {% locate $ TypeUn $3 }
     | '*' '(' Type ')'                      {% locate $ TypeMu $3 }
+    | '(' TypeOfTuples ')'                  {% locate $ TypeTuple (reverse $2) }
     | '(' Type ')'                          { $2 }
+
+TypeOfTuples :: {[Type Loc]}
+    : TypeOfTuples ',' Type                 { $3 : $1 }
+    | Type ',' Type                         { [$3, $1] }
 
 TypeOfLabel :: {TypeOfLabel Loc}
     : Label ':' Type                        {% locate $ TypeOfLabel $1 $3  }
