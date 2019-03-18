@@ -1,5 +1,5 @@
-ms : mu($0)(un(?&{ADD -> ?(Int,Int).!Int.0;
-           NEG -> ?Int.!Int.0} . $0))
+ms : mu(X)(un(?&{ADD -> ?(Int,Int).!Int.0;
+           NEG -> ?Int.!Int.0} . X))
 
 mathSrv =
   *((nu c : &{ADD -> ?(Int,Int).!Int.0;

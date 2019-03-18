@@ -178,7 +178,8 @@ instance Pretty Type where
     where choices' = map (\(label, t) ->
               pretty label <> " : " <> pretty t) choices
   pretty (TUn t) = "un(" <> pretty t <> ")"
-  pretty (TVar t) = "$" <> pretty t
+  pretty (TVar (TypeVarIndex t)) = "$" <> pretty t
+  pretty (TVar TypeVarX) = "X"
   pretty (TMu t) = "μ(" <> pretty t <> ")"
 
 

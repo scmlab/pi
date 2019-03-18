@@ -9,6 +9,9 @@ type Label = Text
 data BType = TInt | TBool
   deriving (Eq, Show, Ord)
 
+data TypeVar = TypeVarIndex Int | TypeVarX
+  deriving (Eq, Show, Ord)
+
 data Type = TEnd                    -- end
            | TBase BType
            | TTuple [Type]
@@ -18,7 +21,7 @@ data Type = TEnd                    -- end
            | TChoi [(Label, Type)]  -- choice
            | TUn Type               -- unrestricted
 
-           | TVar Int    -- de Bruin index?
+           | TVar TypeVar    -- de Bruin index?
            | TMu Type
   deriving (Eq, Show, Ord)
 
@@ -49,7 +52,7 @@ substT i s (TRecv t u) = TRecv (substT i s t) (substT i s u)
 substT i s (TChoi ts)  = TChoi (map (id *** substT i s) ts)
 substT i s (TSele ts)  = TSele (map (id *** substT i s) ts)
 substT i s (TUn t)     = TUn (substT i s t)
-substT i s (TVar j)    | i == j = s
+substT i s (TVar j)    | TypeVarIndex i == j = s
                        | otherwise = TVar j
 substT i s (TMu t)     = TMu (substT (1+i) s t)
 

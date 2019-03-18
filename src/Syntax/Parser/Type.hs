@@ -48,6 +48,7 @@ data Token
   | TokenTypeMu
   | TokenTypeVar0
   | TokenTypeVar
+  | TokenTypeVarX
   | TokenTypeName Text
 
   -- boolean stuff

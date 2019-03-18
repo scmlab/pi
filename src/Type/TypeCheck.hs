@@ -471,7 +471,7 @@ test3 = runTCM (checkPi ctx0 p0) initEnv
 
 test4 :: Either TypeError (Ctx, Set SName)
 test4 = runTCM (checkPi ctx p) initEnv
-  where ctx = Map.fromList [(cp "c", TMu $ TUn $ trecv TInt $ TVar 0)]
+  where ctx = Map.fromList [(cp "c", TMu $ TUn $ trecv TInt $ TVar (TypeVarIndex 0))]
         p = Repl (recv (cP "c") (pn "x") End)
         -- p = *(c(x).0)
         -- {c: mu(X)un(?Int.X)}
@@ -481,7 +481,7 @@ test5 = runTCM (checkPi ctx p) initEnv
   where t = tsend TInt $ trecv TBool TEnd
         -- {c : mu(X)(un(?(!Int.?Bool.0).X))}
         -- p = *(c(d). d[3].d(x).0)
-        ctx = Map.fromList [(cp "c", TMu $ TUn $ TRecv t $ TVar 0)]
+        ctx = Map.fromList [(cp "c", TMu $ TUn $ TRecv t $ TVar (TypeVarIndex 0))]
         p = Repl (recv (cP "c") (pn "d") $
                    Send (cP "d") (eI 3) $
                      recv (cP "d") (pn "x") End)

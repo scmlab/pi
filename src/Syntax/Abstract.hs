@@ -67,7 +67,6 @@ data Pi = End
         | Call ProcName
    deriving (Eq, Show)
 
-
 data Clause = Clause Ptrn Pi
    deriving (Eq, Show)
 

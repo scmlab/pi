@@ -25,6 +25,7 @@ data Program  ann = Program   [Definition ann]                            ann
                   deriving (Show, Functor)
 
 data TypeVar ann  = TypeVarIndex  Int                                           ann
+                  | TypeVarX                                           ann
                   deriving (Show, Functor)
 data ProcName ann = ProcName  Text                                      ann
                   deriving (Show, Functor)
@@ -250,8 +251,9 @@ instance ToAbstract (Expr ann) A.Expr where
   toAbstract (ExprLabel x _) = A.EV (A.VL (toAbstract x))
   toAbstract (ExprString x _) = A.EV (A.VS x)
 
-instance ToAbstract (TypeVar ann) Int where
-  toAbstract (TypeVarIndex name    _) = name
+instance ToAbstract (TypeVar ann) A.TypeVar where
+  toAbstract (TypeVarIndex name    _) = A.TypeVarIndex name
+  toAbstract (TypeVarX    _) = A.TypeVarX
 
 instance ToAbstract (TypeName ann) A.TypeName where
   toAbstract (TypeName name    _) = name

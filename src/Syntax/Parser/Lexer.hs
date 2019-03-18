@@ -57,6 +57,7 @@ tokenRE =
   <|> TokenTypeMu       <$ "mu"
   <|> TokenTypeVar0     <$ "$0"
   <|> TokenTypeVar      <$ "$"
+  <|> TokenTypeVarX     <$ "X"
 
   -- Boolean stuff
   <|> TokenTrue         <$ "True"

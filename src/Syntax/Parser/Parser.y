@@ -62,6 +62,7 @@ import Data.Text (Text)
         'mu'            { TokenTypeMu      }
         '$'             { TokenTypeVar      }
         '$0'            { TokenTypeVar0      }
+        'X'             { TokenTypeVarX      }
         typeName        { TokenTypeName $$ }
 
         -- boolean stuff
@@ -144,6 +145,7 @@ ProcName :: {ProcName Loc}
 TypeVar :: {TypeVar Loc}
     : '$0'                                  {% locate $ TypeVarIndex 0 }
     | '$' int                               {% locate $ TypeVarIndex $2 }
+    | 'X'                                   {% locate $ TypeVarX }
 
 Name :: {Name Loc}
       : namePos                             {% locate $ Positive $1 }
