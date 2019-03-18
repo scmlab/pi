@@ -3,13 +3,12 @@ module Type where
 import Data.Text (Text)
 import Control.Arrow ((***))
 
-type TName = String   -- names of declared types
 type Label = Text
 
 data BType = TInt | TBool
   deriving (Eq, Show, Ord)
 
-data TypeVar = TypeVarIndex Int | TypeVarX
+data TypeVar = TypeVarIndex Int | TypeVarText Text
   deriving (Eq, Show, Ord)
 
 data Type = TEnd                    -- end

@@ -163,6 +163,10 @@ ppDefs :: [(Name, Pi)] -> Doc a
 ppDefs = vsep . map (uncurry ppDef)
 
 -- Types
+instance Pretty TypeVar where
+  pretty (TypeVarIndex i) = "$" <> pretty i
+  pretty (TypeVarText n) = pretty n
+
 instance Pretty Type where
   pretty TEnd = "∅"
   pretty (TBase t) = pretty t
@@ -178,8 +182,7 @@ instance Pretty Type where
     where choices' = map (\(label, t) ->
               pretty label <> " : " <> pretty t) choices
   pretty (TUn t) = "un(" <> pretty t <> ")"
-  pretty (TVar (TypeVarIndex t)) = "$" <> pretty t
-  pretty (TVar TypeVarX) = "X"
+  pretty (TVar t) = pretty t
   pretty (TMu t) = "μ(" <> pretty t <> ")"
 
 

@@ -60,9 +60,6 @@ import Data.Text (Text)
         '0'             { TokenTypeEnd      }
         'un'            { TokenTypeUn      }
         'mu'            { TokenTypeMu      }
-        '$'             { TokenTypeVar      }
-        '$0'            { TokenTypeVar0      }
-        'X'             { TokenTypeVarX      }
         typeName        { TokenTypeName $$ }
 
         -- boolean stuff
@@ -140,12 +137,13 @@ ChoiceClauses :: {[Clause Loc]}
 
 TypeName :: {TypeName Loc}
     : typeName                              {% locate $ TypeName $1 }
+    | label                                 {% locate $ TypeName $1 }
+
 ProcName :: {ProcName Loc}
       : namePos                             {% locate $ ProcName $1 }
+
 TypeVar :: {TypeVar Loc}
-    : '$0'                                  {% locate $ TypeVarIndex 0 }
-    | '$' int                               {% locate $ TypeVarIndex $2 }
-    | 'X'                                   {% locate $ TypeVarX }
+    : TypeName                              {% locate $ TypeVarText $1 }
 
 Name :: {Name Loc}
       : namePos                             {% locate $ Positive $1 }

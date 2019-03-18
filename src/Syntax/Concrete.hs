@@ -23,10 +23,6 @@ data Name     ann = Positive  Text                                      ann
 
 data Program  ann = Program   [Definition ann]                            ann
                   deriving (Show, Functor)
-
-data TypeVar ann  = TypeVarIndex  Int                                           ann
-                  | TypeVarX                                           ann
-                  deriving (Show, Functor)
 data ProcName ann = ProcName  Text                                      ann
                   deriving (Show, Functor)
 data TypeName ann = TypeName  Text                                           ann
@@ -74,6 +70,11 @@ data Expr     ann = ExprTuple [Expr ann]                                ann
                   deriving (Show, Functor)
 
 -- Session Types
+
+data TypeVar ann  = TypeVarIndex Int                                    ann
+                  | TypeVarText (TypeName ann)                          ann
+                  deriving (Show, Functor)
+
 data BaseType ann
               = BaseInt                                                 ann
               | BaseBool                                                ann
@@ -123,6 +124,8 @@ instance Located (Program Loc) where
 
 instance Located (Definition Loc) where
   locOf (ProcDefn _ _ loc) = loc
+  locOf (TypeDefn _ _ loc) = loc
+  locOf (ChanType _ _ loc) = loc
 
 instance Located (Process Loc) where
   locOf (Send _ _ _ loc) = loc
@@ -191,6 +194,7 @@ instance ToAbstract (Program ann) A.Program where
 instance ToAbstract (Definition ann) A.Definition where
   toAbstract (ProcDefn name process _) = A.ProcDefn (toAbstract name) (toAbstract process)
   toAbstract (ChanType name t _) = A.ChanType (toAbstract name) (toAbstract t)
+  toAbstract (TypeDefn name t _) = A.TypeDefn (toAbstract name) (toAbstract t)
 
 instance ToAbstract (Label ann) A.Label where
   toAbstract (Label    label _)     = label
@@ -252,8 +256,8 @@ instance ToAbstract (Expr ann) A.Expr where
   toAbstract (ExprString x _) = A.EV (A.VS x)
 
 instance ToAbstract (TypeVar ann) A.TypeVar where
-  toAbstract (TypeVarIndex name    _) = A.TypeVarIndex name
-  toAbstract (TypeVarX    _) = A.TypeVarX
+  toAbstract (TypeVarIndex name _) = A.TypeVarIndex name
+  toAbstract (TypeVarText  name _) = A.TypeVarText (toAbstract name)
 
 instance ToAbstract (TypeName ann) A.TypeName where
   toAbstract (TypeName name    _) = name
