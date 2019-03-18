@@ -31,13 +31,15 @@ import Control.Monad.Reader
 data TypeError
   = MissingProcDefn (Map ProcName Type)
   | VariableNotFound SName
+  | TypeVariableNotFound TypeName
+  | TypeVarIndexTopLevel TypeVar
   | LabelNotFound Label
   | ProcessNotFound SName
   | PatternMismatched Type Ptrn
   | TypeOfNewChannelMissing Text
   | RecvExpected Type
+  | SendExpected Type
   | SNameExpected Name
-  | SendExpected
   | Others String
   deriving (Show)
 
@@ -82,6 +84,7 @@ checkAll = do
 mapEqBy :: Ord k => (a -> a -> Bool) -> Map k a -> Map k a -> Bool
 mapEqBy f a b = Map.isSubmapOfBy f a b && Map.isSubmapOfBy f b a
 
+-- TODO: Make CTX = Map Text Type, no polarization in the context
 type Ctx = Map SName Type
 
 liftMaybe :: TypeError -> Maybe a -> TCM a
@@ -89,15 +92,54 @@ liftMaybe err = maybe (throwError err) return
 
 type TMonad a = Except ErrMsg a
 
-lookupVar :: Map SName Type -> SName -> TCM Type
-lookupVar env x = case Map.lookup x env of
-  Just v -> return v
-  Nothing -> throwError $ VariableNotFound x
+lookupTypeVar :: TypeVar -> TCM Type
+lookupTypeVar (TypeVarIndex x) = throwError $ TypeVarIndexTopLevel (TypeVarIndex x)
+lookupTypeVar (TypeVarText x) = do
+  typeDefns <- asks envTypeDefns
+  case Map.lookup x typeDefns of
+    Just v -> return v
+    Nothing -> throwError $ TypeVariableNotFound x
+
+lookupChan :: SName -> Ctx -> TCM (Type, Bool, Ctx)
+lookupChan x ctx = do
+  t <- lookupVar ctx x
+  let (t', unrest) = stripUnres (unfoldT t)
+  if unrest
+    then return (t', unrest, ctx)
+    else return (t', unrest, Map.delete x ctx)
+
+lookupVar :: Ctx -> SName -> TCM Type
+lookupVar ctx x = case Map.lookup x ctx of
+  Just v -> substituteTypeVar v
+  Nothing -> case Map.lookup (dual x) ctx of
+    Just v -> substituteTypeVar (dual v)
+    Nothing -> throwError $ VariableNotFound x
+
+  where
+    substitutePair :: (Label, Type) -> TCM (Label, Type)
+    substitutePair (label, t) = do
+      t' <- substituteTypeVar t
+      return (label, t')
+
+    substituteTypeVar :: Type -> TCM Type
+    substituteTypeVar TEnd        = return TEnd
+    substituteTypeVar (TBase t)   = return (TBase t)
+    substituteTypeVar (TTuple ts) = TTuple <$> mapM substituteTypeVar ts
+    substituteTypeVar (TSend t s) = TRecv <$> substituteTypeVar t <*> substituteTypeVar s
+    substituteTypeVar (TRecv t s) = TSend <$> substituteTypeVar t <*> substituteTypeVar s
+    substituteTypeVar (TChoi ss)  = TSele <$> mapM substitutePair ss
+    substituteTypeVar (TSele ss)  = TChoi <$> mapM substitutePair ss
+    substituteTypeVar (TUn t)     = TUn <$> substituteTypeVar t
+    substituteTypeVar (TVar (TypeVarText "X")) = return $ TVar (TypeVarText "X") -- mu
+    substituteTypeVar (TVar i)    = lookupTypeVar i
+    substituteTypeVar (TMu t)     = TMu <$> substituteTypeVar t
+
 
 lookupLabel :: Map Label Type -> Label -> TCM Type
 lookupLabel env x = case Map.lookup x env of
   Just v -> return v
   Nothing -> throwError $ LabelNotFound x
+
 
 inferV :: Ctx -> Val -> TCM (Type, Ctx)
 inferV _ (N (NR _)) =
@@ -194,18 +236,19 @@ checkPi _   (Send (NR _) _ _) =
 checkPi _   (Send (NG _) _ _) =
   throwError $ Others "generated name appears in type checking. a bug?"
 checkPi ctx (Send (ND c) e p) = do
-  (channelType, un, ctx') <- lookupChType c ctx
+  (channelType, un, ctx') <- lookupChan c ctx
   case channelType of
     TSend s1 s2 -> checkPiSend (c, e, p) s1 s2 un ctx'
     TChoi ts    -> checkPiSel  (c, e, p) (Map.fromList ts) un ctx'
-    _           -> throwError $ SendExpected
+    others      -> throwError $ SendExpected others
 
 checkPi _ (Recv (NR _) _) =
   throwError $ Others "not knowing what to do yet"
 checkPi _ (Recv (NG _) _) =
   throwError $ Others "generated name appears in type checking. a bug?"
 checkPi ctx (Recv (ND c) ps) = do
-  (channelType, un, ctx') <- lookupChType c ctx
+
+  (channelType, un, ctx') <- lookupChan c ctx
   case channelType of
     TRecv t s -> checkPiRecv (c,ps) t s un ctx'
     TChoi ts  -> checkPiChoi (c,ps) (Map.fromList ts) un ctx'
@@ -317,14 +360,6 @@ removeChannels ctx names = do
   unless (all unrestricted inCtx) $
     throwError $ Others ("channel " ++ show inCtx ++ " not used up.")
   return $ Map.withoutKeys ctx names
-
-lookupChType :: SName -> Ctx -> TCM (Type, Bool, Ctx)
-lookupChType x ctx = do
-  t <- lookupVar ctx x
-  let (t', unrest) = stripUnres (unfoldT t)
-  if unrest
-    then return (t', unrest, ctx)
-    else return (t', unrest, Map.delete x ctx)
 
 addCtx :: (SName, Type) -> Ctx -> TCM Ctx
 addCtx (c, t) ctx = case Map.lookup c ctx of

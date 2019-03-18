@@ -31,18 +31,26 @@ data PName = PH Text        -- "pure" names, without polarization
 data Polarised a = Pos a | Neg a -- | Neu a
     deriving (Ord, Eq, Show)
 
-depolar :: Polarised a -> a
-depolar (Pos x) = x
-depolar (Neg x) = x
+instance HasDual (Polarised a) where
+  dual (Pos a) = Neg a
+  dual (Neg a) = Pos a
+
+isPositive :: Polarised a -> Bool
+isPositive (Pos _) = True
+isPositive (Neg _) = False
+
+depolarise :: Polarised a -> a
+depolarise (Pos x) = x
+depolarise (Neg x) = x
 -- depolar (Neu x) = x
 
 depolarCh :: Name -> PName
-depolarCh (ND c) = PH (depolar c)
-depolarCh (NG c) = PG (depolar c)
+depolarCh (ND c) = PH (depolarise c)
+depolarCh (NG c) = PG (depolarise c)
 depolarCh (NR _) = error "bug: shouldn't call depolar without checking"
 
 depolarCH :: Name -> Text
-depolarCH = depolar . unND
+depolarCH = depolarise . unND
 
 unND :: Name -> Polarised Text
 unND (ND n) = n

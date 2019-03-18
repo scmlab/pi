@@ -27,17 +27,20 @@ data Type = TEnd                    -- end
 tInt  = TBase TInt
 tBool = TBase TBool
 
-dual :: Type -> Type
-dual TEnd        = TEnd
-dual (TBase t)   = TBase t
-dual (TTuple ts) = TTuple (map dual ts)
-dual (TSend t s) = TRecv t (dual s)
-dual (TRecv t s) = TSend t (dual s)
-dual (TChoi ss)  = TSele (map (id *** dual) ss)
-dual (TSele ss)  = TChoi (map (id *** dual) ss)
-dual (TUn t)     = TUn (dual t)
-dual (TVar i)    = TVar i
-dual (TMu t)     = TMu (dual t)
+class HasDual a where
+  dual :: a -> a
+
+instance HasDual Type where
+  dual TEnd        = TEnd
+  dual (TBase t)   = TBase t
+  dual (TTuple ts) = TTuple (map dual ts)
+  dual (TSend t s) = TRecv t (dual s)
+  dual (TRecv t s) = TSend t (dual s)
+  dual (TChoi ss)  = TSele (map (id *** dual) ss)
+  dual (TSele ss)  = TChoi (map (id *** dual) ss)
+  dual (TUn t)     = TUn (dual t)
+  dual (TVar i)    = TVar i
+  dual (TMu t)     = TMu (dual t)
 
 -- type substitution. it is assumed that s contains
 --   no bound variables.
