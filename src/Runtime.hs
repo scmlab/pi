@@ -14,6 +14,7 @@ import qualified Data.ByteString.Lazy as BS
 import Data.Maybe (mapMaybe)
 
 import Syntax.Abstract
+import Type (dual)
 import Syntax.Concrete (toAbstract)
 import Type.TypeCheck
 -- import Syntax.Concrete (restore)
@@ -269,8 +270,11 @@ programToEnv (Program declarations) = do
   -- -- throw if there is any type signature without a corresponding process definition
   -- unless (Map.null onlyTypes) $
   --   throwError $ TypeError $ MissingProcDefn onlyTypes
-  chanTypes' <- Map.fromList <$> forM chanTypes (\(n, t) -> toSName n >>= \n' -> return (n', t) )
-  return $ Env chanTypes' procDefns typeDefns
+  chanTypesPos' <- Map.fromList <$> forM chanTypesPos (\(n, t) -> toSName n >>= \n' -> return (n', t) )
+  let chanTypesNeg = Map.mapKeys dual $ fmap dual chanTypesPos'
+  let chanTypes = Map.union chanTypesNeg chanTypesPos'
+
+  return $ Env chanTypes procDefns typeDefns
   where
     toChanTypePair (ChanType n t) = Just (n, t)
     toChanTypePair _              = Nothing
@@ -281,7 +285,9 @@ programToEnv (Program declarations) = do
     toTypeDefnPair (TypeDefn n t) = Just (n, t)
     toTypeDefnPair _              = Nothing
 
-    chanTypes = mapMaybe toChanTypePair declarations
+    chanTypesPos = mapMaybe toChanTypePair declarations
+
+
     procDefns = Map.fromList $ mapMaybe toProcDefnPair declarations
     typeDefns = Map.fromList $ mapMaybe toTypeDefnPair declarations
 

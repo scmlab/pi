@@ -69,7 +69,7 @@ checkAll = do
   chanTypes <- asks envChanTypes
   procDefns <- asks envProcDefns
   typeDefns <- asks envTypeDefns
-  -- let chanTypes' = Map.union chanTypes $ Map. dual chanTypes
+
   -- not checking if some process named "test" exists
   case Map.lookup "test" procDefns of
     Nothing -> do
