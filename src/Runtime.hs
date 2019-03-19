@@ -14,6 +14,7 @@ import qualified Data.ByteString.Lazy as BS
 import Data.Maybe (mapMaybe)
 
 import Syntax.Abstract
+import Syntax.Concrete (toAbstract)
 import Type.TypeCheck
 -- import Syntax.Concrete (restore)
 import qualified Syntax.Parser as Parser
@@ -143,8 +144,7 @@ load filePath = do
       -- parse and store the AST
       case Parser.parseProgram filePath source of
         Left err  -> throwError $ ParseError err
-        Right ast -> programToEnv ast >>= putEnv . Just
-
+        Right ast -> programToEnv (toAbstract ast) >>= putEnv . Just
 
       -- do some checkings
       env' <- gets stEnv

@@ -10,9 +10,13 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
+import qualified Data.ByteString as BS
+import Data.ByteString (ByteString)
 import Data.Text (Text)
 
 import Syntax.Abstract
+import Syntax.Concrete (toAbstract)
+import Syntax.Parser (parseProcess)
 import Type
 import Base
 import Debug.Trace
@@ -32,7 +36,7 @@ data TypeError
   = MissingProcDefn (Map ProcName Type)
   | VariableNotFound SName
   | TypeVariableNotFound TypeName
-  | TypeVarIndexTopLevel TypeVar
+  | TypeVarIndexAtTopLevel TypeVar
   | LabelNotFound Label
   | ProcessNotFound SName
   | PatternMismatched Type Ptrn
@@ -93,7 +97,8 @@ liftMaybe err = maybe (throwError err) return
 type TMonad a = Except ErrMsg a
 
 lookupTypeVar :: TypeVar -> TCM Type
-lookupTypeVar (TypeVarIndex x) = throwError $ TypeVarIndexTopLevel (TypeVarIndex x)
+lookupTypeVar (TypeVarIndex x) = return $ TVar $ TypeVarIndex x
+  -- throwError $ TypeVarIndexAtTopLevel (TypeVarIndex x)
 lookupTypeVar (TypeVarText x) = do
   typeDefns <- asks envTypeDefns
   case Map.lookup x typeDefns of
@@ -125,10 +130,10 @@ lookupVar ctx x = case Map.lookup x ctx of
     substituteTypeVar TEnd        = return TEnd
     substituteTypeVar (TBase t)   = return (TBase t)
     substituteTypeVar (TTuple ts) = TTuple <$> mapM substituteTypeVar ts
-    substituteTypeVar (TSend t s) = TRecv <$> substituteTypeVar t <*> substituteTypeVar s
-    substituteTypeVar (TRecv t s) = TSend <$> substituteTypeVar t <*> substituteTypeVar s
-    substituteTypeVar (TChoi ss)  = TSele <$> mapM substitutePair ss
-    substituteTypeVar (TSele ss)  = TChoi <$> mapM substitutePair ss
+    substituteTypeVar (TSend t s) = TSend <$> substituteTypeVar t <*> substituteTypeVar s
+    substituteTypeVar (TRecv t s) = TRecv <$> substituteTypeVar t <*> substituteTypeVar s
+    substituteTypeVar (TChoi ss)  = TChoi <$> mapM substitutePair ss
+    substituteTypeVar (TSele ss)  = TSele <$> mapM substitutePair ss
     substituteTypeVar (TUn t)     = TUn <$> substituteTypeVar t
     substituteTypeVar (TVar (TypeVarText "X")) = return $ TVar (TypeVarText "X") -- mu
     substituteTypeVar (TVar i)    = lookupTypeVar i
@@ -441,19 +446,21 @@ cp = Pos . pack
 cn :: String -> SName
 cn = Neg . pack
 
+fromParseResult :: Show a => Either a b -> b
+fromParseResult (Left err) = error $ show err
+fromParseResult (Right x) = x
+
 test0 :: Either TypeError (Ctx, Set SName)
 test0 = runTCM (checkPi ctx p) initEnv
   where ctx = Map.fromList [(cp "c", tsend TInt (tsend TBool TEnd)),
                (cp "d", TSend (TTuple [tInt, tsend TBool TEnd]) TEnd)]
-        p = Send (cP "c") (eI 3) $
-              Send (cP "d") (ETup [eI 4, ePN "c"]) End
-        {- p = c[3].d[4,c].0
-        -}
+        p = toAbstract $ fromParseResult (parseProcess "c[3] . d[4,c] . end")
 
 test1 :: Either TypeError (Ctx, Set SName)
 test1 = runTCM (checkPi ctx p) initEnv
   where ctx = Map.fromList [(cn "c", trecv TInt (trecv TBool TEnd))]
-        p = recv (cN "c") (pn "x")  $ recv (cN "c") (pn "y")  End
+        p = toAbstract $ fromParseResult (parseProcess "c(x) . c(y) . end")
+        -- p = recv (cN "c") (pn "x")  $ recv (cN "c") (pn "y")  End
 
 test2 :: Either TypeError (Ctx, Set SName)
 test2 = runTCM (checkPi ctx p) initEnv
@@ -518,11 +525,34 @@ test5 = runTCM (checkPi ctx p) initEnv
         -- {c : mu(X)(un(?(!Int.?Bool.0).X))}
         -- p = *(c(d). d[3].d(x).0)
         ctx = Map.fromList [(cp "c", TMu $ TUn $ TRecv t $ TVar (TypeVarIndex 0))]
-        p = Repl (recv (cP "c") (pn "d") $
-                   Send (cP "d") (eI 3) $
-                     recv (cP "d") (pn "x") End)
+        p = toAbstract $ fromParseResult (parseProcess "* (c(d) . d[3] . d(x) . end)")
+           -- Repl (recv (cP "c") (pn "d") $
+           --         Send (cP "d") (eI 3) $
+           --           recv (cP "d") (pn "x") End)
 
 
 -- try: runExcept $ checkPi [] [] p2
 -- try: run `stack test` for running these tests
 -- try: run `stack repl pi:test:pi-tests` to develop thoses tests
+
+
+
+  --   do
+  -- case parseProgram "" src of
+  --   Left err  -> assertFailure $ show err
+  --   Right val -> return val
+
+-- parseProc :: ByteString -> IO Pi
+-- parseProc src = do
+--   case parseProcess src of
+--     Left err  -> assertFailure $ show err
+--     Right val -> return val
+--
+-- testWith :: ByteString -> PiMonad a -> IO [a]
+-- testWith source program = do
+--   prog <- parseProg source
+--   let results = runPiMonad (programToEnv prog) initialState program
+--   mapM fromEither results
+--   where
+--     fromEither (Left err) = assertFailure $ show err
+--     fromEither (Right (val, _)) = return val
