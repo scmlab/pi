@@ -69,7 +69,7 @@ checkAll = do
   chanTypes <- asks envChanTypes
   procDefns <- asks envProcDefns
   typeDefns <- asks envTypeDefns
-
+  -- let chanTypes' = Map.union chanTypes $ Map. dual chanTypes
   -- not checking if some process named "test" exists
   case Map.lookup "test" procDefns of
     Nothing -> do
@@ -120,24 +120,23 @@ lookupVar ctx x = case Map.lookup x ctx of
     Just v -> substituteTypeVar (dual v)
     Nothing -> throwError $ VariableNotFound x
 
-  where
-    substitutePair :: (Label, Type) -> TCM (Label, Type)
-    substitutePair (label, t) = do
-      t' <- substituteTypeVar t
-      return (label, t')
+substitutePair :: (Label, Type) -> TCM (Label, Type)
+substitutePair (label, t) = do
+  t' <- substituteTypeVar t
+  return (label, t')
 
-    substituteTypeVar :: Type -> TCM Type
-    substituteTypeVar TEnd        = return TEnd
-    substituteTypeVar (TBase t)   = return (TBase t)
-    substituteTypeVar (TTuple ts) = TTuple <$> mapM substituteTypeVar ts
-    substituteTypeVar (TSend t s) = TSend <$> substituteTypeVar t <*> substituteTypeVar s
-    substituteTypeVar (TRecv t s) = TRecv <$> substituteTypeVar t <*> substituteTypeVar s
-    substituteTypeVar (TChoi ss)  = TChoi <$> mapM substitutePair ss
-    substituteTypeVar (TSele ss)  = TSele <$> mapM substitutePair ss
-    substituteTypeVar (TUn t)     = TUn <$> substituteTypeVar t
-    substituteTypeVar (TVar (TypeVarText "X")) = return $ TVar (TypeVarText "X") -- mu
-    substituteTypeVar (TVar i)    = lookupTypeVar i
-    substituteTypeVar (TMu t)     = TMu <$> substituteTypeVar t
+substituteTypeVar :: Type -> TCM Type
+substituteTypeVar TEnd        = return TEnd
+substituteTypeVar (TBase t)   = return (TBase t)
+substituteTypeVar (TTuple ts) = TTuple <$> mapM substituteTypeVar ts
+substituteTypeVar (TSend t s) = TSend <$> substituteTypeVar t <*> substituteTypeVar s
+substituteTypeVar (TRecv t s) = TRecv <$> substituteTypeVar t <*> substituteTypeVar s
+substituteTypeVar (TChoi ss)  = TChoi <$> mapM substitutePair ss
+substituteTypeVar (TSele ss)  = TSele <$> mapM substitutePair ss
+substituteTypeVar (TUn t)     = TUn <$> substituteTypeVar t
+substituteTypeVar (TVar (TypeVarText "X")) = return $ TVar (TypeVarText "X") -- mu
+substituteTypeVar (TVar i)    = lookupTypeVar i
+substituteTypeVar (TMu t)     = TMu <$> substituteTypeVar t
 
 
 lookupLabel :: Map Label Type -> Label -> TCM Type
@@ -162,8 +161,8 @@ inferV ctx (VB _) = return (tBool, ctx)
 inferV ctx (VT vs) =
   (TTuple *** id) <$> inferVs ctx vs
 -- inferV env (VL l) = liftMaybe "label not found" (lookup l env)
-inferV _ (VS _) = throwError $ Others "panic: not implemented yet"
-inferV _ (VL _) = throwError $ Others "panic: not implemented yet"
+inferV _ (VS _) = throwError $ Others "panic: string value not implemented yet"
+inferV _ (VL _) = throwError $ Others "panic: label value not implemented yet"
 -- inferV _ (VS _) = return TString
 
 inferVs :: Ctx -> [Val] -> TCM ([Type], Ctx)
@@ -184,6 +183,10 @@ inferE ctx (ESub e1 e2) =
   checkE ctx  e1 tInt >>= \ctx' ->
   checkE ctx' e2 tInt >>= \ctx'' ->
   return (tInt, ctx'')
+inferE ctx (EMul e1 e2) =
+  checkE ctx  e1 tInt >>= \ctx' ->
+  checkE ctx' e2 tInt >>= \ctx'' ->
+  return (tInt, ctx'')
 inferE ctx (EIf e0 e1 e2) = do
   ctx' <- checkE ctx e0 tBool
   (t, ctx'') <- inferE ctx' e1
@@ -193,7 +196,7 @@ inferE ctx (EIf e0 e1 e2) = do
     else throwError $ Others "contexts fail to unify when checking If"
 inferE ctx (ETup es) =
   (TTuple *** id) <$> inferEs ctx es
-inferE _ _ = throwError $ Others "panic: not implemented yet"
+inferE _ e = throwError $ Others ("panic: not implemented yet " ++ show e )
 
 inferEs :: Ctx -> [Expr] -> TCM ([Type], Ctx)
 inferEs _   [] = throwError $ Others "panic: no expressions to infer"
@@ -245,7 +248,7 @@ checkPi ctx (Send (ND c) e p) = do
   case channelType of
     TSend s1 s2 -> checkPiSend (c, e, p) s1 s2 un ctx'
     TChoi ts    -> checkPiSel  (c, e, p) (Map.fromList ts) un ctx'
-    others      -> throwError $ SendExpected others
+    others      -> traceShow (c,ctx) $ throwError $ SendExpected others
 
 checkPi _ (Recv (NR _) _) =
   throwError $ Others "not knowing what to do yet"
@@ -259,7 +262,7 @@ checkPi ctx (Recv (ND c) ps) = do
     TChoi ts  -> checkPiChoi (c,ps) (Map.fromList ts) un ctx'
     others    -> throwError $ RecvExpected others
 
-checkPi ctx (Repl p) = -- throwError $ Others "panic: not implemented yet"
+checkPi ctx (Repl p) =
   checkPi ctx p >>= \(ctx', l) ->
   if null l then return (ctx', l)
      else throwError $ Others ("linear variable used in repetition")
@@ -343,6 +346,9 @@ matchPtn (TSele ts)   (PN x) ctx = addUni (Pos x, TSele ts) ctx
 matchPtn (TChoi ts)   (PN x) ctx = addUni (Pos x, TChoi ts) ctx
 matchPtn (TUn t)      (PN x) ctx = addUni (Pos x, TUn t) ctx
 matchPtn (TUn (TTuple ts)) (PT xs) ctx = matchPtns (map TUn ts) xs ctx
+matchPtn (TVar t)     (PN x) ctx = do
+  t' <- substituteTypeVar (TVar t)
+  matchPtn t' (PN x) ctx
 matchPtn t p _ = throwError $ PatternMismatched t p
 
 addUni :: (SName, Type) -> Ctx -> TCM Ctx
