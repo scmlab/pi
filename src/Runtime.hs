@@ -20,6 +20,7 @@ import Type.TypeCheck
 -- import Syntax.Concrete (restore)
 import qualified Syntax.Parser as Parser
 import Interpreter
+import Debug.Trace
 
 
  --------------------------------------------------------------------------------
@@ -270,9 +271,15 @@ programToEnv (Program declarations) = do
   -- -- throw if there is any type signature without a corresponding process definition
   -- unless (Map.null onlyTypes) $
   --   throwError $ TypeError $ MissingProcDefn onlyTypes
+
+
   chanTypesPos' <- Map.fromList <$> forM chanTypesPos (\(n, t) -> toSName n >>= \n' -> return (n', t) )
   let chanTypesNeg = Map.mapKeys dual $ fmap dual chanTypesPos'
+
+  traceShow chanTypesNeg $ return ()
+
   let chanTypes = Map.union chanTypesNeg chanTypesPos'
+
 
   return $ Env chanTypes procDefns typeDefns
   where

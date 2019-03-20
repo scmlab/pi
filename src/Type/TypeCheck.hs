@@ -21,7 +21,7 @@ import Type
 import Base
 import Debug.Trace
 
-import Control.Monad.Reader
+import Control.Monad.State
 
 
 --------------------------------------------------------------------------------
@@ -50,10 +50,16 @@ data TypeError
 --------------------------------------------------------------------------------
 -- | Type Checking Monad
 
-type TCM = ExceptT TypeError (Reader Env)
+type TCM = ExceptT TypeError (State Env)
 
 runTCM :: TCM a -> Env -> Either TypeError a
-runTCM = runReader . runExceptT
+runTCM = evalState . runExceptT
+
+putChanTypes :: Map SName Type -> TCM ()
+putChanTypes x = modify (\st -> st { envChanTypes = x })
+
+putProcDefns :: Map ProcName Pi -> TCM ()
+putProcDefns x = modify (\st -> st { envProcDefns = x })
 
 --------------------------------------------------------------------------------
 -- | Some checkings
@@ -66,9 +72,20 @@ runTCM = runReader . runExceptT
 checkAll :: TCM ()
 checkAll = do
 
-  chanTypes <- asks envChanTypes
-  procDefns <- asks envProcDefns
-  typeDefns <- asks envTypeDefns
+  typeDefns <- gets envTypeDefns
+  procDefns <- gets envProcDefns
+
+
+  -- substitute type variables in `chanTypes`
+  gets envChanTypes
+    >>= Map.traverseWithKey (\_ x -> substituteTypeVar x)
+    >>= putChanTypes
+  chanTypes <- gets envChanTypes
+
+  -- gets procDefns
+  --     >>= Map.traverseWithKey (\_ x -> substituteTypeVar x)
+  --     >>= putProcDefns
+
 
   -- not checking if some process named "test" exists
   case Map.lookup "test" procDefns of
@@ -100,7 +117,7 @@ lookupTypeVar :: TypeVar -> TCM Type
 lookupTypeVar (TypeVarIndex x) = return $ TVar $ TypeVarIndex x
   -- throwError $ TypeVarIndexAtTopLevel (TypeVarIndex x)
 lookupTypeVar (TypeVarText x) = do
-  typeDefns <- asks envTypeDefns
+  typeDefns <- gets envTypeDefns
   case Map.lookup x typeDefns of
     Just v -> return v
     Nothing -> throwError $ TypeVariableNotFound x
@@ -248,7 +265,10 @@ checkPi ctx (Send (ND c) e p) = do
   case channelType of
     TSend s1 s2 -> checkPiSend (c, e, p) s1 s2 un ctx'
     TChoi ts    -> checkPiSel  (c, e, p) (Map.fromList ts) un ctx'
-    others      -> traceShow (c,ctx) $ throwError $ SendExpected others
+    others      -> do
+      chanTypes <- gets envChanTypes
+      traceShow chanTypes $ return ()
+      throwError $ SendExpected others
 
 checkPi _ (Recv (NR _) _) =
   throwError $ Others "not knowing what to do yet"
@@ -270,12 +290,14 @@ checkPi ctx (Repl p) =
 checkPi _ (Nu x Nothing _) =
   throwError $ TypeOfNewChannelMissing x
 checkPi ctx (Nu x (Just t) p) = do
-  (ctx', l) <- checkPi (Map.insert (Pos x) t $ Map.insert (Neg x) (dual t) ctx) p
+  t' <- substituteTypeVar t
+  -- traceShow t' $ return ()
+  (ctx', l) <- checkPi (Map.insert (Pos x) t' $ Map.insert (Neg x) (dual t') ctx) p
   ctx'' <- ctx' `removeChannels` Set.fromList [Pos x, Neg x]
   return (ctx'', Set.difference l (Set.fromList [Pos x, Neg x]))
 
 checkPi ctx (Call name) = do
-  env <- asks envProcDefns
+  env <- gets envProcDefns
   case Map.lookup name env of
     Just p -> checkPi ctx p
     Nothing -> throwError $ ProcessNotFound (Pos name)
@@ -283,6 +305,7 @@ checkPi ctx (Call name) = do
 
 checkPiSend :: (SName, Expr, Pi) -> Type -> Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
 checkPiSend (c,e,p) s t un ctx = do
+  -- error $ show (e, s, ctx)
   ctx' <- checkE ctx e s
   ctx'' <- addCtx (c,t) ctx'
   (id *** addLin un c) <$>

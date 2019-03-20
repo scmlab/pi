@@ -203,8 +203,8 @@ Type :: {Type Loc}
     | BaseType                              {% locate $ TypeBase $1 }
     | '!' Type '.' Type                     {% locate $ TypeSend $2 $4 }
     | '?' Type '.' Type                     {% locate $ TypeRecv $2 $4 }
-    | '&' '{' TypeOfLabels '}'              {% locate $ TypeSele (reverse $3)  }
-    | '#' '{' TypeOfLabels '}'              {% locate $ TypeChoi (reverse $3)  }
+    | '&' '{' TypeOfLabels '}'              {% locate $ TypeChoi (reverse $3)  }
+    | '#' '{' TypeOfLabels '}'              {% locate $ TypeSele (reverse $3)  }
     | 'un' '(' Type ')'                     {% locate $ TypeUn $3 }
     | 'mu' '(' TypeVar ')' '(' Type ')'     {% locate $ TypeMu $6 }
     | '(' TypeOfTuples ')'                  {% locate $ TypeTuple (reverse $2) }
