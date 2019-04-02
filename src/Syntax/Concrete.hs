@@ -28,25 +28,25 @@ data ProcName     = ProcName  Text  Loc
 data TypeName     = TypeName  Text  Loc
                   deriving (Show)
 
-data Definition   = ProcDefn  ProcName  Process Loc
-                  | ChanType  Name      Type    Loc
-                  | TypeDefn  TypeName  Type    Loc
+data Definition   = ProcDefn  ProcName  Proc Loc
+                  | ChanType  Name      Type Loc
+                  | TypeDefn  TypeName  Type Loc
                   deriving (Show)
 
-data Process      = Send      Name      Expr          Process Loc
-                  | Recv      Name      [Clause]              Loc
-                  | Nu        ProcName  (Maybe Type)  Process Loc
-                  | Par       Process                 Process Loc
-                  | Call      ProcName                        Loc
-                  | Repl      Process                         Loc
-                  | End                                       Loc
+data Proc         = Send      Name      Expr          Proc  Loc
+                  | Recv      Name      [Clause]            Loc
+                  | Nu        ProcName  (Maybe Type)  Proc  Loc
+                  | Par       Proc                    Proc  Loc
+                  | Call      ProcName                      Loc
+                  | Repl      Proc                          Loc
+                  | End                                     Loc
                   deriving (Show)
 
-data Pattern      = PtrnName  ProcName                        Loc
-                  | PtrnTuple [Pattern]                       Loc
-                  | PtrnLabel Label                           Loc
+data Pattern      = PtrnName  ProcName                     Loc
+                  | PtrnTuple [Pattern]                    Loc
+                  | PtrnLabel Label                        Loc
                   deriving (Show)
-data Clause       = Clause    Pattern Process                 Loc
+data Clause       = Clause    Pattern Proc                 Loc
                   deriving (Show)
 
 -- Expressions and all that
@@ -114,7 +114,7 @@ instance Located Definition where
   locOf (TypeDefn _ _ loc) = loc
   locOf (ChanType _ _ loc) = loc
 
-instance Located Process where
+instance Located Proc where
   locOf (Send _ _ _ loc) = loc
   locOf (Recv _ _ loc) = loc
   locOf (Nu _ _ _ loc) = loc
@@ -205,7 +205,7 @@ instance ToAbstract Clause A.Clause where
   toAbstract (Clause pattern process _) =
     A.Clause (toAbstract pattern) (toAbstract process)
 
-instance ToAbstract Process A.Pi where
+instance ToAbstract Proc A.Proc where
   toAbstract (Nu name Nothing process _) =
     A.Nu (toAbstract name) Nothing (toAbstract process)
   toAbstract (Nu name (Just t) process _) =

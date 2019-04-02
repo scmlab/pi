@@ -74,12 +74,12 @@ instance HasPID IOTask where
 --------------------------------------------------------------------------------
 -- |
 
-data Sender   = Sender   PID Name Val Pi            deriving (Show)
+data Sender   = Sender   PID Name Val Proc            deriving (Show)
 data Receiver = Receiver PID Name [Clause]          deriving (Show)
 data Caller   = Caller   PID ProcName               deriving (Show)
-data ReplNu   = ReplNu   PID Text Pi               deriving (Show)
+data ReplNu   = ReplNu   PID Text Proc               deriving (Show)
 data IOTask   = Input    PID      [Clause]
-              | Output   PID      Val Pi
+              | Output   PID      Val Proc
               deriving (Show)
 
 
@@ -113,9 +113,9 @@ initialState :: St
 initialState = St [] [] [] [] [] [] 0 0
 
 data Effect = EffNoop                                   -- nothing ever happened
-            | EffCall Caller Pi                         -- calling some process
-            | EffComm Name (Sender, Receiver) (Pi, Pi)  -- process communicateion
-            | EffReplNu ReplNu Pi
+            | EffCall Caller Proc                         -- calling some process
+            | EffComm Name (Sender, Receiver) (Proc, Proc)  -- process communicateion
+            | EffReplNu ReplNu Proc
             | EffIO   IOTask
             deriving (Show)
 
@@ -168,8 +168,8 @@ addFreshVar x = do
   modify $ \st -> st { stFreshVars = x:xs }
 
 --------------------------------------------------------------------------------
--- | Pi <-> St
-addPi :: Attr -> Pi -> PiMonad ()
+-- | Proc <-> St
+addPi :: Attr -> Proc -> PiMonad ()
 
 addPi _ End = return ()
 
@@ -212,7 +212,7 @@ addPi attr (Nu x _ p) = do
     else do
       restict replNu >>= addPi attr
 
-lineup :: [(ProcName, Pi)] -> PiMonad ()
+lineup :: [(ProcName, Proc)] -> PiMonad ()
 lineup []     = return ()
 lineup ((c, x):xs) = do
   addPi (PID False c) x
@@ -266,13 +266,13 @@ step = do
       lineup [ (invokedBy replNu, p) ]
       return (EffReplNu replNu p)
 
-restict :: ReplNu -> PiMonad Pi
+restict :: ReplNu -> PiMonad Proc
 restict (ReplNu _ x p) = do
   var <- freshVar
   addFreshVar var
-  return $ substPi (Map.fromList [(PH x, N var)]) p
+  return $ substProc (Map.fromList [(PH x, N var)]) p
 
-call :: Caller -> PiMonad Pi
+call :: Caller -> PiMonad Proc
 call (Caller _ callee) = do
   procs <- asks envProcDefns
   case Map.lookup callee procs of
@@ -284,15 +284,15 @@ call (Caller _ callee) = do
 input :: Val -> IOTask -> PiMonad ()
 input val (Input pid pps) =
   case matchClauses pps val of
-    Just (th, p) -> lineup [(pInvokedBy pid, substPi th p)]
+    Just (th, p) -> lineup [(pInvokedBy pid, substProc th p)]
     Nothing -> throwError "input fails to match"
 input _ (Output _ _ _) =
     throwError "expecting Input but got Output"
 
-communicate :: Sender -> Receiver -> PiMonad (Pi, Pi)
+communicate :: Sender -> Receiver -> PiMonad (Proc, Proc)
 communicate (Sender _ _ v q) (Receiver _ _ clauses) =
   case matchClauses clauses v of
-    Just (th, p) -> return (q, substPi th p)
+    Just (th, p) -> return (q, substProc th p)
     Nothing -> throwError "failed to match sender and receiver"
 
 select :: [a] -> PiMonad (a, [a])
@@ -326,39 +326,39 @@ instance Pretty Effect where
     vsep  [ pretty "[I/O]   :" <+> pretty task
           ]
 
-applyRepl :: HasPID a => a -> Pi -> Pi
+applyRepl :: HasPID a => a -> Proc -> Proc
 applyRepl p q = if isReplicable p then Repl q else q
 
-senderToPi :: Sender -> Pi
-senderToPi (Sender _ c v p) = Send c (EV v) p
+senderToProc :: Sender -> Proc
+senderToProc (Sender _ c v p) = Send c (EV v) p
 
-receiverToPi :: Receiver -> Pi
-receiverToPi (Receiver _ c clauses) = Recv c clauses
+receiverToProc :: Receiver -> Proc
+receiverToProc (Receiver _ c clauses) = Recv c clauses
 
-callerToPi :: Caller -> Pi
-callerToPi (Caller _ callee) = Call callee
+callerToProc :: Caller -> Proc
+callerToProc (Caller _ callee) = Call callee
 
-replNuToPi :: ReplNu -> Pi
-replNuToPi (ReplNu _ x p) = Repl (Nu x Nothing p)
+replNuToProc :: ReplNu -> Proc
+replNuToProc (ReplNu _ x p) = Repl (Nu x Nothing p)
 
-ioTaskToPi :: IOTask -> Pi
-ioTaskToPi (Input _ clauses) = Recv (NR StdIn) clauses
-ioTaskToPi (Output _ v p) = Send (NR StdOut) (EV v) p
+ioTaskToProc :: IOTask -> Proc
+ioTaskToProc (Input _ clauses) = Recv (NR StdIn) clauses
+ioTaskToProc (Output _ v p) = Send (NR StdOut) (EV v) p
 
 instance Pretty IOTask where
-  pretty p = pretty $ applyRepl p (ioTaskToPi p)
+  pretty p = pretty $ applyRepl p (ioTaskToProc p)
 
 instance Pretty Sender where
-  pretty p = pretty $ applyRepl p (senderToPi p)
+  pretty p = pretty $ applyRepl p (senderToProc p)
 
 instance Pretty Receiver where
-  pretty p = pretty $ applyRepl p (receiverToPi p)
+  pretty p = pretty $ applyRepl p (receiverToProc p)
 
 instance Pretty Caller where
-  pretty p = pretty $ applyRepl p (callerToPi p)
+  pretty p = pretty $ applyRepl p (callerToProc p)
 
 instance Pretty ReplNu where
-  pretty p = pretty $ replNuToPi p
+  pretty p = pretty $ replNuToProc p
 
 instance Pretty St where
   pretty (St sends recvs callers replNus io news _ _) =
@@ -371,6 +371,6 @@ instance Pretty St where
           , pretty "Replicating Nus:"
           , indent 2 (vsep (map pretty replNus))
           , pretty "I/O:"
-          , indent 2 (vsep (map (pretty . ioTaskToPi) io))
+          , indent 2 (vsep (map (pretty . ioTaskToProc) io))
           , encloseSep (pretty "New: ") (pretty ".") comma (map pretty news)
           ]

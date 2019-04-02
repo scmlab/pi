@@ -16,7 +16,7 @@ import Data.Text (Text)
 
 import Syntax.Abstract
 import Syntax.Concrete (toAbstract)
-import Syntax.Parser (parseProcess)
+import Syntax.Parser (parseProc)
 import Type
 import Base
 import Debug.Trace
@@ -58,7 +58,7 @@ runTCM = evalState . runExceptT
 putChanTypes :: Map SName Type -> TCM ()
 putChanTypes x = modify (\st -> st { envChanTypes = x })
 
-putProcDefns :: Map ProcName Pi -> TCM ()
+putProcDefns :: Map ProcName Proc -> TCM ()
 putProcDefns x = modify (\st -> st { envProcDefns = x })
 
 --------------------------------------------------------------------------------
@@ -92,7 +92,7 @@ checkAll = do
     Nothing -> do
       case Map.lookup "main" procDefns of
         Nothing -> return ()
-        Just p -> void $ checkPi chanTypes p
+        Just p -> void $ checkProc chanTypes p
     Just _ -> return ()
 
   return ()
@@ -244,88 +244,88 @@ checkCh senv c t = do
 allClosed :: Ctx -> Bool
 allClosed = all (TEnd ==) . Map.elems
 
-checkPi :: Ctx -> Pi -> TCM (Ctx, Set SName)
+checkProc :: Ctx -> Proc -> TCM (Ctx, Set SName)
 
-checkPi ctx End = return (ctx, Set.empty)
+checkProc ctx End = return (ctx, Set.empty)
 
-checkPi ctx (p1 `Par` p2) = do
-  (ctx1, l1) <- checkPi ctx p1
+checkProc ctx (p1 `Par` p2) = do
+  (ctx1, l1) <- checkProc ctx p1
   ctx2 <- ctx1 `removeChannels` l1
-  checkPi ctx2 p2
+  checkProc ctx2 p2
 
-checkPi ctx (Send (NR StdOut) e p) = do
+checkProc ctx (Send (NR StdOut) e p) = do
   (_, ctx') <- inferE ctx e
-  checkPi ctx' p
-checkPi _   (Send (NR _) _ _) =
+  checkProc ctx' p
+checkProc _   (Send (NR _) _ _) =
   throwError $ Others "cannot send to this channel"
-checkPi _   (Send (NG _) _ _) =
+checkProc _   (Send (NG _) _ _) =
   throwError $ Others "generated name appears in type checking. a bug?"
-checkPi ctx (Send (ND c) e p) = do
+checkProc ctx (Send (ND c) e p) = do
   (channelType, un, ctx') <- lookupChan c ctx
   case channelType of
-    TSend s1 s2 -> checkPiSend (c, e, p) s1 s2 un ctx'
-    TChoi ts    -> checkPiSel  (c, e, p) (Map.fromList ts) un ctx'
+    TSend s1 s2 -> checkProcSend (c, e, p) s1 s2 un ctx'
+    TChoi ts    -> checkProcSel  (c, e, p) (Map.fromList ts) un ctx'
     others      -> do
       chanTypes <- gets envChanTypes
       traceShow chanTypes $ return ()
       throwError $ SendExpected others
 
-checkPi _ (Recv (NR _) _) =
+checkProc _ (Recv (NR _) _) =
   throwError $ Others "not knowing what to do yet"
-checkPi _ (Recv (NG _) _) =
+checkProc _ (Recv (NG _) _) =
   throwError $ Others "generated name appears in type checking. a bug?"
-checkPi ctx (Recv (ND c) ps) = do
+checkProc ctx (Recv (ND c) ps) = do
 
   (channelType, un, ctx') <- lookupChan c ctx
   case channelType of
-    TRecv t s -> checkPiRecv (c,ps) t s un ctx'
-    TChoi ts  -> checkPiChoi (c,ps) (Map.fromList ts) un ctx'
+    TRecv t s -> checkProcRecv (c,ps) t s un ctx'
+    TChoi ts  -> checkProcChoi (c,ps) (Map.fromList ts) un ctx'
     others    -> throwError $ RecvExpected others
 
-checkPi ctx (Repl p) =
-  checkPi ctx p >>= \(ctx', l) ->
+checkProc ctx (Repl p) =
+  checkProc ctx p >>= \(ctx', l) ->
   if null l then return (ctx', l)
      else throwError $ Others ("linear variable used in repetition")
 
-checkPi _ (Nu x Nothing _) =
+checkProc _ (Nu x Nothing _) =
   throwError $ TypeOfNewChannelMissing x
-checkPi ctx (Nu x (Just t) p) = do
+checkProc ctx (Nu x (Just t) p) = do
   t' <- substituteTypeVar t
   -- traceShow t' $ return ()
-  (ctx', l) <- checkPi (Map.insert (Pos x) t' $ Map.insert (Neg x) (dual t') ctx) p
+  (ctx', l) <- checkProc (Map.insert (Pos x) t' $ Map.insert (Neg x) (dual t') ctx) p
   ctx'' <- ctx' `removeChannels` Set.fromList [Pos x, Neg x]
   return (ctx'', Set.difference l (Set.fromList [Pos x, Neg x]))
 
-checkPi ctx (Call name) = do
+checkProc ctx (Call name) = do
   env <- gets envProcDefns
   case Map.lookup name env of
-    Just p -> checkPi ctx p
+    Just p -> checkProc ctx p
     Nothing -> throwError $ ProcessNotFound (Pos name)
 
 
-checkPiSend :: (SName, Expr, Pi) -> Type -> Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
-checkPiSend (c,e,p) s t un ctx = do
+checkProcSend :: (SName, Expr, Proc) -> Type -> Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
+checkProcSend (c,e,p) s t un ctx = do
   -- error $ show (e, s, ctx)
   ctx' <- checkE ctx e s
   ctx'' <- addCtx (c,t) ctx'
   (id *** addLin un c) <$>
-         checkPi ctx'' p
+         checkProc ctx'' p
 
-checkPiSel :: (SName, Expr, Pi) -> Map Label Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
-checkPiSel (c,e,p) ts un ctx = do
+checkProcSel :: (SName, Expr, Proc) -> Map Label Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
+checkProcSel (c,e,p) ts un ctx = do
   l <- isLabel e
   s <- lookupLabel ts l
   ctx' <- addCtx (c,s) ctx
-  (id *** addLin un c) <$> checkPi ctx' p
+  (id *** addLin un c) <$> checkProc ctx' p
 
-checkPiRecv :: (SName, [Clause]) -> Type -> Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
-checkPiRecv (c, ps) s t un ctx =
+checkProcRecv :: (SName, [Clause]) -> Type -> Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
+checkProcRecv (c, ps) s t un ctx =
   mapM (checkRecvClause c s t un ctx) ps >>= eqAll
 
 checkRecvClause :: SName -> Type -> Type -> Bool -> Ctx -> Clause -> TCM (Ctx, Set SName)
 checkRecvClause name s t un ctx (Clause ptn p) = do
   ctx'' <- matchPtn s ptn ctx >>= addCtx (name, t)
-  (ctx''', l) <- checkPi ctx'' p
+  (ctx''', l) <- checkProc ctx'' p
   return (Map.withoutKeys ctx''' xs,
           let l' = Set.difference l xs
           in if un
@@ -333,12 +333,12 @@ checkRecvClause name s t un ctx (Clause ptn p) = do
               else (Set.insert name l'))
   where xs = ptnVars ptn
 
-checkPiChoi :: (SName, [Clause]) -> Map Label Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
-checkPiChoi (c, ps) ts un ctx = do
+checkProcChoi :: (SName, [Clause]) -> Map Label Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
+checkProcChoi (c, ps) ts un ctx = do
    xss <- pairChoices ts ps
    res <- mapM (\(s, p) -> do
             ctx' <- addCtx (c,s) ctx
-            checkPi ctx' p) $ Map.toList xss
+            checkProc ctx' p) $ Map.toList xss
    (id *** addLin un c) <$> eqAll res
 
 addLin :: Ord a => Bool -> a -> Set a -> Set a
@@ -420,7 +420,7 @@ eqAll ((s1,l1):(s2,l2):xs) =
 --       then return $ Map.findMin pairs
 --       else throwError $ Others "branches cannot be unified"
 
-pairChoices :: Map Label Type -> [Clause] -> TCM (Map Type Pi)
+pairChoices :: Map Label Type -> [Clause] -> TCM (Map Type Proc)
 pairChoices ts [] = if Map.null ts
   then return Map.empty
   else throwError $ Others "choices not fully covered"
@@ -456,15 +456,15 @@ trecv t s = TRecv (TBase t) s
 tsele :: [(String, Type)] -> Type
 tsele = TSele . map (pack *** id)
 
--- smart constructors for Pi
+-- smart constructors for Proc
 
-nu :: String -> Type -> Pi -> Pi
+nu :: String -> Type -> Proc -> Proc
 nu c t p = Nu (pack c) (Just t) p
 
-recv :: Name -> Ptrn -> Pi -> Pi
+recv :: Name -> Ptrn -> Proc -> Proc
 recv c ptn p = Recv c [Clause ptn p]
 
-choices :: Name -> [(String, Pi)] -> Pi
+choices :: Name -> [(String, Proc)] -> Proc
 choices c ps =
    Recv c (map (uncurry Clause . ((PL . pack) *** id)) ps)
 
@@ -480,19 +480,19 @@ fromParseResult (Left err) = error $ show err
 fromParseResult (Right x) = x
 
 test0 :: Either TypeError (Ctx, Set SName)
-test0 = runTCM (checkPi ctx p) initEnv
+test0 = runTCM (checkProc ctx p) initEnv
   where ctx = Map.fromList [(cp "c", tsend TInt (tsend TBool TEnd)),
                (cp "d", TSend (TTuple [tInt, tsend TBool TEnd]) TEnd)]
-        p = toAbstract $ fromParseResult (parseProcess "c[3] . d[4,c] . end")
+        p = toAbstract $ fromParseResult (parseProc "c[3] . d[4,c] . end")
 
 test1 :: Either TypeError (Ctx, Set SName)
-test1 = runTCM (checkPi ctx p) initEnv
+test1 = runTCM (checkProc ctx p) initEnv
   where ctx = Map.fromList [(cn "c", trecv TInt (trecv TBool TEnd))]
-        p = toAbstract $ fromParseResult (parseProcess "c(x) . c(y) . end")
+        p = toAbstract $ fromParseResult (parseProc "c(x) . c(y) . end")
         -- p = recv (cN "c") (pn "x")  $ recv (cN "c") (pn "y")  End
 
 test2 :: Either TypeError (Ctx, Set SName)
-test2 = runTCM (checkPi ctx p) initEnv
+test2 = runTCM (checkProc ctx p) initEnv
   where p = nu "c" t (Par p1 p2)
         p1 = Send (cP "c") (eI 3) $ Send (cP "c") (eB False) End
         p2 = recv (cN "c") (pn "x") $ recv (cN "c") (pn "y") End
@@ -505,7 +505,7 @@ test2 = runTCM (checkPi ctx p) initEnv
         -}
 
 test3 :: Either TypeError (Ctx, Set SName)
-test3 = runTCM (checkPi ctx0 p0) initEnv
+test3 = runTCM (checkProc ctx0 p0) initEnv
   where
     t0 :: Type
     t0 = tsele [("NEG", tsend TInt  $ trecv TInt  $ TEnd),
@@ -523,7 +523,7 @@ test3 = runTCM (checkPi ctx0 p0) initEnv
 
     -- p0 = c[d].d~>>{NEG -> d(x).d[-x].0 ;
     --                ID -> d(x).d[x].0 }
-    p0 :: Pi
+    p0 :: Proc
     p0 = Send (cN "c") (ePN "d") $
           choices (cN "d")
             [("NEG", recv (cN "d") (pn "x") $
@@ -532,35 +532,35 @@ test3 = runTCM (checkPi ctx0 p0) initEnv
                         Send (cN "d") (ePN "x") End)]
 
     -- p1 = c(z).z<<NEG.z[3].z(w).0
-    _p1 :: Pi
+    _p1 :: Proc
     _p1 = recv (cP "c") (pn "z") $
           Send (cP "z") (eL "NEG") $
            Send (cP "z") (eI 3) $
                recv (cP "z") (pn "w") End
     -- p2 = nu (c:t1) nu (d:t0) (p0 | p1)
-    _p2 :: Pi
+    _p2 :: Proc
     _p2 = nu "c" t1 (nu "d" t0 p0 `Par` _p1)
 
 test4 :: Either TypeError (Ctx, Set SName)
-test4 = runTCM (checkPi ctx p) initEnv
+test4 = runTCM (checkProc ctx p) initEnv
   where ctx = Map.fromList [(cp "c", TMu $ TUn $ trecv TInt $ TVar (TypeVarIndex 0))]
         p = Repl (recv (cP "c") (pn "x") End)
         -- p = *(c(x).0)
         -- {c: mu(X)un(?Int.X)}
 
 test5 :: Either TypeError (Ctx, Set SName)
-test5 = runTCM (checkPi ctx p) initEnv
+test5 = runTCM (checkProc ctx p) initEnv
   where t = tsend TInt $ trecv TBool TEnd
         -- {c : mu(X)(un(?(!Int.?Bool.0).X))}
         -- p = *(c(d). d[3].d(x).0)
         ctx = Map.fromList [(cp "c", TMu $ TUn $ TRecv t $ TVar (TypeVarIndex 0))]
-        p = toAbstract $ fromParseResult (parseProcess "* (c(d) . d[3] . d(x) . end)")
+        p = toAbstract $ fromParseResult (parseProc "* (c(d) . d[3] . d(x) . end)")
            -- Repl (recv (cP "c") (pn "d") $
            --         Send (cP "d") (eI 3) $
            --           recv (cP "d") (pn "x") End)
 
 
--- try: runExcept $ checkPi [] [] p2
+-- try: runExcept $ checkProc [] [] p2
 -- try: run `stack test` for running these tests
 -- try: run `stack repl pi:test:pi-tests` to develop thoses tests
 
@@ -571,9 +571,9 @@ test5 = runTCM (checkPi ctx p) initEnv
   --   Left err  -> assertFailure $ show err
   --   Right val -> return val
 
--- parseProc :: ByteString -> IO Pi
+-- parseProc :: ByteString -> IO Proc
 -- parseProc src = do
---   case parseProcess src of
+--   case parseProc src of
 --     Left err  -> assertFailure $ show err
 --     Right val -> return val
 --

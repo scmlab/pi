@@ -14,7 +14,7 @@ import Type
 
 data Env = Env
   { envChanTypes :: Map SName Type
-  , envProcDefns :: Map ProcName Pi
+  , envProcDefns :: Map ProcName Proc
   , envTypeDefns :: Map TypeName Type
   }
   deriving (Show)

@@ -24,7 +24,7 @@ parseProg src = do
 
 parseProc :: ByteString -> IO Pi
 parseProc src = do
-  case parseProcess src of
+  case parseProc src of
     Left err  -> assertFailure $ show err
     Right val -> return val
 

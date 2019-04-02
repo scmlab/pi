@@ -61,21 +61,21 @@ data ResName = StdOut | StdIn
 
 data Program = Program [Definition]
   deriving (Eq, Show)
-data Definition = ProcDefn ProcName Pi
+data Definition = ProcDefn ProcName Proc
                 | ChanType Name Type
                 | TypeDefn TypeName Type
   deriving (Eq, Show)
 
-data Pi = End
-        | Send Name Expr Pi
-        | Recv Name [Clause]
-        | Par Pi Pi
-        | Nu Text (Maybe Type) Pi
-        | Repl Pi
-        | Call ProcName
+data Proc = End
+          | Send Name Expr Proc
+          | Recv Name [Clause]
+          | Par Proc Proc
+          | Nu Text (Maybe Type) Proc
+          | Repl Proc
+          | Call ProcName
    deriving (Eq, Show)
 
-data Clause = Clause Ptrn Pi
+data Clause = Clause Ptrn Proc
    deriving (Eq, Show)
 
 data Expr = EV Val
@@ -148,7 +148,7 @@ cP = ND . Pos . pack
 cN :: String -> Name
 cN = ND . Neg . pack
 
-par :: Pi -> Pi -> Pi
+par :: Proc -> Proc -> Proc
 End `par` p = p
 p `par` End = p
 p `par` q = Par p q
@@ -191,21 +191,21 @@ substExpr th (EIf e0 e1 e2) =
 substExpr th (ETup es) = ETup (map (substExpr th) es)
 substExpr th (EPrj i e) = EPrj i (substExpr th e)
 
-substPi :: Subst -> Pi -> Pi
-substPi _ End = End
-substPi th (Send c u p) =
-   Send (substName th c) (substExpr th u) (substPi th p)
-substPi th (Recv c clauses) =
+substProc :: Subst -> Proc -> Proc
+substProc _ End = End
+substProc th (Send c u p) =
+   Send (substName th c) (substExpr th u) (substProc th p)
+substProc th (Recv c clauses) =
     if Map.null th' then Recv c clauses
         else Recv (substName th' c)
-                  (map (\(Clause ptrn p) -> Clause ptrn (substPi th' p)) clauses)
+                  (map (\(Clause ptrn p) -> Clause ptrn (substProc th' p)) clauses)
   where th' = foldr mask th (map (\(Clause ptrn _) -> ptrn) clauses)
-substPi th (Par p q) = Par (substPi th p) (substPi th q)
-substPi th (Nu y t p) = if Map.member (PH y) th
+substProc th (Par p q) = Par (substProc th p) (substProc th q)
+substProc th (Nu y t p) = if Map.member (PH y) th
    then Nu y t p       -- is this right?
-   else Nu y t (substPi th p)
-substPi th (Repl p) = Repl (substPi th p)   -- is this right?
-substPi _  (Call p) = Call p  -- perhaps this shouldn't be substituted?
+   else Nu y t (substProc th p)
+substProc th (Repl p) = Repl (substProc th p)   -- is this right?
+substProc _  (Call p) = Call p  -- perhaps this shouldn't be substituted?
 
 evalExpr :: MonadError ErrMsg m => Expr -> m Val
 evalExpr (EV v) = return v
@@ -260,7 +260,7 @@ match _ _ = Nothing
 --             | otherwise = error "non-linear pattern"
 --   where s = Map.unions ss
 
-matchClauses :: [Clause] -> Val -> Maybe (Subst, Pi)
+matchClauses :: [Clause] -> Val -> Maybe (Subst, Proc)
 matchClauses [] _ = Nothing
 matchClauses ((Clause pt e):_) v
   | Just ss <- match pt v = Just (ss,e)
@@ -303,19 +303,19 @@ freeExpr (EIf e0 e1 e2) = freeExpr e0 `Set.union` freeExpr e1 `Set.union` freeEx
 freeExpr (ETup es) = Set.unions (map freeExpr es)
 freeExpr (EPrj _ e) = freeExpr e
 
-freePi :: Pi -> Set (Polarised Text)
-freePi End = Set.empty
-freePi (Send c e p) =
-  freeN c `Set.union` freeExpr e `Set.union` freePi p
-freePi (Recv c ps) =
+freeProc :: Proc -> Set (Polarised Text)
+freeProc End = Set.empty
+freeProc (Send c e p) =
+  freeN c `Set.union` freeExpr e `Set.union` freeProc p
+freeProc (Recv c ps) =
   freeN c `Set.union` Set.unions (map freeClause ps)
-freePi (Par p1 p2) = freePi p1 `Set.union` freePi p2
-freePi (Nu x _ p) = freePi p `Set.difference` Set.fromList [Pos x, Neg x]
-freePi (Repl p) = freePi p -- is that right?
-freePi (Call _) = undefined -- what to do here?
+freeProc (Par p1 p2) = freeProc p1 `Set.union` freeProc p2
+freeProc (Nu x _ p) = freeProc p `Set.difference` Set.fromList [Pos x, Neg x]
+freeProc (Repl p) = freeProc p -- is that right?
+freeProc (Call _) = undefined -- what to do here?
 
 freeClause :: Clause -> Set (Polarised Text)
-freeClause (Clause ptn p) = Set.difference (freePi p) (freePtrn ptn)
+freeClause (Clause ptn p) = Set.difference (freeProc p) (freePtrn ptn)
 
 freePtrn :: Ptrn -> Set (Polarised Text)
 freePtrn (PN x)  = Set.singleton (Pos x)

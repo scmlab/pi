@@ -14,7 +14,7 @@ import Data.Text (Text)
 }
 
 %name programParser Program
-%name processParser ProcessPar
+%name processParser ProcPar
 %tokentype { Token }
 %error { syntaticalError }
 
@@ -98,26 +98,26 @@ Definitions :: {[Definition]}
     | Definitions Definition                    { $2:$1 }
 
 Definition :: {Definition}
-    : ProcName '=' ProcessPar                   {% locate $ ProcDefn $1 $3 }
+    : ProcName '=' ProcPar                      {% locate $ ProcDefn $1 $3 }
     | Name ':' Type                             {% locate $ ChanType $1 $3 }
     | 'type' TypeName '=' Type                  {% locate $ TypeDefn $2 $4 }
 
 -- left recursive
-ProcessPar :: {Process}
-    : ProcessPar '|' Process                    {% locate $ Par $1 $3 }
-    | Process                                   { $1 }
+ProcPar :: {Proc}
+    : ProcPar '|' Proc                          {% locate $ Par $1 $3 }
+    | Proc                                      { $1 }
 
-Process :: {Process}
-    : Name '[' Expr ']' '.' Process           {% locate $ Send $1 $3 $6  }
-    | Name RecvClause                         {% locate $ Recv $1 [$2]  }
-    | Name '>>' '{' ChoiceClauses '}'         {% locate $ Recv $1 (reverse $4)  }
-    | Name '<<' SelectLabel '.' Process       {% locate $ Send $1 $3 $5 }
-    | 'end'                                   {% locate $ End }
-    | '(' 'nu' ProcName ')' Process           {% locate $ Nu $3 Nothing $5 }
-    | '(' 'nu' ProcName ':' Type ')' Process  {% locate $ Nu $3 (Just $5) $7 }
-    | '*' Process                             {% locate $ Repl $2 }
-    | ProcName                                {% locate $ Call $1 }
-    | '(' ProcessPar ')'                      { $2 }
+Proc :: {Proc}
+    : Name '[' Expr ']' '.' Proc                {% locate $ Send $1 $3 $6  }
+    | Name RecvClause                           {% locate $ Recv $1 [$2]  }
+    | Name '>>' '{' ChoiceClauses '}'           {% locate $ Recv $1 (reverse $4)  }
+    | Name '<<' SelectLabel '.' Proc            {% locate $ Send $1 $3 $5 }
+    | 'end'                                     {% locate $ End }
+    | '(' 'nu' ProcName ')' Proc                {% locate $ Nu $3 Nothing $5 }
+    | '(' 'nu' ProcName ':' Type ')' Proc       {% locate $ Nu $3 (Just $5) $7 }
+    | '*' Proc                                  {% locate $ Repl $2 }
+    | ProcName                                  {% locate $ Call $1 }
+    | '(' ProcPar ')'                           { $2 }
 
 Pattern :: {Pattern}
          : ProcName                         {% locate $ PtrnName $1 }
@@ -128,9 +128,9 @@ Patterns :: {[Pattern]}
     | Pattern  ',' Pattern                  { [ $3, $1 ]  }
 
 RecvClause :: {Clause}
-        : '(' Pattern ')' '.' ProcessPar    {% locate $  Clause $2 $5 }
+        : '(' Pattern ')' '.' ProcPar    {% locate $  Clause $2 $5 }
 ChoiceClause :: {Clause}
-        : Pattern '->' ProcessPar           {% locate $  Clause $1 $3 }
+        : Pattern '->' ProcPar           {% locate $  Clause $1 $3 }
 ChoiceClauses :: {[Clause]}
         : ChoiceClauses ';' ChoiceClause    { $3 : $1 }
         | ChoiceClause                      { [ $1 ]  }

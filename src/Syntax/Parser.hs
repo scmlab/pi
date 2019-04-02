@@ -1,6 +1,6 @@
 module Syntax.Parser
   ( parseProgram
-  , parseProcess
+  , parseProc
   , parseByteString2
   , ParseError(..)
   , printParseError
@@ -9,7 +9,7 @@ module Syntax.Parser
 
 import qualified Syntax.Abstract as A
 import qualified Syntax.Concrete as C
-import Syntax.Concrete (Program, Process)
+import Syntax.Concrete (Program, Proc)
 import Syntax.Parser.Parser (programParser, processParser)
 import Syntax.Parser.Lexer (lexer)
 import Syntax.Parser.Type
@@ -28,8 +28,8 @@ parseProgram filePath src = runExcept (evalStateT programParser initState)
   where initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
         startingLoc = Loc (startPos filePath) (startPos filePath)
 
-parseProcess :: ByteString -> Either ParseError Process
-parseProcess src = runExcept (evalStateT processParser initState)
+parseProc :: ByteString -> Either ParseError Proc
+parseProc src = runExcept (evalStateT processParser initState)
   where filePath = ""
         initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
         startingLoc = Loc (startPos filePath) (startPos filePath)

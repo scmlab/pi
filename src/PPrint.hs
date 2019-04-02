@@ -111,55 +111,55 @@ ppExpr (ETup es) _ =
 ppExpr (EPrj _ _) _ = error "ppExpr EPrj not defined"
 
 
-ppPi :: Pi -> Int -> Doc a
-ppPi End _ = "end"
-ppPi (Send c e p) pr =
+ppProc :: Proc -> Int -> Doc a
+ppProc End _ = "end"
+ppProc (Send c e p) pr =
   shParen (pr > 4)
    (group . nest 4 . vsep $
         [pretty c <> "!" <>
            ppExpr e 8 <+> ".",
-         ppPi p 4])
-ppPi (Recv c [Clause xs p]) pr =
+         ppProc p 4])
+ppProc (Recv c [Clause xs p]) pr =
   shParen (pr > 4)
    (group . nest 4 . vsep $
      [pretty c <> "?" <> pretty xs <+> ".",
-      ppPi p 4])
-ppPi (Recv c clauses) pr =
+      ppProc p 4])
+ppProc (Recv c clauses) pr =
   shParen (pr > 4)
    (pretty c <> "?{" <+>
     align (encloseSep mempty " }" sepa (map clause clauses)))
  where sepa = flatAlt mempty "; "
        clause (Clause xs p) =
           pretty xs <+> "->" <+>
-           ppPi p 4
-ppPi (Par p1 p2) pr =
-  ppInfixL 3 "|" (ppPi p1) (ppPi p2) pr
-ppPi (Nu x Nothing p) pr =
+           ppProc p 4
+ppProc (Par p1 p2) pr =
+  ppInfixL 3 "|" (ppProc p1) (ppProc p2) pr
+ppProc (Nu x Nothing p) pr =
   shParen (pr > 4) $
     group . nest 4 . vsep $
       [ "(nu " <> pretty x <> ")"
-      , ppPi p 4
+      , ppProc p 4
       ]
-ppPi (Nu x (Just t) p) pr =
+ppProc (Nu x (Just t) p) pr =
   shParen (pr > 4) $
     group . nest 4 . vsep $
       [ "(nu " <> pretty x <> " : " <> pretty t <> ")"
-      , ppPi p 4
+      , ppProc p 4
       ]
-ppPi (Repl p) _ = "*" <+> pretty p
-ppPi (Call p) _ = pretty p
+ppProc (Repl p) _ = "*" <+> pretty p
+ppProc (Call p) _ = pretty p
 
 -- ppClauses [(xs,p)] =
 -- ppClauses pps =
 
-instance Pretty Pi where
-  pretty p = ppPi p 0
+instance Pretty Proc where
+  pretty p = ppProc p 0
 
-ppDef :: Name -> Pi -> Doc a
+ppDef :: Name -> Proc -> Doc a
 ppDef x p = pretty x <+> "=" <+>
-            nest 4 (ppPi p 0)
+            nest 4 (ppProc p 0)
 
-ppDefs :: [(Name, Pi)] -> Doc a
+ppDefs :: [(Name, Proc)] -> Doc a
 ppDefs = vsep . map (uncurry ppDef)
 
 -- Types
