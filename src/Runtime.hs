@@ -6,18 +6,18 @@ import Control.Monad.State hiding (State, state)
 import Control.Monad.Except
 import qualified Control.Exception as Exception
 import qualified Data.Map as Map
--- import Data.Map (Map)
+import Data.Map (Map)
+import Data.Loc (Loc(..))
 import Control.Exception (IOException)
 import Data.Text.Prettyprint.Doc
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
 import Data.Maybe (mapMaybe)
 
-import Syntax.Abstract
+import qualified Syntax.Abstract as A
 import Type (dual)
-import Syntax.Concrete (toAbstract)
+import Syntax.Concrete
 import Type.TypeCheck
--- import Syntax.Concrete (restore)
 import qualified Syntax.Parser as Parser
 import Interpreter
 import Debug.Trace
@@ -27,7 +27,7 @@ import Debug.Trace
  -- | Runtime Monad
 
 data Outcome = Success St Effect
-             | Failure ErrMsg
+             | Failure A.ErrMsg
              deriving (Show)
 
 instance Pretty Outcome where
@@ -146,7 +146,7 @@ load filePath = do
       -- parse and store the AST
       case Parser.parseProgram filePath source of
         Left err  -> throwError $ ParseError err
-        Right ast -> programToEnv (toAbstract ast) >>= putEnv . Just
+        Right ast -> programToEnv ast >>= putEnv . Just
 
       -- do some checkings
       env' <- gets stEnv
@@ -163,7 +163,7 @@ load filePath = do
       -- populate future, the next possible outcomes (there should be only 1)
 
       -- run "test" or else run "main"
-      let procToRun = if Map.member "test" (envProcDefns env)
+      let procToRun = if Map.member (ProcName "test" NoLoc) (envProcDefns env)
                         then "test" else "main"
       updateFuture $ interpret env initialState $ do
         _ <- call (Caller (PID False "you" (-1)) procToRun)
@@ -195,8 +195,8 @@ reload = do
   load filePath
 
 -- run the appointed outcome
-run :: RuntimeM Val   -- input handler
-  -> (Val -> RuntimeM ())   -- output handler
+run :: RuntimeM A.Val   -- input handler
+  -> (A.Val -> RuntimeM ())   -- output handler
   -> RuntimeM ()
 run inputHandler outputHandler = do
   outcome <- selectedFuture
@@ -267,38 +267,32 @@ data Request
 -- | Converting parsed program
 
 programToEnv :: Program -> RuntimeM Env
-programToEnv (Program declarations) = do
-  -- -- throw if there is any type signature without a corresponding process definition
-  -- unless (Map.null onlyTypes) $
-  --   throwError $ TypeError $ MissingProcDefn onlyTypes
+programToEnv (Program declarations _) = do
 
-
-  chanTypesPos' <- Map.fromList <$> forM chanTypesPos (\(n, t) -> toName n >>= \n' -> return (n', t) )
-  let chanTypesNeg = Map.mapKeys dual $ fmap dual chanTypesPos'
-
-  traceShow chanTypesNeg $ return ()
-
-  let chanTypes = Map.union chanTypesNeg chanTypesPos'
+  let chanTypesNeg = Map.mapKeys dual $ fmap dual chanTypesPos
+  let chanTypes = Map.union chanTypesNeg chanTypesPos
 
 
   return $ Env chanTypes procDefns typeDefns
+
   where
-    toChanTypePair (ChanType n t) = Just (n, t)
+    toChanTypePair (ChanType n t _) = Just (n, t)
     toChanTypePair _              = Nothing
 
-    toProcDefnPair (ProcDefn n t) = Just (n, t)
+    toProcDefnPair (ProcDefn n t _) = Just (n, t)
     toProcDefnPair _              = Nothing
 
-    toTypeDefnPair (TypeDefn n t) = Just (n, t)
+    toTypeDefnPair (TypeDefn n t _) = Just (n, t)
     toTypeDefnPair _              = Nothing
 
-    chanTypesPos = mapMaybe toChanTypePair declarations
+    chanTypesPos :: Map Chan Type
+    chanTypesPos = Map.fromList $ mapMaybe toChanTypePair declarations
 
 
     procDefns = Map.fromList $ mapMaybe toProcDefnPair declarations
     typeDefns = Map.fromList $ mapMaybe toTypeDefnPair declarations
 
-toName :: Chan -> RuntimeM Name
-toName (ND c) = return c
-toName n@(NG _) = throwError $ TypeError $ UserDefinedNameExpected n
-toName n@(NR _) = throwError $ TypeError $ UserDefinedNameExpected n
+-- toName :: Chan -> RuntimeM Name
+-- toName (ND c)   = return c
+-- toName n@(NG _) = throwError $ TypeError $ UserDefinedNameExpected n
+-- toName n@(NR _) = throwError $ TypeError $ UserDefinedNameExpected n

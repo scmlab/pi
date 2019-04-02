@@ -25,6 +25,8 @@ import PPrint ()
 
 import Base
 import Syntax.Abstract
+import Syntax.Concrete (toAbstract)
+import qualified Syntax.Concrete as C
 import Utilities
 
 --------------------------------------------------------------------------------
@@ -77,7 +79,7 @@ instance HasPID IOTask where
 data Sender   = Sender   PID Chan Val Proc            deriving (Show)
 data Receiver = Receiver PID Chan [Clause]          deriving (Show)
 data Caller   = Caller   PID ProcName               deriving (Show)
-data ReplNu   = ReplNu   PID Text Proc               deriving (Show)
+data ReplNu   = ReplNu   PID Chan Proc               deriving (Show)
 data IOTask   = Input    PID      [Clause]
               | Output   PID      Val Proc
               deriving (Show)
@@ -270,11 +272,11 @@ restict :: ReplNu -> PiMonad Proc
 restict (ReplNu _ x p) = do
   var <- freshVar
   addFreshVar var
-  return $ substProc (Map.fromList [(PH x, VC var)]) p
+  return $ substProc (Map.fromList [(depolariseChan x, VC var)]) p
 
 call :: Caller -> PiMonad Proc
 call (Caller _ callee) = do
-  procs <- asks envProcDefns
+  procs <- Map.mapKeys toAbstract <$> Map.map toAbstract <$> asks envProcDefns
   case Map.lookup callee procs of
     Just p  -> do
       addPi (PID False callee) p
