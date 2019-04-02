@@ -35,7 +35,7 @@ instance Pretty Chan where
   pretty (NR StdOut) = "stdout"
   pretty (NR StdIn) = "stdin"
 
-instance Pretty PtrnName where
+instance Pretty PureName where
   pretty (PH x) = pretty x
   pretty (PG i) = "x" <> pretty i
 
@@ -56,13 +56,13 @@ instance Pretty Val where
 
 -- Patterns
 instance Pretty Ptrn where
-  pretty (PtrnName x) = pretty x
+  pretty (PtrnVar x) = pretty x
   pretty (PtrnTuple xs) =
      encloseSep langle rangle comma (map pretty xs)
   pretty (PtrnLabel x) = pretty x
 
 {-
-data Ptrn = PtrnName Name         -- patterns
+data Ptrn = PtrnVar Name         -- patterns
           | PtrnTuple [Ptrn]
           | PtrnLabel Label
    deriving Show

@@ -78,7 +78,3 @@ stripUnres (TTuple ts) = (TTuple (map fst tts), and (map snd tts))
   where tts = map stripUnres ts
 stripUnres (TMu t)     = (TMu *** id) $ stripUnres t
 stripUnres t           = (t, False)
-
-
-eqType :: Type -> Type -> Bool
-eqType = (==)

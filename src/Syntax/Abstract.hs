@@ -26,8 +26,8 @@ data Chan = ND Name             -- user defined
           | NR ResName          -- reserved name
     deriving (Ord, Eq, Show)
 
-data PtrnName = PH Text        -- "pure" names, without polarization
-           | PG Int
+data PureName = PH Text        -- "pure" names, without polarization
+              | PG Int
    deriving (Eq, Show, Ord)
 
 
@@ -44,7 +44,7 @@ depolarise (Pos x) = x
 depolarise (Neg x) = x
 -- depolar (Neu x) = x
 
-depolarCh :: Chan -> PtrnName
+depolarCh :: Chan -> PureName
 depolarCh (ND c) = PH (depolarise c)
 depolarCh (NG c) = PG (depolarise c)
 depolarCh (NR _) = error "bug: shouldn't call depolar without checking"
@@ -104,7 +104,7 @@ data Val = VC Chan
          | VS Text
    deriving (Eq, Show)
 
-data Ptrn = PtrnName Text         -- patterns
+data Ptrn = PtrnVar   Text         -- patterns
           | PtrnTuple [Ptrn]
           | PtrnLabel Label
    deriving (Eq, Show)
@@ -121,8 +121,8 @@ unVT :: MonadError ErrMsg m => Val -> m [Val]
 unVT (VT xs) = return xs
 unVT _ = throwError "type error: tuple wanted"
 
-ePtrnName :: String -> Expr
-ePtrnName = EV . VC . ND . Pos . pack
+ePtrnVar :: String -> Expr
+ePtrnVar = EV . VC . ND . Pos . pack
 
 eNN :: String -> Expr
 eNN = EV . VC . ND . Neg . pack
@@ -153,7 +153,7 @@ End `par` p = p
 p `par` End = p
 p `par` q = Par p q
 
-type Subst = Map PtrnName Val
+type Subst = Map PureName Val
 
 substChan :: Subst -> Chan -> Chan
 substChan _ (NR r) = NR r
@@ -249,7 +249,7 @@ evalExpr (EPrj i e) =
 -- substitution related stuffs
 
 match :: Ptrn -> Val -> Maybe Subst
-match (PtrnName x) v = Just $ Map.fromList [(PH x,v)]
+match (PtrnVar x) v = Just $ Map.fromList [(PH x,v)]
 match (PtrnLabel x) (VL y) | x == y = Just Map.empty
 match (PtrnTuple xs) (VT vs) | length xs == length vs =
   Map.unions <$> mapM (uncurry match) (zip xs vs)
@@ -267,7 +267,7 @@ matchClauses ((Clause pt e):_) v
 matchClauses (_:pps) v = matchClauses pps v
 
 mask :: Ptrn -> Subst -> Subst
-mask (PtrnName x)      = Map.delete (PH x)
+mask (PtrnVar x)      = Map.delete (PH x)
 mask (PtrnTuple [])     = id
 mask (PtrnTuple (p:ps)) = mask (PtrnTuple ps) . mask p
 mask (PtrnLabel _)      = id
@@ -318,6 +318,6 @@ freeClause :: Clause -> Set Name
 freeClause (Clause ptn p) = Set.difference (freeProc p) (freePtrn ptn)
 
 freePtrn :: Ptrn -> Set Name
-freePtrn (PtrnName x)  = Set.singleton (Pos x)
+freePtrn (PtrnVar x)  = Set.singleton (Pos x)
 freePtrn (PtrnTuple xs) = Set.unions (map freePtrn xs)  -- linearity check?
 freePtrn _       = Set.empty

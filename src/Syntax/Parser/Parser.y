@@ -119,8 +119,11 @@ Proc :: {Proc}
     | ProcName                                  {% locate $ Call $1 }
     | '(' ProcPar ')'                           { $2 }
 
+Var :: {Var}
+Var : namePos                                   {% locate $ Var $1 }
+
 Ptrn :: {Ptrn}
-         : ProcName                             {% locate $ PtrnName $1 }
+         : Var                                  {% locate $ PtrnVar $1 }
          | Ptrns                                {% locate $ PtrnTuple (reverse $1) }
          | Label                                {% locate $ PtrnLabel $1 }
 Ptrns :: {[Ptrn]}

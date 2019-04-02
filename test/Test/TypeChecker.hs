@@ -44,12 +44,12 @@ tests = testGroup "TypeChecker"
 
 
     p0 :: Pi
-    p0 = Send (cN "c") (ePtrnName "d") $
+    p0 = Send (cN "c") (ePtrnVar "d") $
           choices (cN "d")
             [("NEG", recv (cN "d") (pn "x") $
-                       Send (cN "d") (eI 0 `ESub` ePtrnName "x") End),
+                       Send (cN "d") (eI 0 `ESub` ePtrnVar "x") End),
              ("ID", recv (cN "d") (pn "x") $
-                        Send (cN "d") (ePtrnName "x") End)]
+                        Send (cN "d") (ePtrnVar "x") End)]
 
     p1 :: Pi
     p1 = recv (cP "c") (pn "z") $

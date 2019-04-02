@@ -42,7 +42,9 @@ data Proc         = Send      Chan      Expr          Proc  Loc
                   | End                                     Loc
                   deriving (Show)
 
-data Ptrn         = PtrnName  ProcName                      Loc
+data Var          = Var Text Loc
+                  deriving (Show)
+data Ptrn         = PtrnVar   Var                           Loc
                   | PtrnTuple [Ptrn]                        Loc
                   | PtrnLabel Label                         Loc
                   deriving (Show)
@@ -124,7 +126,7 @@ instance Located Proc where
   locOf (End loc) = loc
 
 instance Located Ptrn where
-  locOf (PtrnName _ loc) = loc
+  locOf (PtrnVar _ loc) = loc
   locOf (PtrnTuple _ loc) = loc
   locOf (PtrnLabel _ loc) = loc
 
@@ -196,10 +198,13 @@ instance ToAbstract Chan A.Chan where
   toAbstract (Res "stdout" _) = A.NR A.StdOut
   toAbstract (Res _        _) = A.NR A.StdOut
 
+instance ToAbstract Var Text where
+  toAbstract (Var   name      _)  = name
+
 instance ToAbstract Ptrn A.Ptrn where
-  toAbstract (PtrnName name _)   = A.PtrnName (toAbstract name)
-  toAbstract (PtrnTuple patterns _) = A.PtrnTuple (map toAbstract patterns)
-  toAbstract (PtrnLabel label _) = A.PtrnLabel (toAbstract label)
+  toAbstract (PtrnVar   name      _)  = A.PtrnVar   (toAbstract name)
+  toAbstract (PtrnTuple patterns  _)  = A.PtrnTuple (map toAbstract patterns)
+  toAbstract (PtrnLabel label     _)  = A.PtrnLabel (toAbstract label)
 
 instance ToAbstract Clause A.Clause where
   toAbstract (Clause pattern process _) =

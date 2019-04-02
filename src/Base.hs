@@ -6,14 +6,13 @@ import Control.Applicative
 import Control.Monad.Except
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Syntax.Abstract
-import Type
+import Syntax.Concrete
 
 --------------------------------------------------------------------------------
 -- | Env
 
 data Env = Env
-  { envChanTypes :: Map Name Type
+  { envChanTypes :: Map Chan Type
   , envProcDefns :: Map ProcName Proc
   , envTypeDefns :: Map TypeName Type
   }
