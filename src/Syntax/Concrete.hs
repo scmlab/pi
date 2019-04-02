@@ -16,9 +16,9 @@ import Prelude hiding (LT, EQ, GT)
 
 data Label        = Label     Text  Loc
                   deriving (Show)
-data Name         = Positive  Text  Loc
-                  | Negative  Text  Loc
-                  | Reserved  Text  Loc
+data Chan         = Pos  Text  Loc
+                  | Neg  Text  Loc
+                  | Res  Text  Loc
                   deriving (Show)
 
 data Program      = Program   [Definition]  Loc
@@ -29,12 +29,12 @@ data TypeName     = TypeName  Text  Loc
                   deriving (Show)
 
 data Definition   = ProcDefn  ProcName  Proc Loc
-                  | ChanType  Name      Type Loc
+                  | ChanType  Chan      Type Loc
                   | TypeDefn  TypeName  Type Loc
                   deriving (Show)
 
-data Proc         = Send      Name      Expr          Proc  Loc
-                  | Recv      Name      [Clause]            Loc
+data Proc         = Send      Chan      Expr          Proc  Loc
+                  | Recv      Chan      [Clause]            Loc
                   | Nu        ProcName  (Maybe Type)  Proc  Loc
                   | Par       Proc                    Proc  Loc
                   | Call      ProcName                      Loc
@@ -64,7 +64,7 @@ data Expr         = ExprTuple [Expr]    Loc
                   | IfThenElse Expr Expr Expr Loc
                   | ExprBool  Bool Loc
                   | ExprDigit Int Loc
-                  | ExprName  Name Loc
+                  | ExprChan  Chan Loc
                   | ExprLabel Label Loc
                   | ExprString Text Loc
                   deriving (Show)
@@ -95,10 +95,10 @@ data TypeOfLabel = TypeOfLabel Label Type   Loc
 --------------------------------------------------------------------------------
 -- | Instance of Located
 
-instance Located Name where
-  locOf (Positive _ loc) = loc
-  locOf (Negative _ loc) = loc
-  locOf (Reserved _ loc) = loc
+instance Located Chan where
+  locOf (Pos _ loc) = loc
+  locOf (Neg _ loc) = loc
+  locOf (Res _ loc) = loc
 
 instance Located ProcName where
   locOf (ProcName _ loc) = loc
@@ -146,7 +146,7 @@ instance Located Expr where
   locOf (IfThenElse _ _ _ loc) = loc
   locOf (ExprBool _ loc) = loc
   locOf (ExprDigit _ loc) = loc
-  locOf (ExprName _ loc) = loc
+  locOf (ExprChan _ loc) = loc
   locOf (ExprLabel _ loc) = loc
   locOf (ExprString _ loc) = loc
 
@@ -189,12 +189,12 @@ instance ToAbstract Label A.Label where
 instance ToAbstract ProcName Text where
   toAbstract (ProcName name    _) = name
 
-instance ToAbstract Name A.Name where
-  toAbstract (Positive name     _) = A.ND (A.Pos name)
-  toAbstract (Negative name     _) = A.ND (A.Neg name)
-  toAbstract (Reserved "stdin"  _) = A.NR A.StdIn
-  toAbstract (Reserved "stdout" _) = A.NR A.StdOut
-  toAbstract (Reserved _        _) = A.NR A.StdOut
+instance ToAbstract Chan A.Chan where
+  toAbstract (Pos name     _) = A.ND (A.Pos name)
+  toAbstract (Neg name     _) = A.ND (A.Neg name)
+  toAbstract (Res "stdin"  _) = A.NR A.StdIn
+  toAbstract (Res "stdout" _) = A.NR A.StdOut
+  toAbstract (Res _        _) = A.NR A.StdOut
 
 instance ToAbstract Ptrn A.Ptrn where
   toAbstract (PtrnName name _)   = A.PtrnName (toAbstract name)
@@ -238,7 +238,7 @@ instance ToAbstract Expr A.Expr where
   toAbstract (ExprBool b _) = A.EV (A.VB b)
   toAbstract (ExprTuple xs _) = A.ETup (map toAbstract xs)
   toAbstract (ExprDigit x _) = A.EV (A.VI x)
-  toAbstract (ExprName  x _) = A.EV (A.N (toAbstract x))
+  toAbstract (ExprChan  x _) = A.EV (A.VC (toAbstract x))
   toAbstract (ExprLabel x _) = A.EV (A.VL (toAbstract x))
   toAbstract (ExprString x _) = A.EV (A.VS x)
 

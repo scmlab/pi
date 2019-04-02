@@ -43,7 +43,7 @@ data TypeError
   | TypeOfNewChannelMissing Text
   | RecvExpected Type
   | SendExpected Type
-  | SNameExpected Name
+  | SNameExpected Chan
   | Others String
   deriving (Show)
 
@@ -163,15 +163,15 @@ lookupLabel env x = case Map.lookup x env of
 
 
 inferV :: Ctx -> Val -> TCM (Type, Ctx)
-inferV _ (N (NR _)) =
+inferV _ (VC (NR _)) =
   throwError $ Others "StdOut/In in expression"
-inferV ctx (N (ND c)) = do
+inferV ctx (VC (ND c)) = do
   case Map.lookup c ctx of
     Nothing -> throwError $ Others $ "variable " ++ show c ++ " not found"
     Just t -> if unrestricted t
                 then return (t, ctx)
                 else return (t, Map.delete c ctx)
-inferV _ (N (NG _)) =
+inferV _ (VC (NG _)) =
   throwError $ Others "Unable to infer system generated variables"
 inferV ctx (VI _) = return (tInt, ctx)
 inferV ctx (VB _) = return (tBool, ctx)
@@ -461,10 +461,10 @@ tsele = TSele . map (pack *** id)
 nu :: String -> Type -> Proc -> Proc
 nu c t p = Nu (pack c) (Just t) p
 
-recv :: Name -> Ptrn -> Proc -> Proc
+recv :: Chan -> Ptrn -> Proc -> Proc
 recv c ptn p = Recv c [Clause ptn p]
 
-choices :: Name -> [(String, Proc)] -> Proc
+choices :: Chan -> [(String, Proc)] -> Proc
 choices c ps =
    Recv c (map (uncurry Clause . ((PtrnLabel . pack) *** id)) ps)
 

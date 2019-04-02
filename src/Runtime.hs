@@ -298,7 +298,7 @@ programToEnv (Program declarations) = do
     procDefns = Map.fromList $ mapMaybe toProcDefnPair declarations
     typeDefns = Map.fromList $ mapMaybe toTypeDefnPair declarations
 
-toSName :: Name -> RuntimeM SName
+toSName :: Chan -> RuntimeM SName
 toSName (ND c) = return c
 toSName n@(NG _) = throwError $ TypeError $ SNameExpected n
 toSName n@(NR _) = throwError $ TypeError $ SNameExpected n

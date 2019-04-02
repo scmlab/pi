@@ -19,7 +19,7 @@ type ProcName = Text
 type TypeName = Text
 
 type SName = Polarised Text
-data Name = ND (Polarised Text)   -- user defined
+data Chan = ND (Polarised Text)   -- user defined
           | NG (Polarised Int)     -- system generated
           | NR ResName      -- reserved name
     deriving (Ord, Eq, Show)
@@ -44,15 +44,15 @@ depolarise (Pos x) = x
 depolarise (Neg x) = x
 -- depolar (Neu x) = x
 
-depolarCh :: Name -> PtrnNameame
+depolarCh :: Chan -> PtrnNameame
 depolarCh (ND c) = PH (depolarise c)
 depolarCh (NG c) = PG (depolarise c)
 depolarCh (NR _) = error "bug: shouldn't call depolar without checking"
 
-depolarCH :: Name -> Text
+depolarCH :: Chan -> Text
 depolarCH = depolarise . unND
 
-unND :: Name -> Polarised Text
+unND :: Chan -> Polarised Text
 unND (ND n) = n
 unND _ = undefined
 
@@ -62,13 +62,13 @@ data ResName = StdOut | StdIn
 data Program = Program [Definition]
   deriving (Eq, Show)
 data Definition = ProcDefn ProcName Proc
-                | ChanType Name Type
+                | ChanType Chan Type
                 | TypeDefn TypeName Type
   deriving (Eq, Show)
 
 data Proc = End
-          | Send Name Expr Proc
-          | Recv Name [Clause]
+          | Send Chan Expr Proc
+          | Recv Chan [Clause]
           | Par Proc Proc
           | Nu Text (Maybe Type) Proc
           | Repl Proc
@@ -96,7 +96,7 @@ data Expr = EV Val
           | EPrj Int Expr
    deriving (Eq, Show)
 
-data Val = N Name
+data Val = VC Chan
          | VI Int
          | VB Bool
          | VT [Val]    -- n-tuples
@@ -122,13 +122,13 @@ unVT (VT xs) = return xs
 unVT _ = throwError "type error: tuple wanted"
 
 ePtrnName :: String -> Expr
-ePtrnName = EV . N . ND . Pos . pack
+ePtrnName = EV . VC . ND . Pos . pack
 
 eNN :: String -> Expr
-eNN = EV . N . ND . Neg . pack
+eNN = EV . VC . ND . Neg . pack
 
 -- eN :: String -> Expr
--- eN  = EV . N . ND . Neu . pack
+-- eN  = EV . VC . ND . Neu . pack
 
 eI :: Int -> Expr
 eI = EV . VI
@@ -140,12 +140,12 @@ eL :: String -> Expr
 eL = EV . VL . pack
 
 eR :: ResName -> Expr
-eR = EV . N . NR
+eR = EV . VC . NR
 
-cP :: String -> Name
+cP :: String -> Chan
 cP = ND . Pos . pack
 
-cN :: String -> Name
+cN :: String -> Chan
 cN = ND . Neg . pack
 
 par :: Proc -> Proc -> Proc
@@ -155,18 +155,18 @@ p `par` q = Par p q
 
 type Subst = Map PtrnNameame Val
 
-substName :: Subst -> Name -> Name
-substName _ (NR r) = NR r
-substName th c =  case Map.lookup (depolarCh c) th of
-  Just (N y) -> y
-  Just _ -> error "not a name"
+substChan :: Subst -> Chan -> Chan
+substChan _ (NR r) = NR r
+substChan th c =  case Map.lookup (depolarCh c) th of
+  Just (VC y) -> y
+  Just _ -> error "not a channel"
   Nothing -> c
 
 substVal :: Subst -> Val -> Val
-substVal _ (N (NR r)) = N (NR r)
-substVal th (N c) = case Map.lookup (depolarCh c) th of
+substVal _ (VC (NR r)) = VC (NR r)
+substVal th (VC c) = case Map.lookup (depolarCh c) th of
   Just v  -> v
-  Nothing -> N c
+  Nothing -> VC c
 substVal th (VT vs) = VT (map (substVal th) vs)
 substVal _ u = u
 
@@ -194,10 +194,10 @@ substExpr th (EPrj i e) = EPrj i (substExpr th e)
 substProc :: Subst -> Proc -> Proc
 substProc _ End = End
 substProc th (Send c u p) =
-   Send (substName th c) (substExpr th u) (substProc th p)
+   Send (substChan th c) (substExpr th u) (substProc th p)
 substProc th (Recv c clauses) =
     if Map.null th' then Recv c clauses
-        else Recv (substName th' c)
+        else Recv (substChan th' c)
                   (map (\(Clause ptrn p) -> Clause ptrn (substProc th' p)) clauses)
   where th' = foldr mask th (map (\(Clause ptrn _) -> ptrn) clauses)
 substProc th (Par p q) = Par (substProc th p) (substProc th q)
@@ -279,11 +279,11 @@ mask (PtrnLabel _)      = id
 -- system generated names are supposed to exist only during execution.
 
 freeVal :: Val -> Set (Polarised Text)
-freeVal (N (ND x)) = Set.singleton x
+freeVal (VC (ND x)) = Set.singleton x
 freeVal (VT vs) = Set.unions . map freeVal $ vs
 freeVal _ = Set.empty
 
-freeN :: Name -> Set (Polarised Text)
+freeN :: Chan -> Set (Polarised Text)
 freeN (ND x) = Set.singleton x
 freeN _ = Set.empty
 

@@ -29,7 +29,7 @@ infix  8 ? !
 
 
 -- Names
-instance Pretty Name where
+instance Pretty Chan where
   pretty (ND x) = pretty x
   pretty (NG i) = "x" <> pretty i
   pretty (NR StdOut) = "stdout"
@@ -45,7 +45,7 @@ instance Pretty a => Pretty (Polarised a) where
 
 -- Values
 instance Pretty Val where
-  pretty (N x) = pretty x
+  pretty (VC x) = pretty x
   pretty (VI n) = pretty n
   pretty (VB b) = pretty b
   pretty (VL x) = pretty x
@@ -155,11 +155,11 @@ ppProc (Call p) _ = pretty p
 instance Pretty Proc where
   pretty p = ppProc p 0
 
-ppDef :: Name -> Proc -> Doc a
+ppDef :: Chan -> Proc -> Doc a
 ppDef x p = pretty x <+> "=" <+>
             nest 4 (ppProc p 0)
 
-ppDefs :: [(Name, Proc)] -> Doc a
+ppDefs :: [(Chan, Proc)] -> Doc a
 ppDefs = vsep . map (uncurry ppDef)
 
 -- Types

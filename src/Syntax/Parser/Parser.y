@@ -6,7 +6,7 @@ module Syntax.Parser.Parser where
 import Syntax.Parser.Lexer
 import Syntax.Parser.Type
 import Syntax.Concrete
-import Data.Loc
+import Data.Loc (Loc)
 import Prelude hiding (GT, LT, EQ)
 
 import Data.Text (Text)
@@ -99,7 +99,7 @@ Definitions :: {[Definition]}
 
 Definition :: {Definition}
     : ProcName '=' ProcPar                      {% locate $ ProcDefn $1 $3 }
-    | Name ':' Type                             {% locate $ ChanType $1 $3 }
+    | Chan ':' Type                             {% locate $ ChanType $1 $3 }
     | 'type' TypeName '=' Type                  {% locate $ TypeDefn $2 $4 }
 
 -- left recursive
@@ -108,10 +108,10 @@ ProcPar :: {Proc}
     | Proc                                      { $1 }
 
 Proc :: {Proc}
-    : Name '[' Expr ']' '.' Proc                {% locate $ Send $1 $3 $6  }
-    | Name RecvClause                           {% locate $ Recv $1 [$2]  }
-    | Name '>>' '{' ChoiceClauses '}'           {% locate $ Recv $1 (reverse $4)  }
-    | Name '<<' SelectLabel '.' Proc            {% locate $ Send $1 $3 $5 }
+    : Chan '[' Expr ']' '.' Proc                {% locate $ Send $1 $3 $6  }
+    | Chan RecvClause                           {% locate $ Recv $1 [$2]  }
+    | Chan '>>' '{' ChoiceClauses '}'           {% locate $ Recv $1 (reverse $4)  }
+    | Chan '<<' SelectLabel '.' Proc            {% locate $ Send $1 $3 $5 }
     | 'end'                                     {% locate $ End }
     | '(' 'nu' ProcName ')' Proc                {% locate $ Nu $3 Nothing $5 }
     | '(' 'nu' ProcName ':' Type ')' Proc       {% locate $ Nu $3 (Just $5) $7 }
@@ -145,10 +145,10 @@ ProcName :: {ProcName}
 TypeVar :: {TypeVar}
     : TypeName                              {% locate $ TypeVarText $1 }
 
-Name :: {Name}
-      : namePos                             {% locate $ Positive $1 }
-      | nameNeg                             {% locate $ Negative $1 }
-      | ReservedName                        {% locate $ Reserved $1 }
+Chan :: {Chan}
+      : namePos                             {% locate $ Pos $1 }
+      | nameNeg                             {% locate $ Neg $1 }
+      | ReservedName                        {% locate $ Res $1 }
 
 ReservedName :: {Text}
      : 'stdout'                             { "stdout" }
@@ -168,7 +168,7 @@ Exprs :: {[Expr]}
 
 Term :: {Expr}
     : '(' Expr ')'                        { $2 }
-    | Name                                {% locate $ ExprName $1 }
+    | Chan                                {% locate $ ExprChan $1 }
     | '0'                                 {% locate $ ExprDigit 0 }
     | int                                 {% locate $ ExprDigit $1 }
     | string                              {% locate $ ExprString $1 }

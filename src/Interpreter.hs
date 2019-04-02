@@ -74,8 +74,8 @@ instance HasPID IOTask where
 --------------------------------------------------------------------------------
 -- |
 
-data Sender   = Sender   PID Name Val Proc            deriving (Show)
-data Receiver = Receiver PID Name [Clause]          deriving (Show)
+data Sender   = Sender   PID Chan Val Proc            deriving (Show)
+data Receiver = Receiver PID Chan [Clause]          deriving (Show)
 data Caller   = Caller   PID ProcName               deriving (Show)
 data ReplNu   = ReplNu   PID Text Proc               deriving (Show)
 data IOTask   = Input    PID      [Clause]
@@ -99,12 +99,12 @@ instance Eq IOTask where
   (==) = (==) `on` getPID
 
 data St = St
-  { stSenders   :: FMap Name Sender     -- senders
-  , stReceivers :: FMap Name Receiver   -- receivers
+  { stSenders   :: FMap Chan Sender     -- senders
+  , stReceivers :: FMap Chan Receiver   -- receivers
   , stCallers   :: [Caller]             -- callers to some processes
   , stReplNus   :: [ReplNu]             -- replicable restrictions
   , stIOTasks   :: [IOTask]             -- I/O tasks
-  , stFreshVars :: [Name]               -- new variables
+  , stFreshVars :: [Chan]               -- new variables
   , stPIDCount  :: Int
   , stVarCount  :: Int
   } deriving (Show)
@@ -114,7 +114,7 @@ initialState = St [] [] [] [] [] [] 0 0
 
 data Effect = EffNoop                                   -- nothing ever happened
             | EffCall Caller Proc                         -- calling some process
-            | EffComm Name (Sender, Receiver) (Proc, Proc)  -- process communicateion
+            | EffComm Chan (Sender, Receiver) (Proc, Proc)  -- process communicateion
             | EffReplNu ReplNu Proc
             | EffIO   IOTask
             deriving (Show)
@@ -124,7 +124,7 @@ type PiMonad = ReaderT Env (StateT St (EitherT String []))
 runPiMonad :: Env -> St -> PiMonad a -> [Either String (a, St)]
 runPiMonad env st m = runEitherT (runStateT (runReaderT m env) st)
 
-freshVar :: PiMonad Name
+freshVar :: PiMonad Chan
 freshVar = do
   i <- gets stVarCount
   modify $ \st -> st { stVarCount = succ i }
@@ -137,12 +137,12 @@ freshPID attr = do
   modify $ \st -> st { stPIDCount = succ i }
   return pid
 
-addSender :: Name -> Sender -> PiMonad ()
+addSender :: Chan -> Sender -> PiMonad ()
 addSender name x = do
   xs <- gets stSenders
   modify $ \st -> st { stSenders = (name, x):xs }
 
-addReceiver :: Name -> Receiver -> PiMonad ()
+addReceiver :: Chan -> Receiver -> PiMonad ()
 addReceiver name x = do
   xs <- gets stReceivers
   modify $ \st -> st { stReceivers = (name, x):xs }
@@ -162,7 +162,7 @@ addIOTask x = do
   xs <- gets stIOTasks
   modify $ \st -> st { stIOTasks = x:xs }
 
-addFreshVar :: Name -> PiMonad ()
+addFreshVar :: Chan -> PiMonad ()
 addFreshVar x = do
   xs <- gets stFreshVars
   modify $ \st -> st { stFreshVars = x:xs }
@@ -228,7 +228,7 @@ step = do
     `mplus` (gets stReplNus >>= select >>= doReplNu)
     `mplus` (gets stIOTasks >>= select >>= doIO)
   where
-    doSend :: ((Name, Sender), FMap Name Sender) -> PiMonad Effect
+    doSend :: ((Chan, Sender), FMap Chan Sender) -> PiMonad Effect
     doSend ((channel, sender), otherSenders) = do
       receivers <- gets stReceivers
       -- selected a reagent from the lists of receivers
@@ -270,7 +270,7 @@ restict :: ReplNu -> PiMonad Proc
 restict (ReplNu _ x p) = do
   var <- freshVar
   addFreshVar var
-  return $ substProc (Map.fromList [(PH x, N var)]) p
+  return $ substProc (Map.fromList [(PH x, VC var)]) p
 
 call :: Caller -> PiMonad Proc
 call (Caller _ callee) = do
