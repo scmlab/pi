@@ -24,7 +24,7 @@ data Name = ND (Polarised Text)   -- user defined
           | NR ResName      -- reserved name
     deriving (Ord, Eq, Show)
 
-data PName = PH Text        -- "pure" names, without polarization
+data PtrnNameame = PH Text        -- "pure" names, without polarization
            | PG Int
    deriving (Eq, Show, Ord)
 
@@ -44,7 +44,7 @@ depolarise (Pos x) = x
 depolarise (Neg x) = x
 -- depolar (Neu x) = x
 
-depolarCh :: Name -> PName
+depolarCh :: Name -> PtrnNameame
 depolarCh (ND c) = PH (depolarise c)
 depolarCh (NG c) = PG (depolarise c)
 depolarCh (NR _) = error "bug: shouldn't call depolar without checking"
@@ -104,9 +104,9 @@ data Val = N Name
          | VS Text
    deriving (Eq, Show)
 
-data Ptrn = PN Text         -- patterns
-          | PT [Ptrn]
-          | PL Label
+data Ptrn = PtrnName Text         -- patterns
+          | PtrnTuple [Ptrn]
+          | PtrnLabel Label
    deriving (Eq, Show)
 
 unVI :: MonadError ErrMsg m => Val -> m Int
@@ -121,8 +121,8 @@ unVT :: MonadError ErrMsg m => Val -> m [Val]
 unVT (VT xs) = return xs
 unVT _ = throwError "type error: tuple wanted"
 
-ePN :: String -> Expr
-ePN = EV . N . ND . Pos . pack
+ePtrnName :: String -> Expr
+ePtrnName = EV . N . ND . Pos . pack
 
 eNN :: String -> Expr
 eNN = EV . N . ND . Neg . pack
@@ -153,7 +153,7 @@ End `par` p = p
 p `par` End = p
 p `par` q = Par p q
 
-type Subst = Map PName Val
+type Subst = Map PtrnNameame Val
 
 substName :: Subst -> Name -> Name
 substName _ (NR r) = NR r
@@ -249,9 +249,9 @@ evalExpr (EPrj i e) =
 -- substitution related stuffs
 
 match :: Ptrn -> Val -> Maybe Subst
-match (PN x) v = Just $ Map.fromList [(PH x,v)]
-match (PL x) (VL y) | x == y = Just Map.empty
-match (PT xs) (VT vs) | length xs == length vs =
+match (PtrnName x) v = Just $ Map.fromList [(PH x,v)]
+match (PtrnLabel x) (VL y) | x == y = Just Map.empty
+match (PtrnTuple xs) (VT vs) | length xs == length vs =
   Map.unions <$> mapM (uncurry match) (zip xs vs)
 match _ _ = Nothing
 --
@@ -267,10 +267,10 @@ matchClauses ((Clause pt e):_) v
 matchClauses (_:pps) v = matchClauses pps v
 
 mask :: Ptrn -> Subst -> Subst
-mask (PN x)      = Map.delete (PH x)
-mask (PT [])     = id
-mask (PT (p:ps)) = mask (PT ps) . mask p
-mask (PL _)      = id
+mask (PtrnName x)      = Map.delete (PH x)
+mask (PtrnTuple [])     = id
+mask (PtrnTuple (p:ps)) = mask (PtrnTuple ps) . mask p
+mask (PtrnLabel _)      = id
 
 --------------------------------------------------------------------------------
 -- | Free Vars
@@ -318,6 +318,6 @@ freeClause :: Clause -> Set (Polarised Text)
 freeClause (Clause ptn p) = Set.difference (freeProc p) (freePtrn ptn)
 
 freePtrn :: Ptrn -> Set (Polarised Text)
-freePtrn (PN x)  = Set.singleton (Pos x)
-freePtrn (PT xs) = Set.unions (map freePtrn xs)  -- linearity check?
+freePtrn (PtrnName x)  = Set.singleton (Pos x)
+freePtrn (PtrnTuple xs) = Set.unions (map freePtrn xs)  -- linearity check?
 freePtrn _       = Set.empty

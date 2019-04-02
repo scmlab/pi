@@ -42,11 +42,11 @@ data Proc         = Send      Name      Expr          Proc  Loc
                   | End                                     Loc
                   deriving (Show)
 
-data Pattern      = PtrnName  ProcName                     Loc
-                  | PtrnTuple [Pattern]                    Loc
-                  | PtrnLabel Label                        Loc
+data Ptrn         = PtrnName  ProcName                      Loc
+                  | PtrnTuple [Ptrn]                        Loc
+                  | PtrnLabel Label                         Loc
                   deriving (Show)
-data Clause       = Clause    Pattern Proc                 Loc
+data Clause       = Clause    Ptrn Proc                     Loc
                   deriving (Show)
 
 -- Expressions and all that
@@ -123,7 +123,7 @@ instance Located Proc where
   locOf (Repl _ loc) = loc
   locOf (End loc) = loc
 
-instance Located Pattern where
+instance Located Ptrn where
   locOf (PtrnName _ loc) = loc
   locOf (PtrnTuple _ loc) = loc
   locOf (PtrnLabel _ loc) = loc
@@ -196,10 +196,10 @@ instance ToAbstract Name A.Name where
   toAbstract (Reserved "stdout" _) = A.NR A.StdOut
   toAbstract (Reserved _        _) = A.NR A.StdOut
 
-instance ToAbstract Pattern A.Ptrn where
-  toAbstract (PtrnName name _)   = A.PN (toAbstract name)
-  toAbstract (PtrnTuple patterns _) = A.PT (map toAbstract patterns)
-  toAbstract (PtrnLabel label _) = A.PL (toAbstract label)
+instance ToAbstract Ptrn A.Ptrn where
+  toAbstract (PtrnName name _)   = A.PtrnName (toAbstract name)
+  toAbstract (PtrnTuple patterns _) = A.PtrnTuple (map toAbstract patterns)
+  toAbstract (PtrnLabel label _) = A.PtrnLabel (toAbstract label)
 
 instance ToAbstract Clause A.Clause where
   toAbstract (Clause pattern process _) =

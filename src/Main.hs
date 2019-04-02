@@ -5,7 +5,7 @@ module Main where
 import System.Console.GetOpt
 import System.Environment
 
-import Runtime.Human (humanREPL)
+import Runtime.Human (humanREPtrnLabel)
 
 import System.IO
 
@@ -15,8 +15,8 @@ main = do
   hSetBuffering stdin  LineBuffering
   (opts, filePaths) <- getArgs >>= parseOpts
   case optMode opts of
-    Trace -> humanREPL True filePaths
-    Execute -> humanREPL False filePaths
+    Trace -> humanREPtrnLabel True filePaths
+    Execute -> humanREPtrnLabel False filePaths
     Help -> putStrLn $ usageInfo usage options
 
 --------------------------------------------------------------------------------
@@ -40,7 +40,7 @@ options =
   ]
 
 usage :: String
-usage =  "Usage: pi [OPTION...] filepath\n"
+usage =  "Usage: pi [OPtrnTupleION...] filepath\n"
 
 parseOpts :: [String] -> IO (Options, [String])
 parseOpts argv =

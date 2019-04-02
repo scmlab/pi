@@ -35,7 +35,7 @@ instance Pretty Name where
   pretty (NR StdOut) = "stdout"
   pretty (NR StdIn) = "stdin"
 
-instance Pretty PName where
+instance Pretty PtrnNameame where
   pretty (PH x) = pretty x
   pretty (PG i) = "x" <> pretty i
 
@@ -56,15 +56,15 @@ instance Pretty Val where
 
 -- Patterns
 instance Pretty Ptrn where
-  pretty (PN x) = pretty x
-  pretty (PT xs) =
+  pretty (PtrnName x) = pretty x
+  pretty (PtrnTuple xs) =
      encloseSep langle rangle comma (map pretty xs)
-  pretty (PL x) = pretty x
+  pretty (PtrnLabel x) = pretty x
 
 {-
-data Ptrn = PN Name         -- patterns
-          | PT [Ptrn]
-          | PL Label
+data Ptrn = PtrnName Name         -- patterns
+          | PtrnTuple [Ptrn]
+          | PtrnLabel Label
    deriving Show
 -}
 shParen :: Bool -> Doc a -> Doc a

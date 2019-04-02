@@ -119,18 +119,18 @@ Proc :: {Proc}
     | ProcName                                  {% locate $ Call $1 }
     | '(' ProcPar ')'                           { $2 }
 
-Pattern :: {Pattern}
-         : ProcName                         {% locate $ PtrnName $1 }
-         | Patterns                         {% locate $ PtrnTuple (reverse $1) }
-         | Label                            {% locate $ PtrnLabel $1 }
-Patterns :: {[Pattern]}
-    : Patterns ',' Pattern                  { $3 : $1 }
-    | Pattern  ',' Pattern                  { [ $3, $1 ]  }
+Ptrn :: {Ptrn}
+         : ProcName                             {% locate $ PtrnName $1 }
+         | Ptrns                                {% locate $ PtrnTuple (reverse $1) }
+         | Label                                {% locate $ PtrnLabel $1 }
+Ptrns :: {[Ptrn]}
+    : Ptrns ',' Ptrn                            { $3 : $1 }
+    | Ptrn  ',' Ptrn                            { [ $3, $1 ]  }
 
 RecvClause :: {Clause}
-        : '(' Pattern ')' '.' ProcPar    {% locate $  Clause $2 $5 }
+        : '(' Ptrn ')' '.' ProcPar    {% locate $  Clause $2 $5 }
 ChoiceClause :: {Clause}
-        : Pattern '->' ProcPar           {% locate $  Clause $1 $3 }
+        : Ptrn '->' ProcPar           {% locate $  Clause $1 $3 }
 ChoiceClauses :: {[Clause]}
         : ChoiceClauses ';' ChoiceClause    { $3 : $1 }
         | ChoiceClause                      { [ $1 ]  }

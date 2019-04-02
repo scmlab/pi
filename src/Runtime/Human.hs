@@ -24,14 +24,14 @@ import Syntax.Parser (printParseError)
 --------------------------------------------------------------------------------
 -- | Interfacing with Humans
 
-humanREPL :: Bool -> [FilePath] -> IO ()
-humanREPL _traceMode [] = void $ runRuntimeM $ do
+humanREPtrnLabel :: Bool -> [FilePath] -> IO ()
+humanREPtrnLabel _traceMode [] = void $ runRuntimeM $ do
   displayHelp
   loop
-humanREPL True (filePath:_) = void $ runRuntimeM $ do
+humanREPtrnLabel True (filePath:_) = void $ runRuntimeM $ do
   handleError (handleRequest (Load filePath))
   loop
-humanREPL False (filePath:_) = void $ runRuntimeM $ do
+humanREPtrnLabel False (filePath:_) = void $ runRuntimeM $ do
   handleError $ do
     load filePath
     execute

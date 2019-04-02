@@ -353,25 +353,25 @@ isLabel _ = throwError $ Others "must be a label"
 
 -- free variables of a pattern
 ptnVars :: Ptrn -> Set SName
-ptnVars (PN x)  = Set.singleton (Pos x)
-ptnVars (PT xs) = Set.unions (map ptnVars xs)
-ptnVars (PL _)  = Set.empty
+ptnVars (PtrnName x)  = Set.singleton (Pos x)
+ptnVars (PtrnTuple xs) = Set.unions (map ptnVars xs)
+ptnVars (PtrnLabel _)  = Set.empty
 
 
 matchPtn :: Type -> Ptrn -> Ctx -> TCM Ctx
-matchPtn TEnd         (PN x) ctx = addUni (Pos x, TEnd) ctx
-matchPtn (TBase t)    (PN x) ctx = addUni (Pos x, TBase t) ctx
-matchPtn (TTuple ts)  (PN x) ctx = addUni (Pos x, TTuple ts) ctx
-matchPtn (TTuple ts)  (PT xs) ctx = matchPtns ts xs ctx
-matchPtn (TSend s t)  (PN x) ctx = addUni (Pos x, TSend s t) ctx
-matchPtn (TRecv s t)  (PN x) ctx = addUni (Pos x, TRecv s t) ctx
-matchPtn (TSele ts)   (PN x) ctx = addUni (Pos x, TSele ts) ctx
-matchPtn (TChoi ts)   (PN x) ctx = addUni (Pos x, TChoi ts) ctx
-matchPtn (TUn t)      (PN x) ctx = addUni (Pos x, TUn t) ctx
-matchPtn (TUn (TTuple ts)) (PT xs) ctx = matchPtns (map TUn ts) xs ctx
-matchPtn (TVar t)     (PN x) ctx = do
+matchPtn TEnd         (PtrnName x) ctx = addUni (Pos x, TEnd) ctx
+matchPtn (TBase t)    (PtrnName x) ctx = addUni (Pos x, TBase t) ctx
+matchPtn (TTuple ts)  (PtrnName x) ctx = addUni (Pos x, TTuple ts) ctx
+matchPtn (TTuple ts)  (PtrnTuple xs) ctx = matchPtns ts xs ctx
+matchPtn (TSend s t)  (PtrnName x) ctx = addUni (Pos x, TSend s t) ctx
+matchPtn (TRecv s t)  (PtrnName x) ctx = addUni (Pos x, TRecv s t) ctx
+matchPtn (TSele ts)   (PtrnName x) ctx = addUni (Pos x, TSele ts) ctx
+matchPtn (TChoi ts)   (PtrnName x) ctx = addUni (Pos x, TChoi ts) ctx
+matchPtn (TUn t)      (PtrnName x) ctx = addUni (Pos x, TUn t) ctx
+matchPtn (TUn (TTuple ts)) (PtrnTuple xs) ctx = matchPtns (map TUn ts) xs ctx
+matchPtn (TVar t)     (PtrnName x) ctx = do
   t' <- substituteTypeVar (TVar t)
-  matchPtn t' (PN x) ctx
+  matchPtn t' (PtrnName x) ctx
 matchPtn t p _ = throwError $ PatternMismatched t p
 
 addUni :: (SName, Type) -> Ctx -> TCM Ctx
@@ -424,7 +424,7 @@ pairChoices :: Map Label Type -> [Clause] -> TCM (Map Type Proc)
 pairChoices ts [] = if Map.null ts
   then return Map.empty
   else throwError $ Others "choices not fully covered"
-pairChoices ts (Clause (PL l) p : ps) = do
+pairChoices ts (Clause (PtrnLabel l) p : ps) = do
   s <- lookupLabel ts l
   Map.insert s p <$> pairChoices (Map.delete l ts) ps
 pairChoices _ (Clause _ _ : _) =
@@ -466,10 +466,10 @@ recv c ptn p = Recv c [Clause ptn p]
 
 choices :: Name -> [(String, Proc)] -> Proc
 choices c ps =
-   Recv c (map (uncurry Clause . ((PL . pack) *** id)) ps)
+   Recv c (map (uncurry Clause . ((PtrnLabel . pack) *** id)) ps)
 
 pn :: String -> Ptrn
-pn = PN . pack
+pn = PtrnName . pack
 cp :: String -> SName
 cp = Pos . pack
 cn :: String -> SName
@@ -524,12 +524,12 @@ test3 = runTCM (checkProc ctx0 p0) initEnv
     -- p0 = c[d].d~>>{NEG -> d(x).d[-x].0 ;
     --                ID -> d(x).d[x].0 }
     p0 :: Proc
-    p0 = Send (cN "c") (ePN "d") $
+    p0 = Send (cN "c") (ePtrnName "d") $
           choices (cN "d")
             [("NEG", recv (cN "d") (pn "x") $
-                       Send (cN "d") (eI 0 `ESub` ePN "x") End),
+                       Send (cN "d") (eI 0 `ESub` ePtrnName "x") End),
              ("ID", recv (cN "d") (pn "x") $
-                        Send (cN "d") (ePN "x") End)]
+                        Send (cN "d") (ePtrnName "x") End)]
 
     -- p1 = c(z).z<<NEG.z[3].z(w).0
     _p1 :: Proc
