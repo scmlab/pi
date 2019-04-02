@@ -7,26 +7,57 @@ module Syntax.Concrete where
 
 import qualified Syntax.Abstract as A
 import qualified Type as A
+import Type (HasDual(..))
 import Data.Text (Text)
-import Data.Loc (Loc, Located(..))
+import Data.Loc (Loc(..), Located(..))
 import Prelude hiding (LT, EQ, GT)
+import Data.Function (on)
 
 --------------------------------------------------------------------------------
 -- | Concrete Syntax Tree
 
 data Label        = Label     Text  Loc
                   deriving (Show)
+
+instance Eq Label where
+  (==) = (==) `on` toAbstract
+instance Ord Label where
+  compare = compare `on` toAbstract
+
 data Chan         = Pos  Text  Loc
                   | Neg  Text  Loc
                   | Res  Text  Loc
                   deriving (Show)
 
+instance Eq Chan where
+  (==) = (==) `on` toAbstract
+instance Ord Chan where
+  compare = compare `on` toAbstract
+instance HasDual Chan where
+  dual (Pos x l) = Neg x l
+  dual (Neg x l) = Pos x l
+  dual (Res "stdout" l) = Res "stdin" l
+  dual (Res "stdin" l) = Res "stdout" l
+  dual (Res x l) = Res x l
+
 data Program      = Program   [Definition]  Loc
                   deriving (Show)
 data ProcName     = ProcName  Text  Loc
                   deriving (Show)
+
+instance Eq ProcName where
+  (==) = (==) `on` toAbstract
+instance Ord ProcName where
+  compare = compare `on` toAbstract
+
 data TypeName     = TypeName  Text  Loc
                   deriving (Show)
+
+instance Eq TypeName where
+  (==) = (==) `on` toAbstract
+instance Ord TypeName where
+    compare = compare `on` toAbstract
+
 
 data Definition   = ProcDefn  ProcName  Proc Loc
                   | ChanType  Chan      Type Loc
@@ -35,7 +66,7 @@ data Definition   = ProcDefn  ProcName  Proc Loc
 
 data Proc         = Send      Chan      Expr          Proc  Loc
                   | Recv      Chan      [Clause]            Loc
-                  | Nu        ProcName  (Maybe Type)  Proc  Loc
+                  | Nu        Chan      (Maybe Type)  Proc  Loc
                   | Par       Proc                    Proc  Loc
                   | Call      ProcName                      Loc
                   | Repl      Proc                          Loc
@@ -75,7 +106,10 @@ data Expr         = ExprTuple [Expr]    Loc
 
 data TypeVar  = TypeVarIndex Int Loc
               | TypeVarText TypeName Loc
-                  deriving (Show)
+              deriving (Show)
+
+instance Eq TypeVar where
+  (==) = (==) `on` toAbstract
 
 data BaseType = BaseInt Loc
               | BaseBool Loc
@@ -91,8 +125,71 @@ data Type     = TypeEnd                         Loc
               | TypeVar       TypeVar           Loc
               | TypeMu        Type              Loc
               deriving (Show)
-data TypeOfLabel = TypeOfLabel Label Type   Loc
+
+-- type substitution. it is assumed that s contains
+--   no bound variables.
+
+substTypeOfLabel :: Int -> Type -> TypeOfLabel -> TypeOfLabel
+substTypeOfLabel i s (TypeOfLabel label t l) = TypeOfLabel label (substType i s t) l
+
+substType :: Int -> Type -> Type -> Type
+substType _ _ (TypeEnd l)       = TypeEnd l
+substType _ _ (TypeBase t l)    = TypeBase t l
+substType i s (TypeTuple ts l)  = TypeTuple (map (substType i s) ts) l
+substType i s (TypeSend t u l)  = TypeSend (substType i s t) (substType i s u) l
+substType i s (TypeRecv t u l)  = TypeRecv (substType i s t) (substType i s u) l
+substType i s (TypeChoi ts l)   = TypeChoi (map (substTypeOfLabel i s) ts) l
+substType i s (TypeSele ts l)   = TypeSele (map (substTypeOfLabel i s) ts) l
+substType i s (TypeUn t l)      = TypeUn (substType i s t) l
+substType i s (TypeVar j l)     | TypeVarIndex i l == j = s
+                                | otherwise = TypeVar j l
+substType i s (TypeMu t l)      = TypeMu (substType (1+i) s t) l
+
+unfoldType :: Type -> Type
+unfoldType (TypeMu t l) = substType 0 (TypeMu t l) t
+unfoldType t = t
+
+stripUnrestricted :: Type -> (Type, Bool)
+stripUnrestricted (TypeEnd l)  = (TypeEnd l, True)
+stripUnrestricted (TypeBase t l)   = (TypeBase t l, True)
+stripUnrestricted (TypeUn t l)     = (t, True)  -- shouldn't be nested
+stripUnrestricted (TypeTuple ts l) = (TypeTuple (map fst tts) l, and (map snd tts))
+  where tts = map stripUnrestricted ts
+stripUnrestricted (TypeMu t l)     = let (t', p) = stripUnrestricted t in (TypeMu t' l, p)
+stripUnrestricted t           = (t, False)
+
+tInt :: Type
+tInt = TypeBase (BaseInt NoLoc) NoLoc
+
+tBool :: Type
+tBool = TypeBase (BaseBool NoLoc) NoLoc
+
+instance Eq Type where
+  (==) = (==) `on` toAbstract
+
+instance Ord Type where
+  compare = compare `on` toAbstract
+
+instance HasDual Type where
+  dual (TypeEnd l)      = TypeEnd l
+  dual (TypeBase t l)   = TypeBase t l
+  dual (TypeTuple ts l) = TypeTuple (map dual ts) l
+  dual (TypeSend c t l) = TypeRecv c (dual t) l
+  dual (TypeRecv c t l) = TypeSend c (dual t) l
+  dual (TypeSele ts l)  = TypeChoi (map dual ts) l
+  dual (TypeChoi ts l)  = TypeSele (map dual ts) l
+  dual (TypeUn t l)     = TypeUn (dual t) l
+  dual (TypeVar i l)    = TypeVar i l
+  dual (TypeMu t l)     = TypeMu (dual t) l
+
+data TypeOfLabel = TypeOfLabel Label Type Loc
               deriving (Show)
+
+instance HasDual TypeOfLabel where
+  dual (TypeOfLabel label t l) = TypeOfLabel label (dual t) l
+
+typedLabelToPair :: TypeOfLabel -> (Label, Type)
+typedLabelToPair (TypeOfLabel l t _) = (l, t)
 
 --------------------------------------------------------------------------------
 -- | Instance of Located

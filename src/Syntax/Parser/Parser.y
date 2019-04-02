@@ -49,7 +49,7 @@ import Data.Text (Text)
         ';'             { TokenSemi }
         '->'            { TokenArrow }
         ':'             { TokenTypeOf }
-        'Int'           { TokenSortInt }
+        'Int'           { TokenSorTBase TInt }
         string          { TokenString $$ }
         -- typing stuff
         'type'          { TokenType      }
@@ -63,7 +63,7 @@ import Data.Text (Text)
         typeName        { TokenTypeName $$ }
 
         -- boolean stuff
-        'Bool'          { TokenSortBool }
+        'Bool'          { TokenSorTBase TBool }
         'True'          { TokenTrue }
         'False'         { TokenFalse }
         '=='            { TokenEQ }
@@ -113,8 +113,8 @@ Proc :: {Proc}
     | Chan '>>' '{' ChoiceClauses '}'           {% locate $ Recv $1 (reverse $4)  }
     | Chan '<<' SelectLabel '.' Proc            {% locate $ Send $1 $3 $5 }
     | 'end'                                     {% locate $ End }
-    | '(' 'nu' ProcName ')' Proc                {% locate $ Nu $3 Nothing $5 }
-    | '(' 'nu' ProcName ':' Type ')' Proc       {% locate $ Nu $3 (Just $5) $7 }
+    | '(' 'nu' Chan ')' Proc                    {% locate $ Nu $3 Nothing $5 }
+    | '(' 'nu' Chan ':' Type ')' Proc           {% locate $ Nu $3 (Just $5) $7 }
     | '*' Proc                                  {% locate $ Repl $2 }
     | ProcName                                  {% locate $ Call $1 }
     | '(' ProcPar ')'                           { $2 }
@@ -147,6 +147,7 @@ ProcName :: {ProcName}
 
 TypeVar :: {TypeVar}
     : TypeName                              {% locate $ TypeVarText $1 }
+
 
 Chan :: {Chan}
       : namePos                             {% locate $ Pos $1 }

@@ -13,11 +13,12 @@ import Data.Set (Set)
 import qualified Data.ByteString as BS
 import Data.ByteString (ByteString)
 import Data.Text (Text)
-import Data.Loc (locOf)
+import Data.Loc (locOf, Loc(..))
 
 import qualified Syntax.Abstract as A
 import qualified Type as A
 import Syntax.Abstract (Expr(..), Val(..))
+import Type (HasDual(..))
 
 import qualified Syntax.Concrete as C
 import Syntax.Concrete hiding (Expr(..))
@@ -42,12 +43,12 @@ import Control.Monad.State
 data TypeError
   = MissingProcDefn (Map ProcName Type)
   | VariableNotFound Chan
-  | TypeVariableNotFound TypeName
+  | TypeVariableNotFound TypeVar
   | TypeVarIndexAtTopLevel TypeVar
   | LabelNotFound Label
   | ProcessNotFound ProcName
   | PatternMismatched Type Ptrn
-  | TypeOfNewChannelMissing Text
+  | TypeOfNewChannelMissing Chan
   | RecvExpected Type
   | SendExpected Type
   | UserDefinedNameExpected Chan
@@ -95,9 +96,9 @@ checkAll = do
 
 
   -- not checking if some process named "test" exists
-  case Map.lookup "test" procDefns of
+  case Map.lookup (ProcName "test" NoLoc) procDefns of
     Nothing -> do
-      case Map.lookup "main" procDefns of
+      case Map.lookup (ProcName "main" NoLoc) procDefns of
         Nothing -> return ()
         Just p -> void $ checkProc chanTypes p
     Just _ -> return ()
@@ -118,18 +119,18 @@ liftMaybe :: TypeError -> Maybe a -> TCM a
 liftMaybe err = maybe (throwError err) return
 
 lookupTypeVar :: TypeVar -> TCM Type
-lookupTypeVar (TypeVarIndex x) = return $ TypeVar $ TypeVarIndex x
+lookupTypeVar (TypeVarIndex x l) = return $ TypeVar (TypeVarIndex x l ) l
   -- throwError $ TypeVarIndexAtTopLevel (TypeVarIndex x)
-lookupTypeVar (TypeVarText x) = do
+lookupTypeVar (TypeVarText x l) = do
   typeDefns <- gets envTypeDefns
   case Map.lookup x typeDefns of
     Just v -> return v
-    Nothing -> throwError $ TypeVariableNotFound x
+    Nothing -> throwError $ TypeVariableNotFound (TypeVarText x l)
 
 lookupChan :: Chan -> Ctx -> TCM (Type, Bool, Ctx)
 lookupChan x ctx = do
   t <- lookupVar ctx x
-  let (t', unrest) = stripUnres (unfoldT t)
+  let (t', unrest) = stripUnrestricted (unfoldType t)
   if unrest
     then return (t', unrest, ctx)
     else return (t', unrest, Map.delete x ctx)
@@ -141,23 +142,23 @@ lookupVar ctx x = case Map.lookup x ctx of
     Just v -> substituteTypeVar (dual v)
     Nothing -> throwError $ VariableNotFound x
 
-substitutePair :: (Label, Type) -> TCM (Label, Type)
-substitutePair (label, t) = do
+substituteTypeOfLabel :: TypeOfLabel -> TCM TypeOfLabel
+substituteTypeOfLabel (TypeOfLabel label t l) = do
   t' <- substituteTypeVar t
-  return (label, t')
+  return $ TypeOfLabel label t' l
 
 substituteTypeVar :: Type -> TCM Type
-substituteTypeVar TypeEnd        = return TypeEnd
-substituteTypeVar (TypeBase t)   = return (TypeBase t)
-substituteTypeVar (TypeTuple ts) = TypeTuple <$> mapM substituteTypeVar ts
-substituteTypeVar (TypeSend t s) = TypeSend <$> substituteTypeVar t <*> substituteTypeVar s
-substituteTypeVar (TypeRecv t s) = TypeRecv <$> substituteTypeVar t <*> substituteTypeVar s
-substituteTypeVar (TypeChoi ss)  = TypeChoi <$> mapM substitutePair ss
-substituteTypeVar (TypeSele ss)  = TypeSele <$> mapM substitutePair ss
-substituteTypeVar (TypeUn t)     = TypeUn <$> substituteTypeVar t
-substituteTypeVar (TypeVar (TypeVarText "X")) = return $ TypeVar (TypeVarText "X") -- mu
-substituteTypeVar (TypeVar i)    = lookupTypeVar i
-substituteTypeVar (TypeMu t)     = TypeMu <$> substituteTypeVar t
+substituteTypeVar (TypeEnd l)      = return (TypeEnd l)
+substituteTypeVar (TypeBase t l)   = return (TypeBase t l)
+substituteTypeVar (TypeTuple ts l) = TypeTuple <$> mapM substituteTypeVar ts <*> pure l
+substituteTypeVar (TypeSend t s l) = TypeSend <$> substituteTypeVar t <*> substituteTypeVar s <*> pure l
+substituteTypeVar (TypeRecv t s l) = TypeRecv <$> substituteTypeVar t <*> substituteTypeVar s <*> pure l
+substituteTypeVar (TypeChoi ss l)  = TypeChoi <$> mapM substituteTypeOfLabel ss <*> pure l
+substituteTypeVar (TypeSele ss l)  = TypeSele <$> mapM substituteTypeOfLabel ss <*> pure l
+substituteTypeVar (TypeUn t l)     = TypeUn <$> substituteTypeVar t <*> pure l
+substituteTypeVar (TypeVar (TypeVarText (TypeName "X" n) m) l) = return $ TypeVar (TypeVarText (TypeName "X" n) m) l -- mu
+substituteTypeVar (TypeVar i l)    = lookupTypeVar i
+substituteTypeVar (TypeMu t l)     = TypeMu <$> substituteTypeVar t <*> pure l
 
 
 lookupLabel :: Map Label Type -> Label -> TCM Type
@@ -170,17 +171,20 @@ inferV :: Ctx -> Val -> TCM (Type, Ctx)
 inferV _ (VC (A.NR _)) =
   throwError $ Others "StdOut/In in expression"
 inferV ctx (VC (A.ND c)) = do
-  case Map.lookup c ctx of
+  let c' = case c of
+            A.Pos x -> Pos x NoLoc
+            A.Neg x -> Neg x NoLoc
+  case Map.lookup c' ctx of
     Nothing -> throwError $ Others $ "variable " ++ show c ++ " not found"
-    Just t -> if unrestricted t
+    Just t -> if A.unrestricted (toAbstract t)
                 then return (t, ctx)
-                else return (t, Map.delete c ctx)
+                else return (t, Map.delete c' ctx)
 inferV _ (VC (A.NG _)) =
   throwError $ Others "Unable to infer system generated variables"
 inferV ctx (VI _) = return (tInt, ctx)
 inferV ctx (VB _) = return (tBool, ctx)
 inferV ctx (VT vs) =
-  (TypeTuple *** id) <$> inferVs ctx vs
+  ((\t -> TypeTuple t NoLoc) *** id) <$> inferVs ctx vs
 -- inferV env (VL l) = liftMaybe "label not found" (lookup l env)
 inferV _ (VS _) = throwError $ Others "panic: string value not implemented yet"
 inferV _ (VL _) = throwError $ Others "panic: label value not implemented yet"
@@ -196,27 +200,27 @@ inferVs ctx (v:vs) = do
 
 inferE :: Ctx -> Expr -> TCM (Type, Ctx)
 inferE ctx (EV v) = inferV ctx v
-inferE ctx (EAdd e1 e2) =
-  checkE ctx  e1 tInt >>= \ctx' ->
-  checkE ctx' e2 tInt >>= \ctx'' ->
+inferE ctx (EAdd e1 e2) = do
+  ctx' <- checkE ctx  e1 tInt
+  ctx'' <- checkE ctx' e2 tInt
   return (tInt, ctx'')
-inferE ctx (ESub e1 e2) =
-  checkE ctx  e1 tInt >>= \ctx' ->
-  checkE ctx' e2 tInt >>= \ctx'' ->
+inferE ctx (ESub e1 e2) = do
+  ctx' <- checkE ctx  e1 tInt
+  ctx'' <- checkE ctx' e2 tInt
   return (tInt, ctx'')
-inferE ctx (EMul e1 e2) =
-  checkE ctx  e1 tInt >>= \ctx' ->
-  checkE ctx' e2 tInt >>= \ctx'' ->
+inferE ctx (EMul e1 e2) = do
+  ctx' <- checkE ctx  e1 tInt
+  ctx'' <- checkE ctx' e2 tInt
   return (tInt, ctx'')
 inferE ctx (EIf e0 e1 e2) = do
   ctx' <- checkE ctx e0 tBool
   (t, ctx'') <- inferE ctx' e1
   ctx''' <- checkE ctx' e2 t
-  if mapEqBy eqType ctx'' ctx'''
+  if mapEqBy (==) ctx'' ctx'''
     then return (t, ctx'')
     else throwError $ Others "contexts fail to unify when checking If"
 inferE ctx (ETup es) =
-  (TypeTuple *** id) <$> inferEs ctx es
+  ((\t -> TypeTuple t NoLoc) *** id) <$> inferEs ctx es
 inferE _ e = throwError $ Others ("panic: not implemented yet " ++ show e )
 
 inferEs :: Ctx -> [Expr] -> TCM ([Type], Ctx)
@@ -234,7 +238,7 @@ checkE env e t =
 
 tcheck :: Type -> Type -> TCM ()
 tcheck t1 t2
-   | eqType t1 t2 = return ()
+   | t1 == t2 = return ()
    | otherwise = throwError $ Others ("expected: " ++ show t1 ++
                              ", found " ++ show t2)
 
@@ -246,7 +250,10 @@ checkCh senv c t = do
     else throwError $ Others "type mismatch"
 
 allClosed :: Ctx -> Bool
-allClosed = all (TypeEnd ==) . Map.elems
+allClosed = all isTypeEnd . Map.elems
+  where
+    isTypeEnd (TypeEnd _) = True
+    isTypeEnd _           = False
 
 checkProc :: Ctx -> Proc -> TCM (Ctx, Set Chan)
 
@@ -258,7 +265,7 @@ checkProc ctx (Par p1 p2 _) = do
   checkProc ctx2 p2
 
 checkProc ctx (Send (Res "stdout" _) e p _) = do
-  (_, ctx') <- inferE ctx e
+  (_, ctx') <- inferE ctx (toAbstract e)
   checkProc ctx' p
 checkProc _   (Send (Res "stdin" _) _ _ _) =
   throwError $ Others "cannot send to this channel"
@@ -266,7 +273,7 @@ checkProc ctx (Send chan e p _) = do
   (channelType, un, ctx') <- lookupChan chan ctx
   case channelType of
     TypeSend s1 s2 _ -> checkProcSend (chan, e, p) s1 s2 un ctx'
-    TypeChoi ts    _ -> checkProcSel  (chan, e, p) (Map.fromList ts) un ctx'
+    TypeChoi ts    _ -> checkProcSel  (chan, e, p) (Map.fromList $ map typedLabelToPair ts) un ctx'
     others      -> do
       chanTypes <- gets envChanTypes
       traceShow chanTypes $ return ()
@@ -279,7 +286,7 @@ checkProc ctx (Recv chan ps _) = do
   (channelType, un, ctx') <- lookupChan chan ctx
   case channelType of
     TypeRecv t s _ -> checkProcRecv (chan,ps) t s un ctx'
-    TypeChoi ts  _ -> checkProcChoi (chan,ps) (Map.fromList ts) un ctx'
+    TypeChoi ts  _ -> checkProcChoi (chan,ps) (Map.fromList $ map typedLabelToPair ts) un ctx'
     others    -> throwError $ RecvExpected others
 
 checkProc ctx (Repl p _) =
@@ -289,12 +296,12 @@ checkProc ctx (Repl p _) =
 
 checkProc _ (Nu x Nothing _ _) =
   throwError $ TypeOfNewChannelMissing x
-checkProc ctx (Nu x (Just t) p _) = do
+checkProc ctx (Nu x (Just t) p loc) = do
   t' <- substituteTypeVar t
   -- traceShow t' $ return ()
-  (ctx', l) <- checkProc (Map.insert (Pos x) t' $ Map.insert (Neg x) (dual t') ctx) p
-  ctx'' <- ctx' `removeChannels` Set.fromList [Pos x, Neg x]
-  return (ctx'', Set.difference l (Set.fromList [Pos x, Neg x]))
+  (ctx', l) <- checkProc (Map.insert x t' $ Map.insert (A.dual x) (dual t') ctx) p
+  ctx'' <- ctx' `removeChannels` Set.fromList [x, A.dual x]
+  return (ctx'', Set.difference l (Set.fromList [x, A.dual x]))
 
 checkProc ctx (Call name _) = do
   env <- gets envProcDefns
@@ -303,17 +310,17 @@ checkProc ctx (Call name _) = do
     Nothing -> throwError $ ProcessNotFound name
 
 
-checkProcSend :: (Chan, Expr, Proc) -> Type -> Type -> Bool -> Ctx -> TCM (Ctx, Set Chan)
+checkProcSend :: (Chan, C.Expr, Proc) -> Type -> Type -> Bool -> Ctx -> TCM (Ctx, Set Chan)
 checkProcSend (c,e,p) s t un ctx = do
   -- error $ show (e, s, ctx)
-  ctx' <- checkE ctx e s
+  ctx' <- checkE ctx (toAbstract e) s
   ctx'' <- addCtx (c,t) ctx'
   (id *** addLin un c) <$>
          checkProc ctx'' p
 
-checkProcSel :: (Chan, Expr, Proc) -> Map Label Type -> Bool -> Ctx -> TCM (Ctx, Set Chan)
+checkProcSel :: (Chan, C.Expr, Proc) -> Map Label Type -> Bool -> Ctx -> TCM (Ctx, Set Chan)
 checkProcSel (c,e,p) ts un ctx = do
-  l <- extractLabel (toAbstract e)
+  l <- extractLabel e
   s <- lookupLabel ts l
   ctx' <- addCtx (c,s) ctx
   (id *** addLin un c) <$> checkProc ctx' p
@@ -485,7 +492,7 @@ splitSEnv fl fr ((x,t):xs)
 -- test0 :: Either TypeError (Ctx, Set Chan)
 -- test0 = runTCM (checkProc ctx p) initEnv
 --   where ctx = Map.fromList [(cp "c", tsend TInt (tsend TBool TypeEnd)),
---                (cp "d", TypeSend (TypeTuple [tInt, tsend TBool TypeEnd]) TypeEnd)]
+--                (cp "d", TypeSend (TypeTuple [A.tInt, tsend TBool TypeEnd]) TypeEnd)]
 --         p = toAbstract $ fromParseResult (parseProc "c[3] . d[4,c] . end")
 --
 -- test1 :: Either TypeError (Ctx, Set Chan)

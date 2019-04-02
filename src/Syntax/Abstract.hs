@@ -26,14 +26,15 @@ data Chan = ND Name             -- user defined
           | NR ResName          -- reserved name
     deriving (Ord, Eq, Show)
 
-data PureName = PH Text        -- "pure" names, without polarization
-              | PG Int
-   deriving (Eq, Show, Ord)
-
-
 instance HasDual (Polarised a) where
   dual (Pos a) = Neg a
   dual (Neg a) = Pos a
+
+instance HasDual Chan where
+  dual (ND n) = ND (dual n)
+  dual (NG n) = NG (dual n)
+  dual (NR StdIn) = NR StdOut
+  dual (NR StdOut) = NR StdIn
 
 isPositive :: Polarised a -> Bool
 isPositive (Pos _) = True
@@ -44,13 +45,9 @@ depolarise (Pos x) = x
 depolarise (Neg x) = x
 -- depolar (Neu x) = x
 
-depolarCh :: Chan -> PureName
-depolarCh (ND c) = PH (depolarise c)
-depolarCh (NG c) = PG (depolarise c)
-depolarCh (NR _) = error "bug: shouldn't call depolar without checking"
-
-depolarCH :: Chan -> Text
-depolarCH = depolarise . unND
+depolariseChan :: Chan -> Text
+depolariseChan (ND c) = depolarise c
+depolariseChan _ = error "bug: shouldn't call depolar without checking"
 
 unND :: Chan -> Name
 unND (ND n) = n
@@ -70,7 +67,7 @@ data Proc = End
           | Send Chan Expr Proc
           | Recv Chan [Clause]
           | Par Proc Proc
-          | Nu Text (Maybe Type) Proc
+          | Nu Chan (Maybe Type) Proc
           | Repl Proc
           | Call ProcName
    deriving (Eq, Show)
@@ -153,18 +150,18 @@ End `par` p = p
 p `par` End = p
 p `par` q = Par p q
 
-type Subst = Map PureName Val
+type Subst = Map Text Val
 
 substChan :: Subst -> Chan -> Chan
 substChan _ (NR r) = NR r
-substChan th c =  case Map.lookup (depolarCh c) th of
+substChan th c =  case Map.lookup (depolariseChan c) th of
   Just (VC y) -> y
   Just _ -> error "not a channel"
   Nothing -> c
 
 substVal :: Subst -> Val -> Val
 substVal _ (VC (NR r)) = VC (NR r)
-substVal th (VC c) = case Map.lookup (depolarCh c) th of
+substVal th (VC c) = case Map.lookup (depolariseChan c) th of
   Just v  -> v
   Nothing -> VC c
 substVal th (VT vs) = VT (map (substVal th) vs)
@@ -201,7 +198,7 @@ substProc th (Recv c clauses) =
                   (map (\(Clause ptrn p) -> Clause ptrn (substProc th' p)) clauses)
   where th' = foldr mask th (map (\(Clause ptrn _) -> ptrn) clauses)
 substProc th (Par p q) = Par (substProc th p) (substProc th q)
-substProc th (Nu y t p) = if Map.member (PH y) th
+substProc th (Nu y t p) = if Map.member (depolariseChan y) th
    then Nu y t p       -- is this right?
    else Nu y t (substProc th p)
 substProc th (Repl p) = Repl (substProc th p)   -- is this right?
@@ -249,7 +246,7 @@ evalExpr (EPrj i e) =
 -- substitution related stuffs
 
 match :: Ptrn -> Val -> Maybe Subst
-match (PtrnVar x) v = Just $ Map.fromList [(PH x,v)]
+match (PtrnVar x) v = Just $ Map.fromList [(x, v)]
 match (PtrnLabel x) (VL y) | x == y = Just Map.empty
 match (PtrnTuple xs) (VT vs) | length xs == length vs =
   Map.unions <$> mapM (uncurry match) (zip xs vs)
@@ -267,7 +264,7 @@ matchClauses ((Clause pt e):_) v
 matchClauses (_:pps) v = matchClauses pps v
 
 mask :: Ptrn -> Subst -> Subst
-mask (PtrnVar x)      = Map.delete (PH x)
+mask (PtrnVar x)      = Map.delete x
 mask (PtrnTuple [])     = id
 mask (PtrnTuple (p:ps)) = mask (PtrnTuple ps) . mask p
 mask (PtrnLabel _)      = id
@@ -310,7 +307,8 @@ freeProc (Send c e p) =
 freeProc (Recv c ps) =
   freeN c `Set.union` Set.unions (map freeClause ps)
 freeProc (Par p1 p2) = freeProc p1 `Set.union` freeProc p2
-freeProc (Nu x _ p) = freeProc p `Set.difference` Set.fromList [Pos x, Neg x]
+freeProc (Nu x _ p) = freeProc p `Set.difference` Set.fromList
+  [Pos (depolariseChan x), Neg (depolariseChan x)]
 freeProc (Repl p) = freeProc p -- is that right?
 freeProc (Call _) = undefined -- what to do here?
 

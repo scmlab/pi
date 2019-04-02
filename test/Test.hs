@@ -18,5 +18,5 @@ tests = testGroup "Tests"
   -- [ testCase "2+2=4" $
   --     2+2 @?= 4
   -- , testCase "7 is even" $
-  --     assertBool "Oops, 7 is odd" (even 7)
+  --     asserTBase TBool "Oops, 7 is odd" (even 7)
   -- ]

@@ -24,8 +24,11 @@ data Type = TEnd                    -- end
            | TMu Type
   deriving (Eq, Show, Ord)
 
-tInt  = TBase TInt
+tBool :: Type
 tBool = TBase TBool
+
+tInt :: Type
+tInt = TBase TInt
 
 class HasDual a where
   dual :: a -> a
