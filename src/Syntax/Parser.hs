@@ -23,18 +23,18 @@ import PPrint
 import Language.Lexer.Applicative
 import System.Console.ANSI
 
-parseProgram :: FilePath -> ByteString -> Either ParseError (Program Loc)
+parseProgram :: FilePath -> ByteString -> Either ParseError Program
 parseProgram filePath src = runExcept (evalStateT programParser initState)
   where initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
         startingLoc = Loc (startPos filePath) (startPos filePath)
 
-parseProcess :: ByteString -> Either ParseError (Process Loc)
+parseProcess :: ByteString -> Either ParseError Process
 parseProcess src = runExcept (evalStateT processParser initState)
   where filePath = ""
         initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
         startingLoc = Loc (startPos filePath) (startPos filePath)
 
-parseByteString2 :: FilePath -> ByteString -> Either ParseError (C.Program Loc)
+parseByteString2 :: FilePath -> ByteString -> Either ParseError Program
 parseByteString2 filePath src = runExcept (evalStateT programParser initState)
   where initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
         startingLoc = Loc (startPos filePath) (startPos filePath)

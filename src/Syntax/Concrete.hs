@@ -8,126 +8,113 @@ module Syntax.Concrete where
 import qualified Syntax.Abstract as A
 import qualified Type as A
 import Data.Text (Text)
-import Data.Loc
+import Data.Loc (Loc, Located(..))
 import Prelude hiding (LT, EQ, GT)
 
 --------------------------------------------------------------------------------
 -- | Concrete Syntax Tree
 
-data Label    ann = Label     Text                                      ann
-                  deriving (Show, Functor)
-data Name     ann = Positive  Text                                      ann
-                  | Negative  Text                                      ann
-                  | Reserved  Text                                      ann
-                  deriving (Show, Functor)
+data Label        = Label     Text  Loc
+                  deriving (Show)
+data Name         = Positive  Text  Loc
+                  | Negative  Text  Loc
+                  | Reserved  Text  Loc
+                  deriving (Show)
 
-data Program  ann = Program   [Definition ann]                            ann
-                  deriving (Show, Functor)
-data ProcName ann = ProcName  Text                                      ann
-                  deriving (Show, Functor)
-data TypeName ann = TypeName  Text                                           ann
-                  deriving (Show, Functor)
+data Program      = Program   [Definition]  Loc
+                  deriving (Show)
+data ProcName     = ProcName  Text  Loc
+                  deriving (Show)
+data TypeName     = TypeName  Text  Loc
+                  deriving (Show)
 
-data Definition ann = ProcDefn  (ProcName ann)  (Process ann)             ann
-                    | ChanType  (Name     ann)  (Type ann)             ann
-                    | TypeDefn  (TypeName ann)  (Type ann)             ann
-                  deriving (Show, Functor)
+data Definition   = ProcDefn  ProcName  Process Loc
+                  | ChanType  Name      Type    Loc
+                  | TypeDefn  TypeName  Type    Loc
+                  deriving (Show)
 
-data Process  ann = Send      (Name ann)     (Expr ann)         (Process ann) ann
-                  | Recv      (Name ann)     [Clause ann]                     ann
-                  | Nu        (ProcName ann) (Maybe (Type ann)) (Process ann) ann
-                  | Par       (Process ann)  (Process ann)                    ann
-                  | Call      (ProcName ann)                                  ann
-                  | Repl      (Process ann)                                   ann
-                  | End                                                       ann
-                  deriving (Show, Functor)
+data Process      = Send      Name      Expr          Process Loc
+                  | Recv      Name      [Clause]              Loc
+                  | Nu        ProcName  (Maybe Type)  Process Loc
+                  | Par       Process                 Process Loc
+                  | Call      ProcName                        Loc
+                  | Repl      Process                         Loc
+                  | End                                       Loc
+                  deriving (Show)
 
-data Pattern  ann = PtrnName  (ProcName ann)                            ann
-                  | PtrnTuple [Pattern ann]                             ann
-                  | PtrnLabel (Label ann)                               ann
-                  deriving (Show, Functor)
-data Clause   ann = Clause    (Pattern ann) (Process ann)               ann
-                  deriving (Show, Functor)
+data Pattern      = PtrnName  ProcName                        Loc
+                  | PtrnTuple [Pattern]                       Loc
+                  | PtrnLabel Label                           Loc
+                  deriving (Show)
+data Clause       = Clause    Pattern Process                 Loc
+                  deriving (Show)
 
 -- Expressions and all that
-data Expr     ann = ExprTuple [Expr ann]                                ann
-                  | Mul       (Expr ann) (Expr ann)                     ann
-                  | Div       (Expr ann) (Expr ann)                     ann
-                  | Add       (Expr ann) (Expr ann)                     ann
-                  | Sub       (Expr ann) (Expr ann)                     ann
-                  | EQ        (Expr ann) (Expr ann)                     ann
-                  | NEQ       (Expr ann) (Expr ann)                     ann
-                  | GT        (Expr ann) (Expr ann)                     ann
-                  | GTE       (Expr ann) (Expr ann)                     ann
-                  | LT        (Expr ann) (Expr ann)                     ann
-                  | LTE       (Expr ann) (Expr ann)                     ann
-                  | IfThenElse (Expr ann) (Expr ann) (Expr ann)         ann
-                  | ExprBool  Bool                                      ann
-                  | ExprDigit Int                                       ann
-                  | ExprName  (Name ann)                                ann
-                  | ExprLabel (Label ann)                               ann
-                  | ExprString Text                                     ann
-                  deriving (Show, Functor)
+data Expr         = ExprTuple [Expr]    Loc
+                  | Mul       Expr Expr Loc
+                  | Div       Expr Expr Loc
+                  | Add       Expr Expr Loc
+                  | Sub       Expr Expr Loc
+                  | EQ        Expr Expr Loc
+                  | NEQ       Expr Expr Loc
+                  | GT        Expr Expr Loc
+                  | GTE       Expr Expr Loc
+                  | LT        Expr Expr Loc
+                  | LTE       Expr Expr Loc
+                  | IfThenElse Expr Expr Expr Loc
+                  | ExprBool  Bool Loc
+                  | ExprDigit Int Loc
+                  | ExprName  Name Loc
+                  | ExprLabel Label Loc
+                  | ExprString Text Loc
+                  deriving (Show)
 
 -- Session Types
 
-data TypeVar ann  = TypeVarIndex Int                                    ann
-                  | TypeVarText (TypeName ann)                          ann
-                  deriving (Show, Functor)
+data TypeVar  = TypeVarIndex Int Loc
+              | TypeVarText TypeName Loc
+                  deriving (Show)
 
-data BaseType ann
-              = BaseInt                                                 ann
-              | BaseBool                                                ann
-              deriving (Show, Functor)
-data Type ann = TypeEnd                                                 ann
-              | TypeBase      (BaseType ann)                            ann
-              | TypeTuple     [Type ann]                                ann
-              | TypeSend      (Type ann) (Type ann)                     ann
-              | TypeRecv      (Type ann) (Type ann)                     ann
-              | TypeSele      [TypeOfLabel ann]                         ann
-              | TypeChoi      [TypeOfLabel ann]                         ann
-              | TypeUn        (Type ann)                                ann
-              | TypeVar       (TypeVar ann)                            ann
-              | TypeMu        (Type ann)                                ann
+data BaseType = BaseInt Loc
+              | BaseBool Loc
               deriving (Show)
-data TypeOfLabel ann = TypeOfLabel (Label ann) (Type ann)               ann
-              deriving (Show, Functor)
-
-instance Functor Type where
-  fmap f (TypeEnd ann)              = TypeEnd                                 (f ann)
-  fmap f (TypeTuple a ann)          = TypeTuple (map (fmap f) a)                    (f ann)
-  fmap f (TypeBase a ann)           = TypeBase  (fmap f a)                    (f ann)
-  fmap f (TypeSend a b ann)         = TypeSend  (fmap f a) (fmap f b) (f ann)
-  fmap f (TypeRecv a b ann)         = TypeRecv  (fmap f a) (fmap f b) (f ann)
-  fmap f (TypeSele a ann)           = TypeSele  (map (fmap f) a)              (f ann)
-  fmap f (TypeChoi a ann)           = TypeChoi  (map (fmap f) a)              (f ann)
-  fmap f (TypeUn a ann)             = TypeUn    (fmap f a)                    (f ann)
-  fmap f (TypeVar a ann)            = TypeVar  (fmap f a)                    (f ann)
-  fmap f (TypeMu a ann)             = TypeMu    (fmap f a)                    (f ann)
+data Type     = TypeEnd                         Loc
+              | TypeBase      BaseType          Loc
+              | TypeTuple     [Type]            Loc
+              | TypeSend      Type Type         Loc
+              | TypeRecv      Type Type         Loc
+              | TypeSele      [TypeOfLabel]     Loc
+              | TypeChoi      [TypeOfLabel]     Loc
+              | TypeUn        Type              Loc
+              | TypeVar       TypeVar           Loc
+              | TypeMu        Type              Loc
+              deriving (Show)
+data TypeOfLabel = TypeOfLabel Label Type   Loc
+              deriving (Show)
 
 --------------------------------------------------------------------------------
 -- | Instance of Located
 
-instance Located (Name Loc) where
+instance Located Name where
   locOf (Positive _ loc) = loc
   locOf (Negative _ loc) = loc
   locOf (Reserved _ loc) = loc
 
-instance Located (ProcName Loc) where
+instance Located ProcName where
   locOf (ProcName _ loc) = loc
 
-instance Located (Label Loc) where
+instance Located Label where
   locOf (Label _ loc) = loc
 
-instance Located (Program Loc) where
+instance Located Program where
   locOf (Program _ loc) = loc
 
-instance Located (Definition Loc) where
+instance Located Definition where
   locOf (ProcDefn _ _ loc) = loc
   locOf (TypeDefn _ _ loc) = loc
   locOf (ChanType _ _ loc) = loc
 
-instance Located (Process Loc) where
+instance Located Process where
   locOf (Send _ _ _ loc) = loc
   locOf (Recv _ _ loc) = loc
   locOf (Nu _ _ _ loc) = loc
@@ -136,15 +123,15 @@ instance Located (Process Loc) where
   locOf (Repl _ loc) = loc
   locOf (End loc) = loc
 
-instance Located (Pattern Loc) where
+instance Located Pattern where
   locOf (PtrnName _ loc) = loc
   locOf (PtrnTuple _ loc) = loc
   locOf (PtrnLabel _ loc) = loc
 
-instance Located (Clause Loc) where
+instance Located Clause where
   locOf (Clause _ _ loc) = loc
 
-instance Located (Expr Loc) where
+instance Located Expr where
   locOf (ExprTuple _ loc) = loc
   locOf (Mul _ _ loc) = loc
   locOf (Div _ _ loc) = loc
@@ -163,11 +150,11 @@ instance Located (Expr Loc) where
   locOf (ExprLabel _ loc) = loc
   locOf (ExprString _ loc) = loc
 
-instance Located (BaseType Loc) where
+instance Located BaseType where
   locOf (BaseInt loc) = loc
   locOf (BaseBool loc) = loc
 
-instance Located (Type Loc) where
+instance Located Type where
   locOf (TypeEnd loc) = loc
   locOf (TypeBase _ loc) = loc
   locOf (TypeTuple _ loc) = loc
@@ -179,7 +166,7 @@ instance Located (Type Loc) where
   locOf (TypeVar _ loc) = loc
   locOf (TypeMu _ loc) = loc
 
-instance Located (TypeOfLabel Loc) where
+instance Located TypeOfLabel where
   locOf (TypeOfLabel _ _ loc) = loc
 
 --------------------------------------------------------------------------------
@@ -188,37 +175,37 @@ instance Located (TypeOfLabel Loc) where
 class ToAbstract a b | a -> b where
   toAbstract :: a -> b
 
-instance ToAbstract (Program ann) A.Program where
+instance ToAbstract Program A.Program where
   toAbstract (Program  definitions _) = A.Program (map toAbstract definitions)
 
-instance ToAbstract (Definition ann) A.Definition where
+instance ToAbstract Definition A.Definition where
   toAbstract (ProcDefn name process _) = A.ProcDefn (toAbstract name) (toAbstract process)
   toAbstract (ChanType name t _) = A.ChanType (toAbstract name) (toAbstract t)
   toAbstract (TypeDefn name t _) = A.TypeDefn (toAbstract name) (toAbstract t)
 
-instance ToAbstract (Label ann) A.Label where
+instance ToAbstract Label A.Label where
   toAbstract (Label    label _)     = label
 
-instance ToAbstract (ProcName ann) Text where
+instance ToAbstract ProcName Text where
   toAbstract (ProcName name    _) = name
 
-instance ToAbstract (Name ann) A.Name where
+instance ToAbstract Name A.Name where
   toAbstract (Positive name     _) = A.ND (A.Pos name)
   toAbstract (Negative name     _) = A.ND (A.Neg name)
   toAbstract (Reserved "stdin"  _) = A.NR A.StdIn
   toAbstract (Reserved "stdout" _) = A.NR A.StdOut
   toAbstract (Reserved _        _) = A.NR A.StdOut
 
-instance ToAbstract (Pattern ann) A.Ptrn where
+instance ToAbstract Pattern A.Ptrn where
   toAbstract (PtrnName name _)   = A.PN (toAbstract name)
   toAbstract (PtrnTuple patterns _) = A.PT (map toAbstract patterns)
   toAbstract (PtrnLabel label _) = A.PL (toAbstract label)
 
-instance ToAbstract (Clause ann) A.Clause where
+instance ToAbstract Clause A.Clause where
   toAbstract (Clause pattern process _) =
     A.Clause (toAbstract pattern) (toAbstract process)
 
-instance ToAbstract (Process ann) A.Pi where
+instance ToAbstract Process A.Pi where
   toAbstract (Nu name Nothing process _) =
     A.Nu (toAbstract name) Nothing (toAbstract process)
   toAbstract (Nu name (Just t) process _) =
@@ -236,7 +223,7 @@ instance ToAbstract (Process ann) A.Pi where
   toAbstract (End _) =
     A.End
 
-instance ToAbstract (Expr ann) A.Expr where
+instance ToAbstract Expr A.Expr where
   toAbstract (Add x y _) = A.EAdd (toAbstract x) (toAbstract y)
   toAbstract (Sub x y _) = A.ESub (toAbstract x) (toAbstract y)
   toAbstract (Mul x y _) = A.EMul (toAbstract x) (toAbstract y)
@@ -255,18 +242,18 @@ instance ToAbstract (Expr ann) A.Expr where
   toAbstract (ExprLabel x _) = A.EV (A.VL (toAbstract x))
   toAbstract (ExprString x _) = A.EV (A.VS x)
 
-instance ToAbstract (TypeVar ann) A.TypeVar where
+instance ToAbstract TypeVar A.TypeVar where
   toAbstract (TypeVarIndex name _) = A.TypeVarIndex name
   toAbstract (TypeVarText  name _) = A.TypeVarText (toAbstract name)
 
-instance ToAbstract (TypeName ann) A.TypeName where
+instance ToAbstract TypeName A.TypeName where
   toAbstract (TypeName name    _) = name
 
-instance ToAbstract (BaseType ann) A.BType where
+instance ToAbstract BaseType A.BType where
   toAbstract (BaseInt _)  = A.TInt
   toAbstract (BaseBool _) = A.TBool
 
-instance ToAbstract (Type ann) A.Type where
+instance ToAbstract Type A.Type where
   toAbstract (TypeEnd _) = A.TEnd
   toAbstract (TypeBase t _) = A.TBase (toAbstract t)
   toAbstract (TypeTuple ts _) = A.TTuple (map toAbstract ts)
@@ -278,30 +265,5 @@ instance ToAbstract (Type ann) A.Type where
   toAbstract (TypeVar t _) = A.TVar (toAbstract t)
   toAbstract (TypeMu t _) = A.TMu (toAbstract t)
 
-instance ToAbstract (TypeOfLabel ann) (A.Label, A.Type) where
+instance ToAbstract TypeOfLabel (A.Label, A.Type) where
   toAbstract (TypeOfLabel t u _)  = (toAbstract t, toAbstract u)
-
-{- To banacorn: please fixe this later. Thank you!
-  toAbstract (TypeEnd _             ) = TEnd
-  toAbstract (TypeSend (Left  s) t _) = TSend (Left (toAbstract s)) (toAbstract t)
-  toAbstract (TypeSend (Right s) t _) = TSend (Right (toAbstract s)) (toAbstract t)
-  toAbstract (TypeRecv (Left  s) t _) = TRecv (Left (toAbstract s)) (toAbstract t)
-  toAbstract (TypeRecv (Right s) t _) = TRecv (Right (toAbstract s)) (toAbstract t)
-  toAbstract (TypeSele selections  _) =
-    TSele (map (\(TypeOfLabel l t _) -> (toAbstract l, toAbstract t)) selections)
-  toAbstract (TypeChoi choices     _) =
-    TChoi (map (\(TypeOfLabel l t _) -> (toAbstract l, toAbstract t)) choices)
---  toAbstract (TypeCall call        _) = TCall (toAbstract call)
--}
- -- TEnd                    -- end
- --           | TBase BType
- --           | TTuple [Type]
- --           | TSend Type Type       -- send
- --           | TRecv Type Type       -- recv
- --           | TSele [(Label, Type)]  -- select
- --           | TChoi [(Label, Type)]  -- choice
- --           | TUn Type               -- unrestricted
- --
- --           | TVar Int    -- de Bruin index?
- --           | TMu Type
- --  deriving (Eq, Show)

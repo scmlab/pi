@@ -89,25 +89,25 @@ import Data.Text (Text)
 
 %%
 
-Program :: {Program Loc}
+Program :: {Program}
     : Definitions                              {% locate $ Program (reverse $1) }
 
 -- left recursive
-Definitions :: {[Definition Loc]}
+Definitions :: {[Definition]}
     : Definition                                { [$1] }
     | Definitions Definition                    { $2:$1 }
 
-Definition :: {Definition Loc}
+Definition :: {Definition}
     : ProcName '=' ProcessPar                   {% locate $ ProcDefn $1 $3 }
     | Name ':' Type                             {% locate $ ChanType $1 $3 }
     | 'type' TypeName '=' Type                  {% locate $ TypeDefn $2 $4 }
 
 -- left recursive
-ProcessPar :: {Process Loc}
+ProcessPar :: {Process}
     : ProcessPar '|' Process                    {% locate $ Par $1 $3 }
     | Process                                   { $1 }
 
-Process :: {Process Loc}
+Process :: {Process}
     : Name '[' Expr ']' '.' Process           {% locate $ Send $1 $3 $6  }
     | Name RecvClause                         {% locate $ Recv $1 [$2]  }
     | Name '>>' '{' ChoiceClauses '}'         {% locate $ Recv $1 (reverse $4)  }
@@ -119,33 +119,33 @@ Process :: {Process Loc}
     | ProcName                                {% locate $ Call $1 }
     | '(' ProcessPar ')'                      { $2 }
 
-Pattern :: {Pattern Loc}
+Pattern :: {Pattern}
          : ProcName                         {% locate $ PtrnName $1 }
          | Patterns                         {% locate $ PtrnTuple (reverse $1) }
          | Label                            {% locate $ PtrnLabel $1 }
-Patterns :: {[Pattern Loc]}
+Patterns :: {[Pattern]}
     : Patterns ',' Pattern                  { $3 : $1 }
     | Pattern  ',' Pattern                  { [ $3, $1 ]  }
 
-RecvClause :: {Clause Loc}
+RecvClause :: {Clause}
         : '(' Pattern ')' '.' ProcessPar    {% locate $  Clause $2 $5 }
-ChoiceClause :: {Clause Loc}
+ChoiceClause :: {Clause}
         : Pattern '->' ProcessPar           {% locate $  Clause $1 $3 }
-ChoiceClauses :: {[Clause Loc]}
+ChoiceClauses :: {[Clause]}
         : ChoiceClauses ';' ChoiceClause    { $3 : $1 }
         | ChoiceClause                      { [ $1 ]  }
 
-TypeName :: {TypeName Loc}
+TypeName :: {TypeName}
     : typeName                              {% locate $ TypeName $1 }
     | label                                 {% locate $ TypeName $1 }
 
-ProcName :: {ProcName Loc}
+ProcName :: {ProcName}
       : namePos                             {% locate $ ProcName $1 }
 
-TypeVar :: {TypeVar Loc}
+TypeVar :: {TypeVar}
     : TypeName                              {% locate $ TypeVarText $1 }
 
-Name :: {Name Loc}
+Name :: {Name}
       : namePos                             {% locate $ Positive $1 }
       | nameNeg                             {% locate $ Negative $1 }
       | ReservedName                        {% locate $ Reserved $1 }
@@ -154,7 +154,7 @@ ReservedName :: {Text}
      : 'stdout'                             { "stdout" }
      | 'stdin'                              { "stdin" }
 
-Expr :: {Expr Loc}
+Expr :: {Expr}
     : Expr '+' Expr                       {% locate $ Add $1 $3 }
     | Expr '-' Expr                       {% locate $ Sub $1 $3 }
     | Expr '*' Expr                       {% locate $ Mul $1 $3 }
@@ -162,11 +162,11 @@ Expr :: {Expr Loc}
     | 'if' Expr 'then' Expr 'else' Expr   {% locate $ IfThenElse $2 $4 $6 }
     | Exprs                               {% locate $ ExprTuple (reverse $1) }
     | Term                                { $1 }
-Exprs :: {[Expr Loc]}
+Exprs :: {[Expr]}
     : Exprs ',' Expr                        { $3 : $1 }
     | Expr  ',' Expr                        { [ $3 , $1 ]  }
 
-Term :: {Expr Loc}
+Term :: {Expr}
     : '(' Expr ')'                        { $2 }
     | Name                                {% locate $ ExprName $1 }
     | '0'                                 {% locate $ ExprDigit 0 }
@@ -180,24 +180,24 @@ Term :: {Expr Loc}
     | Expr '<=' Expr                      {% locate $ LTE $1 $3 }
     | Boolean                             { $1 }
 
-Boolean :: {Expr Loc}
+Boolean :: {Expr}
     : 'True'                              {% locate $ ExprBool True }
     | 'False'                             {% locate $ ExprBool False }
 
-SelectLabel :: {Expr Loc}
+SelectLabel :: {Expr}
     : Label                               {% locate $ ExprLabel $1 }
 
-Label :: {Label Loc}
+Label :: {Label}
     : label                                 {% locate $ Label $1 }
 
-BaseType :: {BaseType Loc}
+BaseType :: {BaseType}
     : 'Int'                                 {% locate $ BaseInt }
     | 'Bool'                                {% locate $ BaseBool }
 
-TypeBase :: {Type Loc}
+TypeBase :: {Type}
     : BaseType                              {% locate $ TypeBase $1  }
 
-Type :: {Type Loc}
+Type :: {Type}
     : '0'                                   {% locate $ TypeEnd }
     | TypeVar                               {% locate $ TypeVar $1 }
     | BaseType                              {% locate $ TypeBase $1 }
@@ -210,14 +210,14 @@ Type :: {Type Loc}
     | '(' TypeOfTuples ')'                  {% locate $ TypeTuple (reverse $2) }
     | '(' Type ')'                          { $2 }
 
-TypeOfTuples :: {[Type Loc]}
+TypeOfTuples :: {[Type]}
     : TypeOfTuples ',' Type                 { $3 : $1 }
     | Type ',' Type                         { [$3, $1] }
 
-TypeOfLabel :: {TypeOfLabel Loc}
+TypeOfLabel :: {TypeOfLabel}
     : Label '->' Type                        {% locate $ TypeOfLabel $1 $3  }
 
-TypeOfLabels :: {[TypeOfLabel Loc]}
+TypeOfLabels :: {[TypeOfLabel]}
     : TypeOfLabels ';' TypeOfLabel          { $3 : $1 }
     | TypeOfLabel                           { [ $1 ]  }
 
