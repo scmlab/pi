@@ -35,7 +35,7 @@ instance Pretty Chan where
   pretty (NR StdOut) = "stdout"
   pretty (NR StdIn) = "stdin"
 
-instance Pretty PtrnNameame where
+instance Pretty PtrnName where
   pretty (PH x) = pretty x
   pretty (PG i) = "x" <> pretty i
 

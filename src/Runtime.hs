@@ -273,7 +273,7 @@ programToEnv (Program declarations) = do
   --   throwError $ TypeError $ MissingProcDefn onlyTypes
 
 
-  chanTypesPos' <- Map.fromList <$> forM chanTypesPos (\(n, t) -> toSName n >>= \n' -> return (n', t) )
+  chanTypesPos' <- Map.fromList <$> forM chanTypesPos (\(n, t) -> toName n >>= \n' -> return (n', t) )
   let chanTypesNeg = Map.mapKeys dual $ fmap dual chanTypesPos'
 
   traceShow chanTypesNeg $ return ()
@@ -298,7 +298,7 @@ programToEnv (Program declarations) = do
     procDefns = Map.fromList $ mapMaybe toProcDefnPair declarations
     typeDefns = Map.fromList $ mapMaybe toTypeDefnPair declarations
 
-toSName :: Chan -> RuntimeM SName
-toSName (ND c) = return c
-toSName n@(NG _) = throwError $ TypeError $ SNameExpected n
-toSName n@(NR _) = throwError $ TypeError $ SNameExpected n
+toName :: Chan -> RuntimeM Name
+toName (ND c) = return c
+toName n@(NG _) = throwError $ TypeError $ UserDefinedNameExpected n
+toName n@(NR _) = throwError $ TypeError $ UserDefinedNameExpected n

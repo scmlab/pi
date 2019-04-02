@@ -18,18 +18,18 @@ type ErrMsg = String
 type ProcName = Text
 type TypeName = Text
 
-type SName = Polarised Text
-data Chan = ND (Polarised Text)   -- user defined
-          | NG (Polarised Int)     -- system generated
-          | NR ResName      -- reserved name
+data Polarised a = Pos a | Neg a
+    deriving (Ord, Eq, Show)
+type Name = Polarised Text
+data Chan = ND Name             -- user defined
+          | NG (Polarised Int)  -- system generated
+          | NR ResName          -- reserved name
     deriving (Ord, Eq, Show)
 
-data PtrnNameame = PH Text        -- "pure" names, without polarization
+data PtrnName = PH Text        -- "pure" names, without polarization
            | PG Int
    deriving (Eq, Show, Ord)
 
-data Polarised a = Pos a | Neg a -- | Neu a
-    deriving (Ord, Eq, Show)
 
 instance HasDual (Polarised a) where
   dual (Pos a) = Neg a
@@ -44,7 +44,7 @@ depolarise (Pos x) = x
 depolarise (Neg x) = x
 -- depolar (Neu x) = x
 
-depolarCh :: Chan -> PtrnNameame
+depolarCh :: Chan -> PtrnName
 depolarCh (ND c) = PH (depolarise c)
 depolarCh (NG c) = PG (depolarise c)
 depolarCh (NR _) = error "bug: shouldn't call depolar without checking"
@@ -52,7 +52,7 @@ depolarCh (NR _) = error "bug: shouldn't call depolar without checking"
 depolarCH :: Chan -> Text
 depolarCH = depolarise . unND
 
-unND :: Chan -> Polarised Text
+unND :: Chan -> Name
 unND (ND n) = n
 unND _ = undefined
 
@@ -153,7 +153,7 @@ End `par` p = p
 p `par` End = p
 p `par` q = Par p q
 
-type Subst = Map PtrnNameame Val
+type Subst = Map PtrnName Val
 
 substChan :: Subst -> Chan -> Chan
 substChan _ (NR r) = NR r
@@ -278,16 +278,16 @@ mask (PtrnLabel _)      = id
 -- since it is used in type checking, we return only user defined names.
 -- system generated names are supposed to exist only during execution.
 
-freeVal :: Val -> Set (Polarised Text)
+freeVal :: Val -> Set Name
 freeVal (VC (ND x)) = Set.singleton x
 freeVal (VT vs) = Set.unions . map freeVal $ vs
 freeVal _ = Set.empty
 
-freeN :: Chan -> Set (Polarised Text)
+freeN :: Chan -> Set Name
 freeN (ND x) = Set.singleton x
 freeN _ = Set.empty
 
-freeExpr :: Expr -> Set (Polarised Text)
+freeExpr :: Expr -> Set Name
 freeExpr (EV v) = freeVal v
 freeExpr (EAdd e1 e2) = freeExpr e1 `Set.union` freeExpr e2
 freeExpr (ESub e1 e2) = freeExpr e1 `Set.union` freeExpr e2
@@ -303,7 +303,7 @@ freeExpr (EIf e0 e1 e2) = freeExpr e0 `Set.union` freeExpr e1 `Set.union` freeEx
 freeExpr (ETup es) = Set.unions (map freeExpr es)
 freeExpr (EPrj _ e) = freeExpr e
 
-freeProc :: Proc -> Set (Polarised Text)
+freeProc :: Proc -> Set Name
 freeProc End = Set.empty
 freeProc (Send c e p) =
   freeN c `Set.union` freeExpr e `Set.union` freeProc p
@@ -314,10 +314,10 @@ freeProc (Nu x _ p) = freeProc p `Set.difference` Set.fromList [Pos x, Neg x]
 freeProc (Repl p) = freeProc p -- is that right?
 freeProc (Call _) = undefined -- what to do here?
 
-freeClause :: Clause -> Set (Polarised Text)
+freeClause :: Clause -> Set Name
 freeClause (Clause ptn p) = Set.difference (freeProc p) (freePtrn ptn)
 
-freePtrn :: Ptrn -> Set (Polarised Text)
+freePtrn :: Ptrn -> Set Name
 freePtrn (PtrnName x)  = Set.singleton (Pos x)
 freePtrn (PtrnTuple xs) = Set.unions (map freePtrn xs)  -- linearity check?
 freePtrn _       = Set.empty

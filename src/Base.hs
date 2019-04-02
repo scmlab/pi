@@ -13,7 +13,7 @@ import Type
 -- | Env
 
 data Env = Env
-  { envChanTypes :: Map SName Type
+  { envChanTypes :: Map Name Type
   , envProcDefns :: Map ProcName Proc
   , envTypeDefns :: Map TypeName Type
   }

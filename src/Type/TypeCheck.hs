@@ -34,16 +34,16 @@ import Control.Monad.State
 
 data TypeError
   = MissingProcDefn (Map ProcName Type)
-  | VariableNotFound SName
+  | VariableNotFound Name
   | TypeVariableNotFound TypeName
   | TypeVarIndexAtTopLevel TypeVar
   | LabelNotFound Label
-  | ProcessNotFound SName
+  | ProcessNotFound Name
   | PatternMismatched Type Ptrn
   | TypeOfNewChannelMissing Text
   | RecvExpected Type
   | SendExpected Type
-  | SNameExpected Chan
+  | UserDefinedNameExpected Chan
   | Others String
   deriving (Show)
 
@@ -55,7 +55,7 @@ type TCM = ExceptT TypeError (State Env)
 runTCM :: TCM a -> Env -> Either TypeError a
 runTCM = evalState . runExceptT
 
-putChanTypes :: Map SName Type -> TCM ()
+putChanTypes :: Map Name Type -> TCM ()
 putChanTypes x = modify (\st -> st { envChanTypes = x })
 
 putProcDefns :: Map ProcName Proc -> TCM ()
@@ -106,7 +106,7 @@ mapEqBy :: Ord k => (a -> a -> Bool) -> Map k a -> Map k a -> Bool
 mapEqBy f a b = Map.isSubmapOfBy f a b && Map.isSubmapOfBy f b a
 
 -- TODO: Make CTX = Map Text Type, no polarization in the context
-type Ctx = Map SName Type
+type Ctx = Map Name Type
 
 liftMaybe :: TypeError -> Maybe a -> TCM a
 liftMaybe err = maybe (throwError err) return
@@ -122,7 +122,7 @@ lookupTypeVar (TypeVarText x) = do
     Just v -> return v
     Nothing -> throwError $ TypeVariableNotFound x
 
-lookupChan :: SName -> Ctx -> TCM (Type, Bool, Ctx)
+lookupChan :: Name -> Ctx -> TCM (Type, Bool, Ctx)
 lookupChan x ctx = do
   t <- lookupVar ctx x
   let (t', unrest) = stripUnres (unfoldT t)
@@ -130,7 +130,7 @@ lookupChan x ctx = do
     then return (t', unrest, ctx)
     else return (t', unrest, Map.delete x ctx)
 
-lookupVar :: Ctx -> SName -> TCM Type
+lookupVar :: Ctx -> Name -> TCM Type
 lookupVar ctx x = case Map.lookup x ctx of
   Just v -> substituteTypeVar v
   Nothing -> case Map.lookup (dual x) ctx of
@@ -234,7 +234,7 @@ tcheck t1 t2
    | otherwise = throwError $ Others ("expected: " ++ show t1 ++
                              ", found " ++ show t2)
 
-checkCh :: Ctx -> SName -> Type -> TCM ()
+checkCh :: Ctx -> Name -> Type -> TCM ()
 checkCh senv c t = do
   t' <- lookupVar senv c
   if t == t'
@@ -244,7 +244,7 @@ checkCh senv c t = do
 allClosed :: Ctx -> Bool
 allClosed = all (TEnd ==) . Map.elems
 
-checkProc :: Ctx -> Proc -> TCM (Ctx, Set SName)
+checkProc :: Ctx -> Proc -> TCM (Ctx, Set Name)
 
 checkProc ctx End = return (ctx, Set.empty)
 
@@ -303,7 +303,7 @@ checkProc ctx (Call name) = do
     Nothing -> throwError $ ProcessNotFound (Pos name)
 
 
-checkProcSend :: (SName, Expr, Proc) -> Type -> Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
+checkProcSend :: (Name, Expr, Proc) -> Type -> Type -> Bool -> Ctx -> TCM (Ctx, Set Name)
 checkProcSend (c,e,p) s t un ctx = do
   -- error $ show (e, s, ctx)
   ctx' <- checkE ctx e s
@@ -311,18 +311,18 @@ checkProcSend (c,e,p) s t un ctx = do
   (id *** addLin un c) <$>
          checkProc ctx'' p
 
-checkProcSel :: (SName, Expr, Proc) -> Map Label Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
+checkProcSel :: (Name, Expr, Proc) -> Map Label Type -> Bool -> Ctx -> TCM (Ctx, Set Name)
 checkProcSel (c,e,p) ts un ctx = do
   l <- isLabel e
   s <- lookupLabel ts l
   ctx' <- addCtx (c,s) ctx
   (id *** addLin un c) <$> checkProc ctx' p
 
-checkProcRecv :: (SName, [Clause]) -> Type -> Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
+checkProcRecv :: (Name, [Clause]) -> Type -> Type -> Bool -> Ctx -> TCM (Ctx, Set Name)
 checkProcRecv (c, ps) s t un ctx =
   mapM (checkRecvClause c s t un ctx) ps >>= eqAll
 
-checkRecvClause :: SName -> Type -> Type -> Bool -> Ctx -> Clause -> TCM (Ctx, Set SName)
+checkRecvClause :: Name -> Type -> Type -> Bool -> Ctx -> Clause -> TCM (Ctx, Set Name)
 checkRecvClause name s t un ctx (Clause ptn p) = do
   ctx'' <- matchPtn s ptn ctx >>= addCtx (name, t)
   (ctx''', l) <- checkProc ctx'' p
@@ -333,7 +333,7 @@ checkRecvClause name s t un ctx (Clause ptn p) = do
               else (Set.insert name l'))
   where xs = ptnVars ptn
 
-checkProcChoi :: (SName, [Clause]) -> Map Label Type -> Bool -> Ctx -> TCM (Ctx, Set SName)
+checkProcChoi :: (Name, [Clause]) -> Map Label Type -> Bool -> Ctx -> TCM (Ctx, Set Name)
 checkProcChoi (c, ps) ts un ctx = do
    xss <- pairChoices ts ps
    res <- mapM (\(s, p) -> do
@@ -352,7 +352,7 @@ isLabel _ = throwError $ Others "must be a label"
 -- pattern related stuffs
 
 -- free variables of a pattern
-ptnVars :: Ptrn -> Set SName
+ptnVars :: Ptrn -> Set Name
 ptnVars (PtrnName x)  = Set.singleton (Pos x)
 ptnVars (PtrnTuple xs) = Set.unions (map ptnVars xs)
 ptnVars (PtrnLabel _)  = Set.empty
@@ -374,7 +374,7 @@ matchPtn (TVar t)     (PtrnName x) ctx = do
   matchPtn t' (PtrnName x) ctx
 matchPtn t p _ = throwError $ PatternMismatched t p
 
-addUni :: (SName, Type) -> Ctx -> TCM Ctx
+addUni :: (Name, Type) -> Ctx -> TCM Ctx
 addUni (x,t) ctx = case Map.lookup x ctx of
   Just _ -> throwError $ Others (show x ++ " exists in context")
   Nothing -> return $ Map.insert x t ctx
@@ -388,21 +388,21 @@ matchPtns _ _ _ = throwError $ Others "tuple length mismatch"
 
 -- return the context without the given names
 -- the names in the context should all be unrestricted
-removeChannels :: Ctx -> Set SName -> TCM Ctx
+removeChannels :: Ctx -> Set Name -> TCM Ctx
 removeChannels ctx names = do
   let inCtx = Map.elems $ Map.restrictKeys ctx names
   unless (all unrestricted inCtx) $
     throwError $ Others ("channel " ++ show inCtx ++ " not used up.")
   return $ Map.withoutKeys ctx names
 
-addCtx :: (SName, Type) -> Ctx -> TCM Ctx
+addCtx :: (Name, Type) -> Ctx -> TCM Ctx
 addCtx (c, t) ctx = case Map.lookup c ctx of
   Just t' -> if eqType t t'
     then return ctx
     else throwError $ Others ("types of channels in env mismatch: " ++ show t ++ " and " ++ show t')
   Nothing -> return $ Map.insert c t ctx
 
-eqAll :: [(Ctx, Set SName)] -> TCM (Ctx, Set SName)
+eqAll :: [(Ctx, Set Name)] -> TCM (Ctx, Set Name)
 eqAll [] = throwError $ Others "no branches to unify with"
 eqAll [x] = return x
 eqAll ((s1,l1):(s2,l2):xs) =
@@ -432,7 +432,7 @@ pairChoices _ (Clause _ _ : _) =
 
 {-
 splitSEnv ::
-  [SName] -> [SName] -> SEnv -> TCM (SEnv, SEnv)
+  [Name] -> [Name] -> SEnv -> TCM (SEnv, SEnv)
 splitSEnv _ _ [] = return ([],[])
 splitSEnv fl fr ((x,t):xs)
    | bl && br  = throwError ("channel " ++ show x ++ " not linear")
@@ -470,28 +470,28 @@ choices c ps =
 
 pn :: String -> Ptrn
 pn = PtrnName . pack
-cp :: String -> SName
+cp :: String -> Name
 cp = Pos . pack
-cn :: String -> SName
+cn :: String -> Name
 cn = Neg . pack
 
 fromParseResult :: Show a => Either a b -> b
 fromParseResult (Left err) = error $ show err
 fromParseResult (Right x) = x
 
-test0 :: Either TypeError (Ctx, Set SName)
+test0 :: Either TypeError (Ctx, Set Name)
 test0 = runTCM (checkProc ctx p) initEnv
   where ctx = Map.fromList [(cp "c", tsend TInt (tsend TBool TEnd)),
                (cp "d", TSend (TTuple [tInt, tsend TBool TEnd]) TEnd)]
         p = toAbstract $ fromParseResult (parseProc "c[3] . d[4,c] . end")
 
-test1 :: Either TypeError (Ctx, Set SName)
+test1 :: Either TypeError (Ctx, Set Name)
 test1 = runTCM (checkProc ctx p) initEnv
   where ctx = Map.fromList [(cn "c", trecv TInt (trecv TBool TEnd))]
         p = toAbstract $ fromParseResult (parseProc "c(x) . c(y) . end")
         -- p = recv (cN "c") (pn "x")  $ recv (cN "c") (pn "y")  End
 
-test2 :: Either TypeError (Ctx, Set SName)
+test2 :: Either TypeError (Ctx, Set Name)
 test2 = runTCM (checkProc ctx p) initEnv
   where p = nu "c" t (Par p1 p2)
         p1 = Send (cP "c") (eI 3) $ Send (cP "c") (eB False) End
@@ -504,7 +504,7 @@ test2 = runTCM (checkProc ctx p) initEnv
             t  = !Int.!Bool.0
         -}
 
-test3 :: Either TypeError (Ctx, Set SName)
+test3 :: Either TypeError (Ctx, Set Name)
 test3 = runTCM (checkProc ctx0 p0) initEnv
   where
     t0 :: Type
@@ -541,14 +541,14 @@ test3 = runTCM (checkProc ctx0 p0) initEnv
     _p2 :: Proc
     _p2 = nu "c" t1 (nu "d" t0 p0 `Par` _p1)
 
-test4 :: Either TypeError (Ctx, Set SName)
+test4 :: Either TypeError (Ctx, Set Name)
 test4 = runTCM (checkProc ctx p) initEnv
   where ctx = Map.fromList [(cp "c", TMu $ TUn $ trecv TInt $ TVar (TypeVarIndex 0))]
         p = Repl (recv (cP "c") (pn "x") End)
         -- p = *(c(x).0)
         -- {c: mu(X)un(?Int.X)}
 
-test5 :: Either TypeError (Ctx, Set SName)
+test5 :: Either TypeError (Ctx, Set Name)
 test5 = runTCM (checkProc ctx p) initEnv
   where t = tsend TInt $ trecv TBool TEnd
         -- {c : mu(X)(un(?(!Int.?Bool.0).X))}
