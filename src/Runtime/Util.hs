@@ -1,7 +1,10 @@
 module Runtime.Util where
 
 import System.IO
-import System.Console.ANSI
+import Data.Text.Prettyprint.Doc.Render.Terminal
+import Data.Text.Prettyprint.Doc
+import Data.Text (Text)
+
 
 --------------------------------------------------------------------------------
 -- | IO control
@@ -33,26 +36,17 @@ interceptStdin input = reverse <$> interceptStdin' input
 --------------------------------------------------------------------------------
 -- | Colouring stuff
 
-yellow :: IO () -> IO ()
-yellow p = do
-  setSGR [SetColor Foreground Vivid Yellow]
-  p
-  setSGR []
+yellow :: Pretty a => a -> IO ()
+yellow = putDoc . annotate (color Yellow) . pretty
 
-blue :: IO () -> IO ()
-blue p = do
-  setSGR [SetColor Foreground Dull Blue]
-  p
-  setSGR []
+blue :: Pretty a => a -> IO ()
+blue = putDoc . annotate (colorDull Blue) . pretty
 
-red :: IO () -> IO ()
-red p = do
-  setSGR [SetColor Foreground Vivid Red]
-  p
-  setSGR []
+red :: Pretty a => a -> IO ()
+red = putDoc . annotate (color Red) . pretty
 
-green :: IO () -> IO ()
-green p = do
-  setSGR [SetColor Foreground Vivid Green]
-  p
-  setSGR []
+green :: Pretty a => a -> IO ()
+green = putDoc . annotate (color Green) . pretty
+
+text :: Text -> Text
+text = id

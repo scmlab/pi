@@ -23,7 +23,6 @@ description:         Please see the README on GitHub at <https://github.com/gith
 dependencies:
 - base >= 4.7 && < 5
 - array
-- ansi-terminal
 - bytestring
 - containers
 - haskeline
@@ -31,6 +30,7 @@ dependencies:
 - mtl
 - regex-applicative
 - prettyprinter
+- prettyprinter-ansi-terminal
 - srcloc
 - text
 

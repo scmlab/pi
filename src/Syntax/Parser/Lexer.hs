@@ -8,7 +8,7 @@ import Control.Monad.State
 import Control.Monad.Except
 import Data.Char
 import Data.Loc
-import Data.Text (Text, pack, cons)
+import Data.Text (Text, pack)
 import Language.Lexer.Applicative
 import Text.Regex.Applicative
 

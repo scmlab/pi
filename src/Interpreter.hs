@@ -18,15 +18,13 @@ import Control.Arrow ((***))
 
 import qualified Data.Map as Map
 import Data.Function (on)
-import Data.Text (Text)
 
 import Data.Text.Prettyprint.Doc
-import PPrint ()
+import Pretty ()
 
 import Base
 import Syntax.Abstract
 import Syntax.Concrete (toAbstract)
-import qualified Syntax.Concrete as C
 import Utilities
 
 --------------------------------------------------------------------------------

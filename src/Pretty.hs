@@ -1,15 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module PPrint where
+module Pretty where
 
+import Pretty.Syntax.Concrete ()
 
 import Syntax.Abstract
 import Type
 
-import Data.Loc hiding (Pos)
-import qualified Data.Text.IO as Text
-import Data.Text.Prettyprint.Doc hiding (line)
-import System.Console.ANSI
+import Data.Loc (Loc(..), posLine, posCol)
+import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy.Char8 as BS
+
+import Data.Monoid (mempty, (<>))
+import Data.Text.Prettyprint.Doc
+import Data.Text.Prettyprint.Doc.Render.Terminal
 import System.IO
 
 {-
@@ -195,50 +199,28 @@ data SourceCodeAnnotation
   | HighlightedArea
 
 data SourceCode = SourceCode
-                    String    -- source code
+                    ByteString    -- source code
                     Loc       -- highlighted location
                     Int       -- number of the neighboring lines to be rendered
 
+
 printSourceCode :: SourceCode -> IO ()
-printSourceCode = printAnnotation . layoutPretty defaultLayoutOptions . prettySourceCode
+printSourceCode = renderIO stdout . reAnnotateS toAnsiStyle . layoutPretty defaultLayoutOptions . prettySourceCode
 
-
-printAnnotation :: SimpleDocStream SourceCodeAnnotation -> IO ()
-printAnnotation x = case x of
-  SFail -> error "panic: failed to render annotated source code"
-  SEmpty -> do
-    hFlush stdout
-    return ()
-  SChar c xs -> do
-    putChar c
-    printAnnotation xs
-  SText _ t xs -> do
-    Text.putStr t
-    printAnnotation xs
-  SLine i xs -> do
-    putStr ('\n' : replicate i ' ')
-    printAnnotation xs
-  SAnnPush code xs -> do
-    setSGR (translateSourceCodeAnnotation code)
-    printAnnotation xs
-  SAnnPop xs -> do
-    setSGR []
-    printAnnotation xs
-
-translateSourceCodeAnnotation :: SourceCodeAnnotation -> [SGR]
-translateSourceCodeAnnotation Other             = [Reset]
-translateSourceCodeAnnotation HighlightedLineNo = [SetColor Foreground Dull Blue]
-translateSourceCodeAnnotation HighlightedArea   = [SetColor Foreground Vivid Red]
+toAnsiStyle :: SourceCodeAnnotation -> AnsiStyle
+toAnsiStyle Other = mempty
+toAnsiStyle HighlightedLineNo = colorDull Blue
+toAnsiStyle HighlightedArea = color Red
 
 -- instance Pretty SourceCode where
 prettySourceCode :: SourceCode -> Doc SourceCodeAnnotation
-prettySourceCode (SourceCode source NoLoc _) = pretty source
+prettySourceCode (SourceCode source NoLoc _) = pretty $ BS.unpack source
 prettySourceCode (SourceCode source (Loc from to) spread) =
   vsep $  [softline']
       ++  zipWith (<+>) lineNos lines'
       ++  [softline', softline']
 
-  where   sourceLines = lines source
+  where   sourceLines = lines (BS.unpack source)
 
           start = (posLine from - spread) `max` 1
           end   = (posLine to   + spread) `min` length sourceLines
@@ -274,18 +256,37 @@ prettySourceCode (SourceCode source (Loc from to) spread) =
           substring startFrom (Just endAt)  = drop (startFrom - 1) . take endAt
 
           prettyLine :: (Int, String) -> Doc SourceCodeAnnotation
-          prettyLine (n, line)
+          prettyLine (n, s)
             | n == posLine from && n == posLine to =
-                    annotate Other            (pretty $ substring 0              (Just (posCol from - 1)) line)
-                <>  annotate HighlightedArea  (pretty $ substring (posCol from)  (Just (posCol to))       line)
-                <>  annotate Other            (pretty $ substring (posCol to + 1) Nothing                 line)
+                    annotate Other            (pretty $ substring 0              (Just (posCol from - 1)) s)
+                <>  annotate HighlightedArea  (pretty $ substring (posCol from)  (Just (posCol to))       s)
+                <>  annotate Other            (pretty $ substring (posCol to + 1) Nothing                 s)
             | n == posLine from =
-                    annotate Other            (pretty $ substring 0              (Just (posCol from - 1)) line)
-                <>  annotate HighlightedArea  (pretty $ substring (posCol from)  Nothing                  line)
+                    annotate Other            (pretty $ substring 0              (Just (posCol from - 1)) s)
+                <>  annotate HighlightedArea  (pretty $ substring (posCol from)  Nothing                  s)
             | n == posLine to =
-                    annotate HighlightedArea  (pretty $ substring 0              (Just (posCol to))       line)
-                <>  annotate Other            (pretty $ substring (posCol to)    Nothing                  line)
+                    annotate HighlightedArea  (pretty $ substring 0              (Just (posCol to))       s)
+                <>  annotate Other            (pretty $ substring (posCol to)    Nothing                  s)
             | n > posLine from && n < posLine to =
-                    annotate HighlightedArea  (pretty line)
+                    annotate HighlightedArea  (pretty s)
             | otherwise =
-                    annotate Other            (pretty line)
+                    annotate Other            (pretty s)
+
+-- prettyError :: Text -> Maybe Text -> [Loc] -> ByteString -> Doc AnsiStyle
+-- prettyError header message locations source = vsep
+--   [ softline'
+--   , indent 2 text
+--   , indent 4 pieces
+--   , softline'
+--   ]
+--   where
+--     text = vsep
+--       [ annotate (color Red) $ pretty header
+--       , case message of
+--           Just m -> pretty m <> line
+--           Nothing -> mempty
+--       ]
+--     pieces = vsep $ map (\loc -> vsep
+--       [ annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)
+--       , reAnnotate toAnsiStyle $ prettySourceCode $ SourceCode source loc 1
+--       ]) locations

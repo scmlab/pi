@@ -5,14 +5,10 @@ module Type.TypeCheck where
 
 import Control.Arrow ((***))
 import Control.Monad.Except
-import Data.Text (pack)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
-import qualified Data.ByteString as BS
-import Data.ByteString (ByteString)
-import Data.Text (Text)
 import Data.Loc (locOf, Loc(..))
 
 import qualified Syntax.Abstract as A
@@ -23,9 +19,6 @@ import Type (HasDual(..))
 import qualified Syntax.Concrete as C
 import Syntax.Concrete hiding (Expr(..))
 
--- import Syntax.Concrete (toAbstract, Type)
-import Syntax.Parser (parseProc)
--- import Type hiding (Type)
 import Base
 import Debug.Trace
 
@@ -52,6 +45,8 @@ data TypeError
   | RecvExpected Type
   | SendExpected Type
   | UserDefinedNameExpected Chan
+
+  | TypeMismatched Type Type
   | Others String
   deriving (Show)
 
@@ -80,7 +75,7 @@ putProcDefns x = modify (\st -> st { envProcDefns = x })
 checkAll :: TCM ()
 checkAll = do
 
-  typeDefns <- gets envTypeDefns
+  _typeDefns <- gets envTypeDefns
   procDefns <- gets envProcDefns
 
 
@@ -157,7 +152,7 @@ substituteTypeVar (TypeChoi ss l)  = TypeChoi <$> mapM substituteTypeOfLabel ss 
 substituteTypeVar (TypeSele ss l)  = TypeSele <$> mapM substituteTypeOfLabel ss <*> pure l
 substituteTypeVar (TypeUn t l)     = TypeUn <$> substituteTypeVar t <*> pure l
 substituteTypeVar (TypeVar (TypeVarText (TypeName "X" n) m) l) = return $ TypeVar (TypeVarText (TypeName "X" n) m) l -- mu
-substituteTypeVar (TypeVar i l)    = lookupTypeVar i
+substituteTypeVar (TypeVar i _)    = lookupTypeVar i
 substituteTypeVar (TypeMu t l)     = TypeMu <$> substituteTypeVar t <*> pure l
 
 
@@ -239,8 +234,7 @@ checkE env e t =
 tcheck :: Type -> Type -> TCM ()
 tcheck t1 t2
    | t1 == t2 = return ()
-   | otherwise = throwError $ Others ("expected: " ++ show t1 ++
-                             ", found " ++ show t2)
+   | otherwise = throwError $ TypeMismatched t1 t2
 
 checkCh :: Ctx -> Chan -> Type -> TCM ()
 checkCh senv c t = do
@@ -296,7 +290,7 @@ checkProc ctx (Repl p _) =
 
 checkProc _ (Nu x Nothing _ _) =
   throwError $ TypeOfNewChannelMissing x
-checkProc ctx (Nu x (Just t) p loc) = do
+checkProc ctx (Nu x (Just t) p _) = do
   t' <- substituteTypeVar t
   -- traceShow t' $ return ()
   (ctx', l) <- checkProc (Map.insert x t' $ Map.insert (A.dual x) (dual t') ctx) p
@@ -371,7 +365,7 @@ matchPtn :: Type -> Ptrn -> Ctx -> TCM Ctx
 matchPtn (TypeEnd l)       (PtrnVar v _) ctx = addUni (varToChan v, TypeEnd l) ctx
 matchPtn (TypeBase t l)    (PtrnVar v _) ctx = addUni (varToChan v, TypeBase t l) ctx
 matchPtn (TypeTuple ts l)  (PtrnVar v _) ctx = addUni (varToChan v, TypeTuple ts l) ctx
-matchPtn (TypeTuple ts l)  (PtrnTuple xs _) ctx = matchPtns ts xs ctx
+matchPtn (TypeTuple ts _)  (PtrnTuple xs _) ctx = matchPtns ts xs ctx
 matchPtn (TypeSend s t l)  (PtrnVar v _) ctx = addUni (varToChan v, TypeSend s t l) ctx
 matchPtn (TypeRecv s t l)  (PtrnVar v _) ctx = addUni (varToChan v, TypeRecv s t l) ctx
 matchPtn (TypeSele ts l)   (PtrnVar v _) ctx = addUni (varToChan v, TypeSele ts l) ctx

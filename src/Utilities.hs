@@ -73,12 +73,13 @@ rmEntry _ [] = []
 rmEntry i ((j,x):xs) | i == j    = rmEntry i xs
                      | otherwise = (j,x) : rmEntry i xs
 
+rmEntries :: Eq a => [a] -> [(a, b)] -> [(a, b)]
 rmEntries [] xs = xs
 rmEntries (i:is) xs = rmEntries is (rmEntry i xs)
 
 fMapSubsetBy :: Eq a => (b -> b -> Bool) ->
                 [(a,b)] -> [(a,b)] -> Bool
-fMapSubsetBy f [] ys = True
+fMapSubsetBy _ [] _ = True
 fMapSubsetBy f ((x,z):xs) ys =
   case lookup x ys of
     Nothing -> False

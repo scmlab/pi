@@ -19,8 +19,9 @@ import Type (dual)
 import Syntax.Concrete
 import Type.TypeCheck
 import qualified Syntax.Parser as Parser
+import Syntax.Parser (ParseError)
 import Interpreter
-import Debug.Trace
+-- import Debug.Trace
 
 
  --------------------------------------------------------------------------------
@@ -43,10 +44,11 @@ data RuntimeState = State
   , stCursor   :: Maybe Int           -- pointing at which outcome
   } deriving (Show)
 
-data Error = ParseError Parser.ParseError
+data Error = ParseError ParseError
            | TypeError TypeError
            | RuntimeError String
            deriving (Show)
+
 
 type RuntimeM = ExceptT Error (StateT RuntimeState IO)
 

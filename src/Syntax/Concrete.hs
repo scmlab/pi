@@ -152,7 +152,7 @@ unfoldType t = t
 stripUnrestricted :: Type -> (Type, Bool)
 stripUnrestricted (TypeEnd l)  = (TypeEnd l, True)
 stripUnrestricted (TypeBase t l)   = (TypeBase t l, True)
-stripUnrestricted (TypeUn t l)     = (t, True)  -- shouldn't be nested
+stripUnrestricted (TypeUn t _)     = (t, True)  -- shouldn't be nested
 stripUnrestricted (TypeTuple ts l) = (TypeTuple (map fst tts) l, and (map snd tts))
   where tts = map stripUnrestricted ts
 stripUnrestricted (TypeMu t l)     = let (t', p) = stripUnrestricted t in (TypeMu t' l, p)
